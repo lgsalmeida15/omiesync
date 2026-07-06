@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Motor de Sync Omie — Diagrama Completo</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=DM+Sans:wght@300;400;500;600;700;800&display=swap');
+
+  :root {
+    --bg: #060810;
+    --s1: #0a0e1a;
+    --s2: #0f1525;
+    --border: #162030;
+    --border2: #1e3048;
+    --accent: #4e9eff;
+    --accent2: #00d4a0;
+    --accent3: #b87cff;
+    --accent4: #ff6b6b;
+    --accent5: #ffb347;
+    --accent6: #ff4eb8;
+    --text: #ddeeff;
+    --dim: #3a5570;
+    --mid: #6a90b8;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    padding: 40px 32px 80px;
+  }
+
+  body::before {
+    content:'';
+    position:fixed; inset:0;
+    background-image:
+      linear-gradient(rgba(78,158,255,0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(78,158,255,0.02) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events:none; z-index:0;
+  }
+
+  .page { position:relative; z-index:1; max-width:1400px; margin:0 auto; }
+
+  /* HEADER */
+  .header { text-align:center; margin-bottom:48px; }
+  .header .badge {
+    display:inline-block;
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px; letter-spacing:3px; text-transform:uppercase;
+    color:var(--accent); background:rgba(78,158,255,0.08);
+    border:1px solid rgba(78,158,255,0.25); border-radius:2px;
+    padding:5px 14px; margin-bottom:14px;
+  }
+  .header h1 {
+    font-size:32px; font-weight:800; letter-spacing:-1px;
+    background:linear-gradient(135deg, var(--accent), var(--accent2), var(--accent3));
+    -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+    margin-bottom:8px;
+  }
+  .header p { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--dim); letter-spacing:1px; }
+
+  /* LEGEND */
+  .legend {
+    display:flex; gap:16px; justify-content:center; flex-wrap:wrap;
+    margin-bottom:40px;
+  }
+  .leg { display:flex; align-items:center; gap:6px; font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--mid); }
+  .leg-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+  .leg-line { width:24px; height:2px; flex-shrink:0; }
+
+  /* SECTION LABEL */
+  .section-label {
+    font-family:'JetBrains Mono',monospace; font-size:9px;
+    letter-spacing:3px; text-transform:uppercase; color:var(--dim);
+    text-align:center; margin-bottom:12px;
+  }
+
+  /* ===== CAMADA 1: SCHEDULER ===== */
+  .layer-scheduler {
+    display:flex; justify-content:center; margin-bottom:0;
+  }
+
+  .scheduler-card {
+    background:linear-gradient(135deg, #0d0a22, #150f35);
+    border:1px solid rgba(184,124,255,0.4); border-radius:14px;
+    padding:22px 32px; width:680px; position:relative; overflow:hidden;
+  }
+  .scheduler-card::before {
+    content:''; position:absolute; top:0; left:0; right:0; height:2px;
+    background:linear-gradient(90deg, var(--accent3), var(--accent));
+  }
+  .sc-header { display:flex; align-items:center; gap:12px; margin-bottom:16px; }
+  .sc-icon { font-size:22px; }
+  .sc-title { font-size:16px; font-weight:700; color:var(--text); }
+  .sc-sub { font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--dim); margin-top:2px; }
+
+  .sc-timers {
+    display:grid; grid-template-columns:repeat(4,1fr); gap:8px;
+  }
+  .sc-timer {
+    background:rgba(0,0,0,0.3); border:1px solid var(--border2);
+    border-radius:6px; padding:8px 10px; text-align:center;
+  }
+  .sc-timer .t-val { font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:700; }
+  .sc-timer .t-label { font-family:'JetBrains Mono',monospace; font-size:8px; color:var(--dim); margin-top:2px; letter-spacing:1px; text-transform:uppercase; }
+
+  /* ===== ARROW DOWN ===== */
+  .arrow-section {
+    display:flex; flex-direction:column; align-items:center;
+    padding:8px 0; gap:2px;
+  }
+  .arrow-line { width:2px; height:20px; }
+  .arrow-head { font-size:14px; }
+  .arrow-label {
+    font-family:'JetBrains Mono',monospace; font-size:9px;
+    color:var(--dim); letter-spacing:1px; background:var(--bg);
+    padding:1px 8px; border-radius:3px; margin:-4px 0;
+  }
+
+  /* ===== CAMADA 2: ORQUESTRADOR ===== */
+  .layer-orch { display:flex; justify-content:center; margin-bottom:0; }
+
+  .orch-card {
+    background:linear-gradient(135deg, #081a12, #0c2018);
+    border:1px solid rgba(0,212,160,0.35); border-radius:14px;
+    padding:20px 28px; width:680px; position:relative; overflow:hidden;
+  }
+  .orch-card::before {
+    content:''; position:absolute; top:0; left:0; right:0; height:2px;
+    background:linear-gradient(90deg, var(--accent2), var(--accent));
+  }
+
+  .orch-phases {
+    display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin-top:14px;
+  }
+  .orch-phase {
+    background:rgba(0,0,0,0.3); border:1px solid var(--border2);
+    border-radius:6px; padding:8px;
+  }
+  .op-num {
+    font-family:'JetBrains Mono',monospace; font-size:9px;
+    color:var(--accent2); letter-spacing:1px; margin-bottom:4px;
+    text-transform:uppercase;
+  }
+  .op-name { font-size:11px; font-weight:600; color:var(--text); margin-bottom:4px; }
+  .op-items { display:flex; flex-direction:column; gap:2px; }
+  .op-item {
+    font-family:'JetBrains Mono',monospace; font-size:8.5px;
+    color:var(--mid); padding:2px 4px; border-radius:2px;
+    background:rgba(0,212,160,0.06); border:1px solid rgba(0,212,160,0.1);
+  }
+  .op-item.extrato { background:rgba(184,124,255,0.08); border-color:rgba(184,124,255,0.2); color:var(--accent3); }
+
+  /* ===== CAMADA 3: WORKERS ===== */
+  .layer-workers { margin-bottom:0; }
+
+  .workers-grid {
+    display:grid; grid-template-columns:repeat(5,1fr); gap:10px;
+    margin-top:12px;
+  }
+
+  .worker-card {
+    background:linear-gradient(135deg, #0d1520, #111e30);
+    border:1px solid var(--border2); border-radius:10px;
+    padding:12px; position:relative; overflow:hidden;
+    transition:border-color 0.2s;
+  }
+  .worker-card::before {
+    content:''; position:absolute; top:0; left:0; right:0; height:2px;
+    background:var(--accent);
+  }
+  .worker-card.extrato-special::before { background:var(--accent3); }
+  .worker-card.error-state::before { background:var(--accent4); }
+  .worker-card.paused-state::before { background:var(--dim); }
+
+  .wc-label { font-family:'JetBrains Mono',monospace; font-size:8px; color:var(--dim); letter-spacing:2px; text-transform:uppercase; margin-bottom:4px; }
+  .wc-empresa { font-size:12px; font-weight:700; color:var(--text); margin-bottom:6px; }
+
+  .wc-status {
+    font-family:'JetBrains Mono',monospace; font-size:8px;
+    padding:2px 6px; border-radius:3px; display:inline-block; margin-bottom:8px;
+  }
+  .ws-syncing { background:rgba(0,212,160,0.15); color:var(--accent2); }
+  .ws-extrato { background:rgba(184,124,255,0.15); color:var(--accent3); }
+  .ws-error   { background:rgba(255,107,107,0.15); color:var(--accent4); }
+  .ws-paused  { background:rgba(58,85,112,0.3); color:var(--dim); }
+  .ws-queue   { background:rgba(78,158,255,0.1); color:var(--accent); }
+
+  .wc-endpoints { display:flex; flex-wrap:wrap; gap:3px; }
+  .wc-ep {
+    font-family:'JetBrains Mono',monospace; font-size:7.5px;
+    padding:1px 4px; border-radius:2px;
+    background:rgba(78,158,255,0.08); color:var(--mid);
+    border:1px solid var(--border2);
+  }
+  .wc-ep.done { background:rgba(0,212,160,0.1); color:var(--accent2); border-color:rgba(0,212,160,0.2); }
+  .wc-ep.running { background:rgba(78,158,255,0.15); color:var(--accent); border-color:rgba(78,158,255,0.3); animation:pulse 1.2s ease-in-out infinite; }
+  .wc-ep.ext { background:rgba(184,124,255,0.1); color:var(--accent3); border-color:rgba(184,124,255,0.25); }
+  .wc-ep.err { background:rgba(255,107,107,0.1); color:var(--accent4); border-color:rgba(255,107,107,0.25); }
+
+  .more-workers {
+    grid-column:1/-1; text-align:center;
+    font-family:'JetBrains Mono',monospace; font-size:9px; color:var(--dim);
+    letter-spacing:2px; padding:6px 0;
+  }
+
+  /* ===== EXTRATO ESPECIAL ===== */
+  .extrato-section {
+    background:linear-gradient(135deg, #100a20, #180f32);
+    border:1px solid rgba(184,124,255,0.3); border-radius:14px;
+    padding:20px 24px; margin-top:20px; position:relative; overflow:hidden;
+  }
+  .extrato-section::before {
+    content:''; position:absolute; top:0; left:0; right:0; height:2px;
+    background:linear-gradient(90deg, var(--accent3), var(--accent6));
+  }
+
+  .ext-header { display:flex; align-items:center; gap:10px; margin-bottom:16px; }
+  .ext-title { font-size:14px; font-weight:700; color:var(--text); }
+  .ext-badge {
+    font-family:'JetBrains Mono',monospace; font-size:8px;
+    padding:2px 8px; border-radius:3px;
+    background:rgba(184,124,255,0.15); color:var(--accent3);
+    border:1px solid rgba(184,124,255,0.3); letter-spacing:1px;
+  }
+
+  .ext-flow {
+    display:grid; grid-template-columns:1fr 28px 1fr 28px 1fr 28px 1fr;
+    gap:0; align-items:center;
+  }
+  .ext-box {
+    background:rgba(0,0,0,0.3); border:1px solid var(--border2);
+    border-radius:8px; padding:10px 12px; text-align:center;
+  }
+  .ext-box.highlight { border-color:rgba(184,124,255,0.4); background:rgba(184,124,255,0.06); }
+  .ext-box .eb-title { font-size:11px; font-weight:600; color:var(--text); margin-bottom:4px; }
+  .ext-box .eb-sub { font-family:'JetBrains Mono',monospace; font-size:9px; color:var(--dim); line-height:1.5; }
+  .ext-arrow { text-align:center; color:var(--accent3); font-size:16px; }
+
+  .cc-loop {
+    margin-top:14px; background:rgba(0,0,0,0.25);
+    border:1px solid var(--border); border-radius:8px; padding:12px 16px;
+  }
+  .cc-loop-title {
+    font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:2px;
+    text-transform:uppercase; color:var(--accent3); margin-bottom:8px;
+  }
+  .cc-jobs { display:flex; gap:8px; flex-wrap:wrap; }
+  .cc-job {
+    background:rgba(184,124,255,0.08); border:1px solid rgba(184,124,255,0.2);
+    border-radius:6px; padding:6px 10px; font-family:'JetBrains Mono',monospace;
+    font-size:9px;
+  }
+  .cc-job .cj-cc { color:var(--accent3); font-weight:600; }
+  .cc-job .cj-status { color:var(--dim); margin-top:2px; }
+  .cc-job.done .cj-status { color:var(--accent2); }
+  .cc-job.running .cj-status { color:var(--accent); animation:pulse 1s ease-in-out infinite; }
+
+  .pai-status {
+    margin-top:10px; display:flex; align-items:center; gap:8px;
+    font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--mid);
+    background:rgba(0,212,160,0.04); border:1px solid rgba(0,212,160,0.15);
+    border-radius:6px; padding:8px 12px;
+  }
+  .pai-icon { font-size:14px; }
+
+  /* ===== CAMADA 4: STAGING ===== */
+  .layer-staging {
+    background:linear-gradient(135deg, #1a0d0d, #220f0f);
+    border:1px solid rgba(255,107,107,0.3); border-radius:14px;
+    padding:22px 28px; margin-top:20px; position:relative; overflow:hidden;
+  }
+  .layer-staging::before {
+    content:''; position:absolute; top:0; left:0; right:0; height:2px;
+    background:linear-gradient(90deg, var(--accent4), var(--accent5));
+  }
+
+  .staging-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-top:16px; }
+
+  .staging-panel { background:rgba(0,0,0,0.25); border:1px solid var(--border); border-radius:8px; padding:14px; }
+  .sp-title {
+    font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:2px;
+    text-transform:uppercase; color:var(--accent5); margin-bottom:12px;
+    display:flex; align-items:center; gap:6px;
+  }
+
+  .page-grid { display:flex; gap:4px; flex-wrap:wrap; margin-bottom:10px; }
+  .pg {
+    width:24px; height:24px; border-radius:3px;
+    display:flex; align-items:center; justify-content:center;
+    font-family:'JetBrains Mono',monospace; font-size:8px; font-weight:600;
+  }
+  .pg-ok   { background:rgba(0,212,160,0.2); color:var(--accent2); border:1px solid rgba(0,212,160,0.4); }
+  .pg-run  { background:rgba(78,158,255,0.2); color:var(--accent); border:1px solid rgba(78,158,255,0.4); animation:pulse 1s ease-in-out infinite; }
+  .pg-err  { background:rgba(255,107,107,0.2); color:var(--accent4); border:1px solid rgba(255,107,107,0.4); }
+  .pg-pend { background:rgba(0,0,0,0.3); color:var(--dim); border:1px solid var(--border); }
+
+  .pg-legend { display:flex; gap:10px; font-family:'JetBrains Mono',monospace; font-size:8px; color:var(--dim); }
+
+  .commit-guard {
+    margin-top:10px; background:rgba(0,212,160,0.05);
+    border:1px solid rgba(0,212,160,0.2); border-radius:6px;
+    padding:10px 12px; font-family:'JetBrains Mono',monospace; font-size:10px;
+    color:var(--accent2); display:flex; align-items:flex-start; gap:8px;
+    line-height:1.6;
+  }
+  .commit-guard .cg-icon { font-size:16px; flex-shrink:0; margin-top:1px; }
+
+  .sync-modes { display:flex; flex-direction:column; gap:8px; }
+  .sync-mode {
+    background:rgba(0,0,0,0.3); border:1px solid var(--border);
+    border-radius:6px; padding:10px 12px;
+  }
+  .sm-title { font-size:12px; font-weight:600; margin-bottom:4px; display:flex; align-items:center; gap:6px; }
+  .sm-badge {
+    font-family:'JetBrains Mono',monospace; font-size:8px;
+    padding:1px 6px; border-radius:2px;
+  }
+  .sm-inc { background:rgba(78,158,255,0.15); color:var(--accent); }
+  .sm-full { background:rgba(255,107,107,0.15); color:var(--accent4); }
+  .sm-desc { font-family:'JetBrains Mono',monospace; font-size:9px; color:var(--dim); line-height:1.6; }
+
+  /* ===== CAMADA 5: ERRO ===== */
+  .layer-errors {
+    background:linear-gradient(135deg, #1a1208, #211508);
+    border:1px solid rgba(255,179,71,0.3); border-radius:14px;
+    padding:20px 28px; margin-top:20px; position:relative; overflow:hidden;
+  }
+  .layer-errors::before {
+    content:''; position:absolute; top:0; left:0; right:0; height:2px;
+    background:linear-gradient(90deg, var(--accent5), var(--accent4));
+  }
+
+  .errors-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-top:14px; }
+  .error-card {
+    background:rgba(0,0,0,0.3); border:1px solid var(--border);
+    border-radius:8px; padding:12px;
+  }
+  .ec-badge {
+    font-family:'JetBrains Mono',monospace; font-size:8px; font-weight:700;
+    padding:2px 8px; border-radius:3px; display:inline-block; margin-bottom:8px;
+    letter-spacing:1px;
+  }
+  .ec-transiente { background:rgba(78,158,255,0.15); color:var(--accent); }
+  .ec-estrutural { background:rgba(255,107,107,0.15); color:var(--accent4); }
+  .ec-logico     { background:rgba(255,179,71,0.15); color:var(--accent5); }
+
+  .ec-title { font-size:12px; font-weight:600; margin-bottom:6px; }
+  .ec-triggers { font-family:'JetBrains Mono',monospace; font-size:9px; color:var(--dim); margin-bottom:8px; line-height:1.6; }
+  .ec-action {
+    font-family:'JetBrains Mono',monospace; font-size:9px;
+    padding:6px 8px; border-radius:5px; line-height:1.6;
+  }
+  .ea-t { background:rgba(78,158,255,0.06); border:1px solid rgba(78,158,255,0.15); color:var(--accent); }
+  .ea-e { background:rgba(255,107,107,0.06); border:1px solid rgba(255,107,107,0.15); color:var(--accent4); }
+  .ea-l { background:rgba(255,179,71,0.06); border:1px solid rgba(255,179,71,0.15); color:var(--accent5); }
+
+  /* ===== CAMADA 6: BANCO ===== */
+  .layer-db {
+    background:linear-gradient(135deg, #080d1a, #0d1628);
+    border:1px solid var(--border2); border-radius:14px;
+    padding:20px 28px; margin-top:20px; position:relative; overflow:hidden;
+  }
+  .layer-db::before {
+    content:''; position:absolute; top:0; left:0; right:0; height:2px;
+    background:linear-gradient(90deg, var(--accent), var(--accent3));
+  }
+
+  .db-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-top:16px; }
+
+  .db-schema { background:rgba(0,0,0,0.25); border:1px solid var(--border); border-radius:8px; padding:14px; }
+  .dbs-title {
+    font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:2px;
+    text-transform:uppercase; margin-bottom:10px; display:flex; align-items:center; gap:6px;
+  }
+
+  .table-list { display:flex; flex-direction:column; gap:4px; }
+  .table-item {
+    display:flex; align-items:center; gap:8px;
+    font-family:'JetBrains Mono',monospace; font-size:9.5px; color:var(--mid);
+    padding:4px 6px; border-radius:4px; transition:background 0.15s;
+  }
+  .table-item:hover { background:rgba(78,158,255,0.04); }
+  .ti-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+  .ti-key { margin-left:auto; font-size:8px; color:var(--dim); }
+
+  .view-mat {
+    margin-top:10px; background:rgba(78,158,255,0.04);
+    border:1px dashed rgba(78,158,255,0.2); border-radius:6px;
+    padding:8px 10px; font-family:'JetBrains Mono',monospace;
+    font-size:9px; color:var(--dim);
+  }
+  .view-mat .vm-title { color:var(--accent); margin-bottom:4px; font-size:8px; letter-spacing:1px; text-transform:uppercase; }
+
+  /* ===== WEBHOOK ===== */
+  .webhook-strip {
+    margin-top:20px; background:rgba(255,78,184,0.04);
+    border:1px solid rgba(255,78,184,0.2); border-radius:10px;
+    padding:14px 20px; display:flex; align-items:center; gap:20px; flex-wrap:wrap;
+  }
+  .wh-title { font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--accent6); letter-spacing:1px; font-weight:600; white-space:nowrap; }
+  .wh-events { display:flex; gap:8px; flex-wrap:wrap; }
+  .wh-ev {
+    font-family:'JetBrains Mono',monospace; font-size:9px;
+    padding:3px 8px; border-radius:4px;
+    background:rgba(255,78,184,0.08); color:var(--accent6);
+    border:1px solid rgba(255,78,184,0.2);
+  }
+  .wh-arrow { color:var(--accent6); font-size:14px; flex-shrink:0; }
+  .wh-dest { font-family:'JetBrains Mono',monospace; font-size:9px; color:var(--mid); }
+
+  /* ANIMAÇÕES */
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  @keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+
+  .layer-scheduler { animation:fadeUp 0.3s ease backwards; animation-delay:0.05s; }
+  .layer-orch      { animation:fadeUp 0.3s ease backwards; animation-delay:0.10s; }
+  .layer-workers   { animation:fadeUp 0.3s ease backwards; animation-delay:0.15s; }
+  .extrato-section { animation:fadeUp 0.3s ease backwards; animation-delay:0.20s; }
+  .layer-staging   { animation:fadeUp 0.3s ease backwards; animation-delay:0.25s; }
+  .layer-errors    { animation:fadeUp 0.3s ease backwards; animation-delay:0.30s; }
+  .layer-db        { animation:fadeUp 0.3s ease backwards; animation-delay:0.35s; }
+  .webhook-strip   { animation:fadeUp 0.3s ease backwards; animation-delay:0.40s; }
+
+  ::-webkit-scrollbar{width:5px} ::-webkit-scrollbar-track{background:var(--bg)} ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+  .sep { height:1px; background:linear-gradient(90deg,transparent,var(--border2),transparent); margin:6px 0; }
+  .inline-tag { font-family:'JetBrains Mono',monospace; font-size:9px; padding:1px 5px; border-radius:3px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="badge">⚡ Sync Engine — Visão Completa</div>
+    <h1>Motor de Sincronização Omie</h1>
+    <p>Go · goroutines · pgx · staging atômico · 60–2000+ empresas</p>
+  </div>
+
+  <!-- LEGEND -->
+  <div class="legend">
+    <div class="leg"><div class="leg-dot" style="background:#b87cff"></div>Scheduler / Orquestrador</div>
+    <div class="leg"><div class="leg-dot" style="background:#4e9eff"></div>Workers / Goroutines</div>
+    <div class="leg"><div class="leg-dot" style="background:#00d4a0"></div>Dados OK / Commit</div>
+    <div class="leg"><div class="leg-dot" style="background:#ff6b6b"></div>Erro / Retry</div>
+    <div class="leg"><div class="leg-dot" style="background:#ffb347"></div>Controle de Erros</div>
+    <div class="leg"><div class="leg-dot" style="background:#ff4eb8"></div>Webhook</div>
+  </div>
+
+  <!-- ===== CAMADA 1: SCHEDULER ===== -->
+  <div class="section-label">① Scheduler — Define quando cada empresa sincroniza</div>
+  <div class="layer-scheduler">
+    <div class="scheduler-card">
+      <div class="sc-header">
+        <span class="sc-icon">⏱</span>
+        <div>
+          <div class="sc-title">SyncScheduler</div>
+          <div class="sc-sub">goroutine contínua · verifica empresas ativas a cada minuto · respeita configuração por empresa</div>
+        </div>
+      </div>
+      <div class="sc-timers">
+        <div class="sc-timer">
+          <div class="t-val" style="color:#b87cff">≥ 30 min</div>
+          <div class="t-label">Sync Incremental</div>
+        </div>
+        <div class="sc-timer">
+          <div class="t-val" style="color:#4e9eff">1x / semana</div>
+          <div class="t-label">Full Sync</div>
+        </div>
+        <div class="sc-timer">
+          <div class="t-val" style="color:#ffb347">Contínuo</div>
+          <div class="t-label">Retry Worker</div>
+        </div>
+        <div class="sc-timer">
+          <div class="t-val" style="color:#00d4a0">On Demand</div>
+          <div class="t-label">Forçar Sync</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ARROW -->
+  <div class="arrow-section">
+    <div class="arrow-line" style="background:linear-gradient(180deg,#b87cff,#00d4a0)"></div>
+    <div class="arrow-label">despacha goroutine por empresa</div>
+    <div class="arrow-line" style="background:linear-gradient(180deg,#b87cff,#00d4a0)"></div>
+    <div class="arrow-head" style="color:#00d4a0">↓</div>
+  </div>
+
+  <!-- ===== CAMADA 2: ORQUESTRADOR ===== -->
+  <div class="section-label">② Orquestrador — Ordem de execução por fase de dependência</div>
+  <div class="layer-orch">
+    <div class="orch-card">
+      <div class="sc-header">
+        <span class="sc-icon">🎛</span>
+        <div>
+          <div class="sc-title">SyncOrchestrator</div>
+          <div class="sc-sub">respeita dependências entre endpoints · fase 4 (extrato) só inicia após fase 2 (contas correntes)</div>
+        </div>
+      </div>
+      <div class="orch-phases">
+        <div class="orch-phase">
+          <div class="op-num">Fase 1 — Paralelo</div>
+          <div class="op-name">Cadastros Base</div>
+          <div class="op-items">
+            <div class="op-item">categorias</div>
+            <div class="op-item">departamentos</div>
+            <div class="op-item">clientes</div>
+            <div class="op-item">projetos</div>
+          </div>
+        </div>
+        <div class="orch-phase">
+          <div class="op-num">Fase 2 — Obrigatório</div>
+          <div class="op-name">Contas Correntes</div>
+          <div class="op-items">
+            <div class="op-item">geral/contacorrente</div>
+          </div>
+          <div style="margin-top:6px;font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--accent3);padding:3px 5px;border-radius:3px;background:rgba(184,124,255,0.08);border:1px solid rgba(184,124,255,0.2);">
+            pré-req. do extrato
+          </div>
+        </div>
+        <div class="orch-phase">
+          <div class="op-num">Fase 3 — Paralelo</div>
+          <div class="op-name">Financeiro</div>
+          <div class="op-items">
+            <div class="op-item">contas_pagar</div>
+            <div class="op-item">contas_receber</div>
+            <div class="op-item">movimentos_fin</div>
+            <div class="op-item">ordens_servico</div>
+          </div>
+        </div>
+        <div class="orch-phase" style="border-color:rgba(184,124,255,0.3);">
+          <div class="op-num" style="color:var(--accent3)">Fase 4 — Loop CC</div>
+          <div class="op-name">Extrato</div>
+          <div class="op-items">
+            <div class="op-item extrato">financas/extrato</div>
+            <div class="op-item extrato">nCodCC obrigatório</div>
+            <div class="op-item extrato">1 job por CC</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ARROW -->
+  <div class="arrow-section">
+    <div class="arrow-line" style="background:linear-gradient(180deg,#00d4a0,#4e9eff)"></div>
+    <div class="arrow-label">1 goroutine por empresa × endpoint</div>
+    <div class="arrow-line" style="background:linear-gradient(180deg,#00d4a0,#4e9eff)"></div>
+    <div class="arrow-head" style="color:#4e9eff">↓</div>
+  </div>
+
+  <!-- ===== CAMADA 3: WORKERS ===== -->
+  <div class="section-label" style="margin-bottom:12px;">③ Workers — Goroutines independentes · rate limit 120 req/min por empresa</div>
+  <div class="layer-workers">
+    <div class="workers-grid">
+
+      <div class="worker-card">
+        <div class="wc-label">goroutine</div>
+        <div class="wc-empresa">Empresa 01</div>
+        <div class="wc-status ws-syncing">● SYNCING</div>
+        <div class="wc-endpoints">
+          <span class="wc-ep done">categ.</span>
+          <span class="wc-ep done">depto</span>
+          <span class="wc-ep done">clientes</span>
+          <span class="wc-ep done">cc</span>
+          <span class="wc-ep running">c.pagar</span>
+          <span class="wc-ep">c.receber</span>
+          <span class="wc-ep">mf</span>
+          <span class="wc-ep">os</span>
+          <span class="wc-ep ext">extrato</span>
+        </div>
+      </div>
+
+      <div class="worker-card">
+        <div class="wc-label">goroutine</div>
+        <div class="wc-empresa">Empresa 02</div>
+        <div class="wc-status ws-syncing">● SYNCING</div>
+        <div class="wc-endpoints">
+          <span class="wc-ep done">categ.</span>
+          <span class="wc-ep done">cc</span>
+          <span class="wc-ep done">c.pagar</span>
+          <span class="wc-ep running">c.receber</span>
+          <span class="wc-ep">mf</span>
+          <span class="wc-ep ext">extrato</span>
+        </div>
+      </div>
+
+      <div class="worker-card extrato-special">
+        <div class="wc-label">goroutine</div>
+        <div class="wc-empresa">Empresa 03</div>
+        <div class="wc-status ws-extrato">⟳ EXTRATO LOOP</div>
+        <div class="wc-endpoints">
+          <span class="wc-ep done">categ.</span>
+          <span class="wc-ep done">cc</span>
+          <span class="wc-ep done">c.pagar</span>
+          <span class="wc-ep done">c.receber</span>
+          <span class="wc-ep ext running">extrato CC1</span>
+          <span class="wc-ep ext running">extrato CC2</span>
+          <span class="wc-ep ext">extrato CC3</span>
+        </div>
+      </div>
+
+      <div class="worker-card error-state">
+        <div class="wc-label">goroutine</div>
+        <div class="wc-empresa">Empresa 04</div>
+        <div class="wc-status ws-error">✕ ERRO TRANSIENTE</div>
+        <div class="wc-endpoints">
+          <span class="wc-ep done">categ.</span>
+          <span class="wc-ep done">cc</span>
+          <span class="wc-ep err">c.pagar p.7</span>
+          <span class="wc-ep">retry→30s</span>
+        </div>
+      </div>
+
+      <div class="worker-card paused-state">
+        <div class="wc-label">goroutine</div>
+        <div class="wc-empresa">Empresa 05</div>
+        <div class="wc-status ws-paused">⏸ PAUSADA</div>
+        <div class="wc-endpoints">
+          <span class="wc-ep err">401 credencial</span>
+          <span class="wc-ep">webhook →</span>
+        </div>
+      </div>
+
+      <div class="more-workers">· · · até 2000 goroutines independentes · · ·</div>
+    </div>
+
+    <!-- EXTRATO ESPECIAL -->
+    <div class="extrato-section">
+      <div class="ext-header">
+        <span style="font-size:20px">🔄</span>
+        <div class="ext-title">Lógica Especial: Extrato por Conta Corrente</div>
+        <div class="ext-badge">FASE 4</div>
+      </div>
+
+      <div class="ext-flow">
+        <div class="ext-box">
+          <div class="eb-title">Fase 2 concluída</div>
+          <div class="eb-sub">contas_correntes<br>sincronizadas</div>
+        </div>
+        <div class="ext-arrow">→</div>
+        <div class="ext-box highlight">
+          <div class="eb-title">Filtra CCs</div>
+          <div class="eb-sub">cFluxoCaixa<br>= "S"</div>
+        </div>
+        <div class="ext-arrow">→</div>
+        <div class="ext-box highlight">
+          <div class="eb-title">Job Pai criado</div>
+          <div class="eb-sub">endpoint=extrato<br>total = N contas</div>
+        </div>
+        <div class="ext-arrow">→</div>
+        <div class="ext-box">
+          <div class="eb-title">N Jobs Filhos</div>
+          <div class="eb-sub">1 goroutine<br>por conta corrente</div>
+        </div>
+      </div>
+
+      <div class="cc-loop">
+        <div class="cc-loop-title">Loop de contas correntes — Empresa 03</div>
+        <div class="cc-jobs">
+          <div class="cc-job done">
+            <div class="cj-cc">CC #1001 · Conta Principal</div>
+            <div class="cj-status">✓ ok · 847 movimentos</div>
+          </div>
+          <div class="cc-job done">
+            <div class="cj-cc">CC #1002 · Conta Poupança</div>
+            <div class="cj-status">✓ ok · 312 movimentos</div>
+          </div>
+          <div class="cc-job running">
+            <div class="cj-cc">CC #1003 · Conta Investimentos</div>
+            <div class="cj-status">⟳ buscando...</div>
+          </div>
+          <div class="cc-job">
+            <div class="cj-cc">CC #1004 · Conta Filial</div>
+            <div class="cj-status">aguardando...</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pai-status">
+        <div class="pai-icon">🔒</div>
+        <div>Job Pai marca <strong style="color:var(--accent2)">status=ok</strong> apenas quando <strong>todos os jobs filhos</strong> concluírem com sucesso — se qualquer CC falhar, job pai fica como <strong style="color:var(--accent4)">erro</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ARROW -->
+  <div class="arrow-section">
+    <div class="arrow-line" style="background:linear-gradient(180deg,#4e9eff,#ff6b6b)"></div>
+    <div class="arrow-label">staging → validação de integridade → commit</div>
+    <div class="arrow-line" style="background:linear-gradient(180deg,#4e9eff,#ff6b6b)"></div>
+    <div class="arrow-head" style="color:#ff6b6b">↓</div>
+  </div>
+
+  <!-- ===== CAMADA 4: STAGING ===== -->
+  <div class="section-label">④ Staging + Garantia de Integridade — Nenhum dado parcial vai para produção</div>
+  <div class="layer-staging">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;">
+      <span style="font-size:20px">🛡</span>
+      <div>
+        <div style="font-size:15px;font-weight:700;color:var(--text);">Controle Atômico de Páginas</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--dim);">dados só vão para produção quando paginas_ok == total_paginas</div>
+      </div>
+    </div>
+
+    <div class="staging-grid">
+      <div class="staging-panel">
+        <div class="sp-title">📄 Controle de páginas — sync_job_paginas</div>
+        <div class="page-grid">
+          <div class="pg pg-ok">1</div><div class="pg pg-ok">2</div>
+          <div class="pg pg-ok">3</div><div class="pg pg-ok">4</div>
+          <div class="pg pg-ok">5</div><div class="pg pg-ok">6</div>
+          <div class="pg pg-ok">7</div><div class="pg pg-ok">8</div>
+          <div class="pg pg-ok">9</div><div class="pg pg-ok">10</div>
+          <div class="pg pg-run">11</div>
+          <div class="pg pg-err">12</div>
+          <div class="pg pg-pend">13</div><div class="pg pg-pend">14</div>
+          <div class="pg pg-pend">15</div><div class="pg pg-pend">…</div>
+        </div>
+        <div class="pg-legend" style="margin-top:6px;">
+          <span><span style="color:var(--accent2)">■</span> ok</span>
+          <span><span style="color:var(--accent)">■</span> processando</span>
+          <span><span style="color:var(--accent4)">■</span> erro→retry</span>
+          <span><span style="color:var(--dim)">■</span> pendente</span>
+        </div>
+        <div class="commit-guard">
+          <div class="cg-icon">🔒</div>
+          <div>
+            <strong>COMMIT só ocorre</strong> quando<br>
+            <span style="color:var(--text)">paginas_ok == total_paginas</span><br>
+            Página com erro → retry (backoff 30s → 2min → 5min)<br>
+            Staging limpo após commit bem-sucedido
+          </div>
+        </div>
+      </div>
+
+      <div class="staging-panel">
+        <div class="sp-title">⚡ Estratégia de commit por tipo de sync</div>
+        <div class="sync-modes">
+          <div class="sync-mode">
+            <div class="sm-title">
+              <span class="sm-badge sm-inc">INCREMENTAL</span>
+              Upsert por codigo_omie
+            </div>
+            <div class="sm-desc">
+              Staging → UPSERT ON CONFLICT (empresa_id, codigo_omie)<br>
+              Preserva dados existentes<br>
+              Atualiza só o que mudou<br>
+              Filtro: alterados desde último sync (campo dDtAlteracao)<br>
+              Margem de 5 min para evitar race condition
+            </div>
+          </div>
+          <div class="sync-mode">
+            <div class="sm-title">
+              <span class="sm-badge sm-full">FULL SYNC</span>
+              TRUNCATE + INSERT
+            </div>
+            <div class="sm-desc">
+              BEGIN TRANSACTION<br>
+              → TRUNCATE tabela de destino<br>
+              → INSERT em bulk do staging<br>
+              → Atualiza sync_control<br>
+              COMMIT (atômico — ou tudo ou nada)<br>
+              Elimina registros deletados no Omie
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ARROW -->
+  <div class="arrow-section">
+    <div class="arrow-line" style="background:linear-gradient(180deg,#ff6b6b,#ffb347)"></div>
+    <div class="arrow-label">classifica e trata cada tipo de erro</div>
+    <div class="arrow-line" style="background:linear-gradient(180deg,#ff6b6b,#ffb347)"></div>
+    <div class="arrow-head" style="color:#ffb347">↓</div>
+  </div>
+
+  <!-- ===== CAMADA 5: ERROS ===== -->
+  <div class="section-label">⑤ Tratamento de Erros — 3 políticas distintas, cada uma com ação específica</div>
+  <div class="layer-errors">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;">
+      <span style="font-size:20px">⚠</span>
+      <div>
+        <div style="font-size:15px;font-weight:700;color:var(--text);">ErrorHandler</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--dim);">todo erro é classificado antes de qualquer ação</div>
+      </div>
+    </div>
+    <div class="errors-grid">
+      <div class="error-card">
+        <div class="ec-badge ec-transiente">TRANSIENTE</div>
+        <div class="ec-title">Retry automático</div>
+        <div class="ec-triggers">
+          HTTP 500, 503<br>
+          Timeout de conexão<br>
+          HTTP 429 (rate limit)<br>
+          Erro de rede temporário
+        </div>
+        <div class="ec-action ea-t">
+          Backoff exponencial:<br>
+          tentativa 1 → aguarda 30s<br>
+          tentativa 2 → aguarda 2min<br>
+          tentativa 3 → aguarda 5min<br>
+          Após 3 falhas → marca como erro lógico
+        </div>
+      </div>
+      <div class="error-card">
+        <div class="ec-badge ec-estrutural">ESTRUTURAL</div>
+        <div class="ec-title">Pausa empresa</div>
+        <div class="ec-triggers">
+          HTTP 401 (credencial inválida)<br>
+          HTTP 425 (bloqueio Omie)<br>
+          app_key não encontrada<br>
+          app_secret incorreto
+        </div>
+        <div class="ec-action ea-e">
+          Marca empresa: pausada_credencial<br>
+          ou pausada_bloqueio<br>
+          Cancela todos os jobs pendentes<br>
+          Dispara webhook de alerta<br>
+          Exige intervenção manual p/ reativar
+        </div>
+      </div>
+      <div class="error-card">
+        <div class="ec-badge ec-logico">LÓGICO</div>
+        <div class="ec-title">Log + continua</div>
+        <div class="ec-triggers">
+          Registro com campos nulos<br>
+          Violação de constraint<br>
+          JSON malformado no payload<br>
+          Paginação inconsistente
+        </div>
+        <div class="ec-action ea-l">
+          Salva em _etl.registros_erro<br>
+          com payload_raw e erro_msg<br>
+          Continua processando restante<br>
+          Não interrompe o sync<br>
+          Visível no painel de auditoria
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ARROW -->
+  <div class="arrow-section">
+    <div class="arrow-line" style="background:linear-gradient(180deg,#ffb347,#4e9eff)"></div>
+    <div class="arrow-label">dados confirmados → schema do tenant</div>
+    <div class="arrow-line" style="background:linear-gradient(180deg,#ffb347,#4e9eff)"></div>
+    <div class="arrow-head" style="color:#4e9eff">↓</div>
+  </div>
+
+  <!-- ===== CAMADA 6: BANCO ===== -->
+  <div class="section-label">⑥ PostgreSQL — Isolamento total por schema · _etl (controle) + schema por grupo (dados)</div>
+  <div class="layer-db">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;">
+      <span style="font-size:20px">🗄</span>
+      <div>
+        <div style="font-size:15px;font-weight:700;color:var(--text);">PostgreSQL Multi-Schema</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--dim);">search_path trocado por conexão · isolamento de dados garantido</div>
+      </div>
+    </div>
+    <div class="db-grid">
+      <div class="db-schema">
+        <div class="dbs-title" style="color:var(--accent3);">📋 Schema: _etl (controle)</div>
+        <div class="table-list">
+          <div class="table-item"><div class="ti-dot" style="background:#b87cff"></div>grupos<div class="ti-key">tenant registry</div></div>
+          <div class="table-item"><div class="ti-dot" style="background:#b87cff"></div>empresas<div class="ti-key">app_key / config</div></div>
+          <div class="table-item"><div class="ti-dot" style="background:#b87cff"></div>usuarios + permissoes</div>
+          <div class="table-item"><div class="ti-dot" style="background:#4e9eff"></div>sync_jobs<div class="ti-key">pai + filhos (extrato)</div></div>
+          <div class="table-item"><div class="ti-dot" style="background:#4e9eff"></div>sync_job_paginas<div class="ti-key">por página</div></div>
+          <div class="table-item"><div class="ti-dot" style="background:#4e9eff"></div>sync_control<div class="ti-key">último sync por endpoint</div></div>
+          <div class="table-item"><div class="ti-dot" style="background:#ffb347"></div>retry_queue</div>
+          <div class="table-item"><div class="ti-dot" style="background:#ff6b6b"></div>registros_erro</div>
+          <div class="table-item"><div class="ti-dot" style="background:#ff6b6b"></div>deletion_queue<div class="ti-key">carência 30 dias</div></div>
+          <div class="table-item"><div class="ti-dot" style="background:#00d4a0"></div>audit_logs<div class="ti-key">req/res completo</div></div>
+          <div class="table-item"><div class="ti-dot" style="background:#ff4eb8"></div>webhooks<div class="ti-key">por grupo</div></div>
+          <div class="table-item"><div class="ti-dot" style="background:#4e9eff"></div>staging_* (10 tabelas)<div class="ti-key">temp por job</div></div>
+          <div class="table-item"><div class="ti-dot" style="background:#b87cff"></div>refresh_tokens</div>
+        </div>
+      </div>
+      <div class="db-schema">
+        <div class="dbs-title" style="color:var(--accent);">📁 Schema: grupo_alpha (tenant — dados Omie)</div>
+        <div class="table-list">
+          <div class="table-item"><div class="ti-dot" style="background:#b87cff"></div>clientes<div class="ti-key">empresa_id</div></div>
+          <div class="table-item"><div class="ti-dot" style="background:#b87cff"></div>categorias<div class="ti-key">empresa_id</div></div>
+          <div class="table-item"><div class="ti-dot" style="background:#b87cff"></div>departamentos<div class="ti-key">empresa_id</div></div>
+          <div class="table-item"><div class="ti-dot" style="background:#b87cff"></div>projetos<div class="ti-key">empresa_id</div></div>
+          <div class="table-item"><div class="ti-dot" style="background:#4e9eff"></div>contas_correntes<div class="ti-key">empresa_id · cFluxoCaixa</div></div>
+          <div class="table-item"><div class="ti-dot" style="background:#00d4a0"></div>contas_a_receber<div class="ti-key">empresa_id</div></div>
+          <div class="table-item"><div class="ti-dot" style="background:#ff6b6b"></div>contas_a_pagar<div class="ti-key">empresa_id</div></div>
+          <div class="table-item"><div class="ti-dot" style="background:#00d4a0"></div>movimentos_financeiros<div class="ti-key">empresa_id</div></div>
+          <div class="table-item"><div class="ti-dot" style="background:#b87cff"></div>ordens_servico<div class="ti-key">empresa_id</div></div>
+          <div class="table-item"><div class="ti-dot" style="background:#ffb347"></div>extrato<div class="ti-key">empresa_id · cod_cc</div></div>
+        </div>
+        <div class="view-mat">
+          <div class="vm-title">Fase 2 — View Materializada</div>
+          vw_fluxo_caixa · refresh após cada sync · índices por empresa_id, data, categoria
+        </div>
+        <div style="margin-top:8px;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--dim);padding:6px 8px;border-radius:5px;background:rgba(0,0,0,0.2);border:1px solid var(--border);">
+          Replicado para: grupo_beta · grupo_gamma · ... · grupo_N
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- WEBHOOK -->
+  <div class="webhook-strip">
+    <div class="wh-title">🔔 WEBHOOKS ASSÍNCRONOS</div>
+    <div class="wh-events">
+      <div class="wh-ev">empresa.pausada</div>
+      <div class="wh-ev">empresa.reativada</div>
+      <div class="wh-ev">sync.falhou</div>
+      <div class="wh-ev">sync.concluido</div>
+    </div>
+    <div class="wh-arrow">→</div>
+    <div class="wh-dest">goroutine · 3 retentativas · backoff 30s→2min→5min · Slack / Teams / HTTP</div>
+  </div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,859 @@
+{
+  "info": {
+    "name": "Omie Sync API",
+    "description": "API completa para sincronização multi-tenant de dados do ERP Omie.\n\n## Como usar\n1. Execute **Auth / Login** — token salvo automaticamente\n2. Todas as demais requisições usam `{{access_token}}` automaticamente\n3. Ao criar Grupo / Empresa / Usuário, o ID é salvo como variável\n\n## Credenciais padrão\n- Email: `admin@omie.local`  \n- Senha: `admin123`\n\n## Fluxo ETL\n1. Crie um Grupo → schema PostgreSQL provisionado automaticamente\n2. Crie uma Empresa com `app_key` e `app_secret` do Omie\n3. Configure o intervalo de sync\n4. Force o primeiro sync ou aguarde o scheduler\n5. Consulte os dados em `/dados/{empresa_id}/...`",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url",      "value": "http://localhost:8080", "type": "string" },
+    { "key": "access_token",  "value": "",                      "type": "string" },
+    { "key": "refresh_token", "value": "",                      "type": "string" },
+    { "key": "grupo_id",      "value": "",                      "type": "string" },
+    { "key": "empresa_id",    "value": "",                      "type": "string" },
+    { "key": "usuario_id",    "value": "",                      "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "🟢 Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/health",
+            "description": "Verifica se o servidor está no ar."
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔐 Auth",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const data = pm.response.json().data;",
+                  "    pm.collectionVariables.set('access_token',  data.access_token);",
+                  "    pm.collectionVariables.set('refresh_token', data.refresh_token);",
+                  "    pm.test('Token salvo', () => pm.expect(data.access_token).to.not.be.empty);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/auth/login",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@omie.local\",\n  \"password\": \"admin123\"\n}"
+            },
+            "description": "Autentica e salva access_token e refresh_token automaticamente."
+          }
+        },
+        {
+          "name": "Me (perfil logado)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/auth/me",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const data = pm.response.json().data;",
+                  "    pm.collectionVariables.set('access_token',  data.access_token);",
+                  "    pm.collectionVariables.set('refresh_token', data.refresh_token);",
+                  "    pm.test('Token rotacionado', () => pm.expect(data.refresh_token).to.not.be.empty);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/auth/refresh",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
+            },
+            "description": "Renova o access_token. O refresh_token é rotacionado a cada uso."
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/auth/logout",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
+            },
+            "description": "Revoga o refresh_token. Retorna 204 No Content."
+          }
+        }
+      ]
+    },
+    {
+      "name": "🏢 Grupos",
+      "description": "Ao criar um grupo, o schema PostgreSQL (`grupo_{slug}`) é provisionado automaticamente com todas as tabelas Omie.",
+      "item": [
+        {
+          "name": "Listar Grupos",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/admin/grupos?page=1&per_page=20",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "grupos"],
+              "query": [
+                { "key": "page",     "value": "1" },
+                { "key": "per_page", "value": "20" }
+              ]
+            },
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+          }
+        },
+        {
+          "name": "Criar Grupo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const id = pm.response.json().data.id;",
+                  "    pm.collectionVariables.set('grupo_id', id);",
+                  "    pm.test('grupo_id salvo: ' + id, () => pm.expect(id).to.not.be.empty);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/admin/grupos",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"Grupo Alpha\",\n  \"slug\": \"alpha\"\n}"
+            },
+            "description": "Cria um grupo (tenant) e provisiona o schema PostgreSQL automaticamente.\n\nSlug: apenas letras minúsculas, números e hífens."
+          }
+        },
+        {
+          "name": "Buscar Grupo por ID",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/admin/grupos/{{grupo_id}}",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+          }
+        },
+        {
+          "name": "Atualizar Grupo",
+          "request": {
+            "method": "PUT",
+            "url": "{{base_url}}/admin/grupos/{{grupo_id}}",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"Grupo Alpha Atualizado\"\n}"
+            },
+            "description": "Só o nome pode ser alterado. Slug e schema são imutáveis."
+          }
+        },
+        {
+          "name": "Deletar Grupo",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/admin/grupos/{{grupo_id}}",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Só funciona se TODAS as empresas do grupo estiverem inativas. Retorna 409 se houver empresa ativa."
+          }
+        }
+      ]
+    },
+    {
+      "name": "🏭 Empresas",
+      "description": "Empresas vinculadas a um grupo. O app_secret nunca aparece completo na resposta (mascarado: primeiros 4 chars + ****).",
+      "item": [
+        {
+          "name": "Listar Empresas do Grupo",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/admin/grupos/{{grupo_id}}/empresas?page=1&per_page=20",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "grupos", "{{grupo_id}}", "empresas"],
+              "query": [
+                { "key": "page",     "value": "1" },
+                { "key": "per_page", "value": "20" }
+              ]
+            },
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+          }
+        },
+        {
+          "name": "Criar Empresa",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const id = pm.response.json().data.id;",
+                  "    pm.collectionVariables.set('empresa_id', id);",
+                  "    pm.test('empresa_id salvo: ' + id, () => pm.expect(id).to.not.be.empty);",
+                  "    const secret = pm.response.json().data.app_secret;",
+                  "    pm.test('app_secret mascarado', () => pm.expect(secret).to.match(/\\*\\*\\*\\*/));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/admin/grupos/{{grupo_id}}/empresas",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"Empresa Ltda\",\n  \"cnpj\": \"12.345.678/0001-99\",\n  \"app_key\": \"SEU_APP_KEY_OMIE\",\n  \"app_secret\": \"SEU_APP_SECRET_OMIE\"\n}"
+            },
+            "description": "Use as credenciais reais do Omie (app_key e app_secret da empresa).\nO app_secret é armazenado com segurança e nunca exposto na API."
+          }
+        },
+        {
+          "name": "Buscar Empresa por ID",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/admin/grupos/{{grupo_id}}/empresas/{{empresa_id}}",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+          }
+        },
+        {
+          "name": "Atualizar Empresa",
+          "request": {
+            "method": "PUT",
+            "url": "{{base_url}}/admin/grupos/{{grupo_id}}/empresas/{{empresa_id}}",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"Empresa Atualizada\",\n  \"cnpj\": \"12.345.678/0001-99\",\n  \"app_key\": \"nova-app-key\",\n  \"app_secret\": \"novo-app-secret\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Deletar Empresa (carência 30 dias)",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/admin/grupos/{{grupo_id}}/empresas/{{empresa_id}}",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Não exclui imediatamente. Marca como 'deletando' e agenda exclusão definitiva em 30 dias.\nUse Reativar para cancelar durante a carência."
+          }
+        },
+        {
+          "name": "Reativar Empresa",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/admin/grupos/{{grupo_id}}/empresas/{{empresa_id}}/reativar",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Cancela a exclusão agendada e reativa a empresa. Retorna 204."
+          }
+        }
+      ]
+    },
+    {
+      "name": "👥 Usuários",
+      "item": [
+        {
+          "name": "Listar Usuários do Grupo",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/admin/grupos/{{grupo_id}}/usuarios?page=1&per_page=20",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "grupos", "{{grupo_id}}", "usuarios"],
+              "query": [
+                { "key": "page",     "value": "1" },
+                { "key": "per_page", "value": "20" }
+              ]
+            },
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+          }
+        },
+        {
+          "name": "Criar Usuário",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const id = pm.response.json().data.id;",
+                  "    pm.collectionVariables.set('usuario_id', id);",
+                  "    pm.test('usuario_id salvo: ' + id, () => pm.expect(id).to.not.be.empty);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/admin/grupos/{{grupo_id}}/usuarios",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"João Silva\",\n  \"email\": \"joao@empresa.com\",\n  \"password\": \"senha1234\",\n  \"role\": \"admin_grupo\"\n}"
+            },
+            "description": "Roles válidas:\n- `admin_global` — acesso total\n- `admin_grupo` — acesso ao próprio grupo\n- `viewer` — leitura com permissão explícita\n\nPassword: mínimo 8 caracteres."
+          }
+        },
+        {
+          "name": "Buscar Usuário por ID",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/admin/grupos/{{grupo_id}}/usuarios/{{usuario_id}}",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+          }
+        },
+        {
+          "name": "Atualizar Usuário",
+          "request": {
+            "method": "PUT",
+            "url": "{{base_url}}/admin/grupos/{{grupo_id}}/usuarios/{{usuario_id}}",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"João Silva Atualizado\",\n  \"role\": \"viewer\",\n  \"ativo\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "Alterar Senha",
+          "request": {
+            "method": "PUT",
+            "url": "{{base_url}}/admin/grupos/{{grupo_id}}/usuarios/{{usuario_id}}/password",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"password\": \"novaSenha456\"\n}"
+            },
+            "description": "Mínimo 8 caracteres. Retorna 204 No Content."
+          }
+        },
+        {
+          "name": "Deletar Usuário",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/admin/grupos/{{grupo_id}}/usuarios/{{usuario_id}}",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Soft delete. Retorna 204."
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔑 Permissões",
+      "description": "Permissões granulares: usuário × empresa × recurso × ação.\n\nRecursos: `dashboard` | `sync` | `admin`\nAções: `ver` | `editar` | `forcar_sync`",
+      "item": [
+        {
+          "name": "Conceder Permissão (Grant)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/admin/permissoes/grant",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usuario_id\": \"{{usuario_id}}\",\n  \"empresa_id\": \"{{empresa_id}}\",\n  \"recurso\": \"sync\",\n  \"acao\": \"ver\"\n}"
+            },
+            "description": "Idempotente — se já existir, retorna a permissão existente sem erro."
+          }
+        },
+        {
+          "name": "Revogar Permissão (Revoke)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/admin/permissoes/revoke",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usuario_id\": \"{{usuario_id}}\",\n  \"empresa_id\": \"{{empresa_id}}\",\n  \"recurso\": \"sync\",\n  \"acao\": \"ver\"\n}"
+            },
+            "description": "Retorna 204 No Content."
+          }
+        },
+        {
+          "name": "Listar Permissões por Usuário",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/admin/permissoes/usuario/{{usuario_id}}",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+          }
+        },
+        {
+          "name": "Listar Permissões por Empresa",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/admin/permissoes/empresa/{{empresa_id}}",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+          }
+        }
+      ]
+    },
+    {
+      "name": "⚙️ Sync",
+      "description": "Controle e monitoramento da sincronização com o Omie.\n\nTipos de job:\n- `manual` — delta sync (só registros alterados desde o último sync)\n- `full` — sync completo de todos os registros\n- `automatico` — criado pelo scheduler com base no intervalo configurado",
+      "item": [
+        {
+          "name": "Status do Sync",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/sync/{{empresa_id}}/status",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Retorna o controle de sync (intervalo, próxima execução) e o último job."
+          }
+        },
+        {
+          "name": "Listar Jobs",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/sync/{{empresa_id}}/jobs?page=1&per_page=20",
+              "host": ["{{base_url}}"],
+              "path": ["sync", "{{empresa_id}}", "jobs"],
+              "query": [
+                { "key": "page",     "value": "1" },
+                { "key": "per_page", "value": "20" }
+              ]
+            },
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+          }
+        },
+        {
+          "name": "Forçar Sync Manual (delta)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/sync/{{empresa_id}}/forcar",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipo\": \"manual\"\n}"
+            },
+            "description": "Delta sync: busca apenas registros alterados desde o último sync.\nO job é executado em background — monitore via GET /status."
+          }
+        },
+        {
+          "name": "Forçar Sync Completo (full)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/sync/{{empresa_id}}/forcar",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipo\": \"full\"\n}"
+            },
+            "description": "Sync completo: reprocessa TODOS os registros do Omie ignorando o delta.\nUse para reconstruir os dados do zero ou após mudança de credencial."
+          }
+        },
+        {
+          "name": "Configurar Sync",
+          "request": {
+            "method": "PUT",
+            "url": "{{base_url}}/sync/{{empresa_id}}/configurar",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ativo\": true,\n  \"intervalo_min\": 60\n}"
+            },
+            "description": "Define o intervalo de sync automático.\n\nintervalo_min mínimo: 5\nRecomendado: 60 (1 hora)\n\nSetando `ativo: false` pausa o scheduler para esta empresa."
+          }
+        }
+      ]
+    },
+    {
+      "name": "📊 Dados Sincronizados",
+      "description": "Leitura dos dados já sincronizados do Omie, armazenados no schema do tenant.\n\nTodos os endpoints suportam paginação via `?page=1&per_page=100` (máx 500).\n\nOs dados só aparecem após o primeiro sync concluído com sucesso.",
+      "item": [
+        {
+          "name": "Clientes",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/dados/{{empresa_id}}/clientes?page=1&per_page=100",
+              "host": ["{{base_url}}"],
+              "path": ["dados", "{{empresa_id}}", "clientes"],
+              "query": [
+                { "key": "page",     "value": "1" },
+                { "key": "per_page", "value": "100" }
+              ]
+            },
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Lista clientes sincronizados do Omie. Campos: id, codigo_cliente_omie, razao_social, nome_fantasia, cnpj_cpf, email, cidade, estado, ativo, synced_at."
+          }
+        },
+        {
+          "name": "Categorias",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/dados/{{empresa_id}}/categorias?page=1&per_page=100",
+              "host": ["{{base_url}}"],
+              "path": ["dados", "{{empresa_id}}", "categorias"],
+              "query": [
+                { "key": "page",     "value": "1" },
+                { "key": "per_page", "value": "100" }
+              ]
+            },
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+          }
+        },
+        {
+          "name": "Departamentos",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/dados/{{empresa_id}}/departamentos?page=1&per_page=100",
+              "host": ["{{base_url}}"],
+              "path": ["dados", "{{empresa_id}}", "departamentos"],
+              "query": [
+                { "key": "page",     "value": "1" },
+                { "key": "per_page", "value": "100" }
+              ]
+            },
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+          }
+        },
+        {
+          "name": "Contas Correntes",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/dados/{{empresa_id}}/contas-correntes?page=1&per_page=100",
+              "host": ["{{base_url}}"],
+              "path": ["dados", "{{empresa_id}}", "contas-correntes"],
+              "query": [
+                { "key": "page",     "value": "1" },
+                { "key": "per_page", "value": "100" }
+              ]
+            },
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+          }
+        },
+        {
+          "name": "Contas a Pagar",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/dados/{{empresa_id}}/contas-pagar?page=1&per_page=100",
+              "host": ["{{base_url}}"],
+              "path": ["dados", "{{empresa_id}}", "contas-pagar"],
+              "query": [
+                { "key": "page",     "value": "1" },
+                { "key": "per_page", "value": "100" }
+              ]
+            },
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Ordenado por data_vencimento DESC. Campos: codigo_lancamento, data_vencimento, valor_documento, valor_pago, status_titulo, codigo_cliente."
+          }
+        },
+        {
+          "name": "Contas a Receber",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/dados/{{empresa_id}}/contas-receber?page=1&per_page=100",
+              "host": ["{{base_url}}"],
+              "path": ["dados", "{{empresa_id}}", "contas-receber"],
+              "query": [
+                { "key": "page",     "value": "1" },
+                { "key": "per_page", "value": "100" }
+              ]
+            },
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Ordenado por data_vencimento DESC."
+          }
+        },
+        {
+          "name": "Movimentos Financeiros",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/dados/{{empresa_id}}/movimentos?page=1&per_page=100",
+              "host": ["{{base_url}}"],
+              "path": ["dados", "{{empresa_id}}", "movimentos"],
+              "query": [
+                { "key": "page",     "value": "1" },
+                { "key": "per_page", "value": "100" }
+              ]
+            },
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Ordenado por data_lancamento DESC."
+          }
+        },
+        {
+          "name": "Extrato Bancário",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/dados/{{empresa_id}}/extrato?page=1&per_page=100",
+              "host": ["{{base_url}}"],
+              "path": ["dados", "{{empresa_id}}", "extrato"],
+              "query": [
+                { "key": "page",     "value": "1" },
+                { "key": "per_page", "value": "100" }
+              ]
+            },
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+          }
+        },
+        {
+          "name": "Ordens de Serviço",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/dados/{{empresa_id}}/ordens-servico?page=1&per_page=100",
+              "host": ["{{base_url}}"],
+              "path": ["dados", "{{empresa_id}}", "ordens-servico"],
+              "query": [
+                { "key": "page",     "value": "1" },
+                { "key": "per_page", "value": "100" }
+              ]
+            },
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Ordenado por data_abertura DESC."
+          }
+        },
+        {
+          "name": "Projetos",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/dados/{{empresa_id}}/projetos?page=1&per_page=100",
+              "host": ["{{base_url}}"],
+              "path": ["dados", "{{empresa_id}}", "projetos"],
+              "query": [
+                { "key": "page",     "value": "1" },
+                { "key": "per_page", "value": "100" }
+              ]
+            },
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+          }
+        }
+      ]
+    },
+    {
+      "name": "🚀 Fluxo Completo ETL (E2E)",
+      "description": "Execute nesta ordem para testar o fluxo completo — do cadastro até os dados sincronizados.\n\n1. Login\n2. Criar Grupo → schema provisionado automaticamente\n3. Criar Empresa (com credenciais Omie reais)\n4. Configurar Sync\n5. Forçar Sync Full\n6. Ver Status (aguardar job=concluido)\n7. Consultar Clientes\n8. Criar Usuário\n9. Conceder Permissão\n10. Verificar Audit Logs",
+      "item": [
+        {
+          "name": "1. Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const data = pm.response.json().data;",
+                  "pm.collectionVariables.set('access_token',  data.access_token);",
+                  "pm.collectionVariables.set('refresh_token', data.refresh_token);",
+                  "pm.test('Login OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/auth/login",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"admin@omie.local\",\n  \"password\": \"admin123\"\n}" }
+          }
+        },
+        {
+          "name": "2. Criar Grupo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    pm.collectionVariables.set('grupo_id', pm.response.json().data.id);",
+                  "    pm.test('Grupo criado + schema provisionado', () => pm.response.to.have.status(201));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/admin/grupos",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"nome\": \"Minha Empresa\",\n  \"slug\": \"minha-empresa\"\n}" }
+          }
+        },
+        {
+          "name": "3. Criar Empresa (credenciais Omie)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    pm.collectionVariables.set('empresa_id', pm.response.json().data.id);",
+                  "    pm.test('Empresa criada', () => pm.response.to.have.status(201));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/admin/grupos/{{grupo_id}}/empresas",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"nome\": \"Minha Empresa Ltda\",\n  \"cnpj\": \"00.000.000/0001-00\",\n  \"app_key\": \"SEU_APP_KEY_AQUI\",\n  \"app_secret\": \"SEU_APP_SECRET_AQUI\"\n}" }
+          }
+        },
+        {
+          "name": "4. Configurar Sync (60 min)",
+          "request": {
+            "method": "PUT",
+            "url": "{{base_url}}/sync/{{empresa_id}}/configurar",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"ativo\": true,\n  \"intervalo_min\": 60\n}" }
+          }
+        },
+        {
+          "name": "5. Forçar Sync Full (primeiro sync)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/sync/{{empresa_id}}/forcar",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"tipo\": \"full\"\n}" },
+            "description": "Full sync para o primeiro uso — busca todos os registros do Omie."
+          }
+        },
+        {
+          "name": "6. Ver Status do Sync",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/sync/{{empresa_id}}/status",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Verifique status do último job. Aguarde status=concluido antes de consultar /dados."
+          }
+        },
+        {
+          "name": "7. Consultar Clientes Sincronizados",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/dados/{{empresa_id}}/clientes?page=1&per_page=50",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+          }
+        },
+        {
+          "name": "8. Consultar Contas a Pagar",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/dados/{{empresa_id}}/contas-pagar?page=1&per_page=50",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }]
+          }
+        },
+        {
+          "name": "9. Criar Usuário do Cliente",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    pm.collectionVariables.set('usuario_id', pm.response.json().data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/admin/grupos/{{grupo_id}}/usuarios",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"nome\": \"Analista Financeiro\",\n  \"email\": \"financeiro@empresa.com\",\n  \"password\": \"senha1234\",\n  \"role\": \"viewer\"\n}" }
+          }
+        },
+        {
+          "name": "10. Conceder Acesso ao Dashboard",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/admin/permissoes/grant",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"usuario_id\": \"{{usuario_id}}\",\n  \"empresa_id\": \"{{empresa_id}}\",\n  \"recurso\": \"dashboard\",\n  \"acao\": \"ver\"\n}" }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,1351 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Motor de Sincronização Omie</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Syne:wght@400;600;700;800&display=swap');
+
+  :root {
+    --bg: #080c14;
+    --surface: #0d1520;
+    --surface2: #111c2e;
+    --border: #1e3048;
+    --border-bright: #2a4a6e;
+    --accent: #00c9ff;
+    --accent2: #7b61ff;
+    --accent3: #00ffa3;
+    --accent4: #ff6b6b;
+    --accent5: #ffb347;
+    --text: #e8f4ff;
+    --text-dim: #6a8caa;
+    --text-mid: #9ab8d4;
+    --glow: rgba(0,201,255,0.15);
+    --glow2: rgba(123,97,255,0.15);
+    --glow3: rgba(0,255,163,0.12);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Background grid */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,201,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,201,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .page {
+    position: relative;
+    z-index: 1;
+    padding: 40px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  /* HEADER */
+  .header {
+    text-align: center;
+    margin-bottom: 50px;
+  }
+
+  .header .badge {
+    display: inline-block;
+    background: rgba(0,201,255,0.1);
+    border: 1px solid rgba(0,201,255,0.3);
+    color: var(--accent);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 3px;
+    padding: 6px 16px;
+    border-radius: 2px;
+    margin-bottom: 16px;
+    text-transform: uppercase;
+  }
+
+  .header h1 {
+    font-size: 36px;
+    font-weight: 800;
+    letter-spacing: -1px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2), var(--accent3));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 8px;
+  }
+
+  .header p {
+    color: var(--text-dim);
+    font-size: 14px;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 1px;
+  }
+
+  /* RATE LIMIT BANNER */
+  .rate-banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(255,179,71,0.08);
+    border: 1px solid rgba(255,179,71,0.3);
+    border-radius: 8px;
+    padding: 12px 20px;
+    margin-bottom: 40px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--accent5);
+  }
+
+  .rate-banner .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--accent5);
+    box-shadow: 0 0 8px var(--accent5);
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  /* MAIN DIAGRAM - 3 columns */
+  .diagram {
+    display: grid;
+    grid-template-columns: 260px 1fr 260px;
+    gap: 24px;
+    align-items: start;
+  }
+
+  /* COLUMN LABELS */
+  .col-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 3px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    text-align: center;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* ===================== LEFT COLUMN: SOURCE ===================== */
+  .source-col {}
+
+  .omie-box {
+    background: linear-gradient(135deg, #0a1628, #0f2040);
+    border: 1px solid var(--border-bright);
+    border-radius: 12px;
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .omie-box::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+  }
+
+  .omie-logo {
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--accent);
+    letter-spacing: 2px;
+    margin-bottom: 4px;
+  }
+
+  .omie-sub {
+    font-size: 10px;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+    margin-bottom: 16px;
+  }
+
+  .endpoint-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .endpoint-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    transition: border-color 0.2s;
+  }
+
+  .endpoint-item:hover { border-color: var(--accent); }
+
+  .ep-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .ep-text {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9.5px;
+    color: var(--text-mid);
+  }
+
+  .ep-tag {
+    margin-left: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px;
+    padding: 2px 5px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  .tag-fin { background: rgba(0,201,255,0.15); color: var(--accent); }
+  .tag-ger { background: rgba(123,97,255,0.15); color: var(--accent2); }
+  .tag-srv { background: rgba(0,255,163,0.15); color: var(--accent3); }
+
+  /* rate limit display */
+  .rate-box {
+    margin-top: 14px;
+    background: rgba(255,179,71,0.06);
+    border: 1px solid rgba(255,179,71,0.2);
+    border-radius: 6px;
+    padding: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--accent5);
+  }
+
+  .rate-box .rate-title {
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+  }
+
+  .rate-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 2px;
+  }
+
+  .rate-bar-wrap {
+    margin-top: 8px;
+    background: rgba(0,0,0,0.4);
+    border-radius: 2px;
+    height: 4px;
+    overflow: hidden;
+  }
+
+  .rate-bar {
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent5), #ff8c00);
+    border-radius: 2px;
+  }
+
+  /* ===================== CENTER COLUMN: ENGINE ===================== */
+  .engine-col {}
+
+  /* SCHEDULER */
+  .scheduler-box {
+    background: linear-gradient(135deg, #110a28, #1a0f3d);
+    border: 1px solid rgba(123,97,255,0.4);
+    border-radius: 12px;
+    padding: 18px 20px;
+    margin-bottom: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .scheduler-box::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent2), var(--accent));
+  }
+
+  .box-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .box-title .icon {
+    font-size: 16px;
+  }
+
+  .box-desc {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+  }
+
+  .sched-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .sched-item {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+  }
+
+  .sched-item .si-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+
+  .sched-item .si-val {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--accent2);
+    font-weight: 600;
+  }
+
+  /* ARROW */
+  .arrow-down {
+    text-align: center;
+    padding: 6px 0;
+    color: var(--text-dim);
+    font-size: 18px;
+    position: relative;
+  }
+
+  .arrow-down::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 1px;
+    height: 100%;
+    background: linear-gradient(180deg, transparent, var(--border-bright), transparent);
+  }
+
+  /* ORCHESTRATOR */
+  .orch-box {
+    background: linear-gradient(135deg, #0a1f18, #0e2820);
+    border: 1px solid rgba(0,255,163,0.3);
+    border-radius: 12px;
+    padding: 18px 20px;
+    margin-bottom: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .orch-box::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent3), var(--accent));
+  }
+
+  /* WORKERS GRID */
+  .workers-section {
+    margin-bottom: 20px;
+  }
+
+  .workers-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 3px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    text-align: center;
+    margin-bottom: 12px;
+  }
+
+  .workers-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+
+  .worker-card {
+    background: linear-gradient(135deg, #0d1a2e, #111e32);
+    border: 1px solid var(--border-bright);
+    border-radius: 8px;
+    padding: 12px 10px;
+    text-align: center;
+    position: relative;
+    transition: border-color 0.3s;
+  }
+
+  .worker-card:hover {
+    border-color: var(--accent);
+  }
+
+  .worker-card.active {
+    border-color: var(--accent3);
+    box-shadow: 0 0 16px rgba(0,255,163,0.1);
+  }
+
+  .worker-card.active::after {
+    content: '●';
+    position: absolute;
+    top: 6px; right: 8px;
+    font-size: 7px;
+    color: var(--accent3);
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  .worker-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--accent);
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .worker-empresa {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+
+  .worker-status {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    display: inline-block;
+  }
+
+  .ws-sync { background: rgba(0,255,163,0.15); color: var(--accent3); }
+  .ws-queue { background: rgba(123,97,255,0.15); color: var(--accent2); }
+  .ws-wait { background: rgba(0,0,0,0.3); color: var(--text-dim); border: 1px solid var(--border); }
+
+  .worker-eps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    justify-content: center;
+    margin-top: 6px;
+  }
+
+  .wep {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 7px;
+    padding: 1px 4px;
+    border-radius: 2px;
+    background: rgba(0,201,255,0.08);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+  }
+
+  .more-workers {
+    text-align: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 2px;
+    padding: 4px;
+  }
+
+  /* STAGING + JOB CONTROL */
+  .staging-box {
+    background: linear-gradient(135deg, #1a0d0d, #220f0f);
+    border: 1px solid rgba(255,107,107,0.3);
+    border-radius: 12px;
+    padding: 18px 20px;
+    margin-bottom: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .staging-box::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent4), var(--accent5));
+  }
+
+  .staging-flow {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 10px;
+    align-items: center;
+    margin-top: 12px;
+  }
+
+  .sf-box {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+    text-align: center;
+  }
+
+  .sf-box .sf-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .sf-box .sf-val {
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .sf-arrow {
+    font-size: 18px;
+    color: var(--accent3);
+    text-align: center;
+  }
+
+  .page-tracker {
+    margin-top: 12px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+  }
+
+  .pt-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .pt-pages {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+
+  .pt-page {
+    width: 20px; height: 20px;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px;
+    font-weight: 600;
+  }
+
+  .pp-ok { background: rgba(0,255,163,0.2); color: var(--accent3); border: 1px solid rgba(0,255,163,0.4); }
+  .pp-run { background: rgba(0,201,255,0.2); color: var(--accent); border: 1px solid rgba(0,201,255,0.4); animation: pulse 1s ease-in-out infinite; }
+  .pp-err { background: rgba(255,107,107,0.2); color: var(--accent4); border: 1px solid rgba(255,107,107,0.4); }
+  .pp-pend { background: rgba(0,0,0,0.3); color: var(--text-dim); border: 1px solid var(--border); }
+
+  .commit-guard {
+    margin-top: 10px;
+    background: rgba(0,255,163,0.05);
+    border: 1px solid rgba(0,255,163,0.2);
+    border-radius: 6px;
+    padding: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--accent3);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* ERROR HANDLING */
+  .error-box {
+    background: linear-gradient(135deg, #1a1208, #211608);
+    border: 1px solid rgba(255,179,71,0.3);
+    border-radius: 12px;
+    padding: 18px 20px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .error-box::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent5), var(--accent4));
+  }
+
+  .error-types {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 10px;
+  }
+
+  .error-type {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 7px 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9.5px;
+  }
+
+  .et-badge {
+    font-size: 8px;
+    padding: 2px 6px;
+    border-radius: 2px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .et-transiente { background: rgba(0,201,255,0.2); color: var(--accent); }
+  .et-estrutural { background: rgba(255,107,107,0.2); color: var(--accent4); }
+  .et-logico { background: rgba(255,179,71,0.2); color: var(--accent5); }
+
+  .et-action {
+    margin-left: auto;
+    font-size: 8px;
+    color: var(--text-dim);
+    text-align: right;
+  }
+
+  /* ===================== RIGHT COLUMN: DESTINATION ===================== */
+  .dest-col {}
+
+  .db-box {
+    background: linear-gradient(135deg, #080d1a, #0c1422);
+    border: 1px solid var(--border-bright);
+    border-radius: 12px;
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+
+  .db-box::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent2), var(--accent3));
+  }
+
+  .schema-item {
+    margin-bottom: 12px;
+  }
+
+  .schema-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--accent2);
+    font-weight: 600;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .schema-name .sn-icon { font-size: 12px; }
+
+  .table-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-left: 10px;
+    border-left: 2px solid var(--border);
+  }
+
+  .table-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--text-mid);
+    padding: 4px 6px;
+    border-radius: 4px;
+    transition: background 0.2s;
+  }
+
+  .table-item:hover {
+    background: rgba(0,201,255,0.05);
+  }
+
+  .ti-dot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .ti-key {
+    margin-left: auto;
+    font-size: 8px;
+    color: var(--text-dim);
+  }
+
+  /* ETL Control schema */
+  .etl-schema {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    margin-top: 8px;
+  }
+
+  .etl-schema-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .etl-tables {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+  }
+
+  .etl-table {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 5px 7px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8.5px;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  /* VIEW MATERIALIZADA */
+  .view-box {
+    background: linear-gradient(135deg, #0a1628, #0d1f3a);
+    border: 1px solid rgba(0,201,255,0.3);
+    border-radius: 12px;
+    padding: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .view-box::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent), var(--accent3));
+  }
+
+  .view-refresh {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(0,201,255,0.05);
+    border: 1px solid rgba(0,201,255,0.15);
+    border-radius: 5px;
+    padding: 7px 10px;
+    margin-top: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--accent);
+  }
+
+  /* FOOTER LEGEND */
+  .legend {
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    margin-top: 40px;
+    flex-wrap: wrap;
+    padding: 16px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  .legend-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+  }
+
+  /* FLOW ARROWS between columns */
+  .flow-row {
+    display: grid;
+    grid-template-columns: 260px 1fr 260px;
+    gap: 24px;
+    align-items: center;
+    margin: -8px 0;
+    position: relative;
+    z-index: 2;
+  }
+
+  .flow-arrow-h {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 30px;
+  }
+
+  .fah-line {
+    height: 2px;
+    flex: 1;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    position: relative;
+  }
+
+  .fah-line::after {
+    content: '▶';
+    position: absolute;
+    right: -4px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--accent);
+    font-size: 10px;
+  }
+
+  .fah-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--text-dim);
+    background: var(--bg);
+    padding: 2px 8px;
+    letter-spacing: 1px;
+    white-space: nowrap;
+  }
+
+  /* ANIMATIONS */
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  @keyframes slide-in {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .page > * {
+    animation: slide-in 0.5s ease-out backwards;
+  }
+
+  .header { animation-delay: 0.1s; }
+  .rate-banner { animation-delay: 0.15s; }
+  .diagram { animation-delay: 0.2s; }
+  .legend { animation-delay: 0.3s; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 3px; }
+
+  .sep {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border-bright), transparent);
+    margin: 14px 0;
+  }
+
+  .full-sync-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: rgba(123,97,255,0.1);
+    border: 1px solid rgba(123,97,255,0.3);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--accent2);
+    margin-top: 6px;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="badge">⚡ Architecture Blueprint v1.0</div>
+    <h1>Motor de Sincronização Omie</h1>
+    <p>60 empresas · multi-tenant · sync incremental + full · garantia de integridade por página</p>
+  </div>
+
+  <!-- RATE LIMIT BANNER -->
+  <div class="rate-banner">
+    <div class="dot"></div>
+    <span>RATE LIMIT POLICY — Operando a 50% do limite Omie &nbsp;|&nbsp; Máx: 120 req/min por empresa &nbsp;|&nbsp; 2 paralelas por método &nbsp;|&nbsp; Backoff automático em caso de 429/425</span>
+  </div>
+
+  <!-- DIAGRAM -->
+  <div class="diagram">
+
+    <!-- ===== LEFT: SOURCE ===== -->
+    <div class="source-col">
+      <div class="col-label">① Fonte de Dados</div>
+
+      <div class="omie-box">
+        <div class="omie-logo">OMIE ERP</div>
+        <div class="omie-sub">api.omie.com.br/v1</div>
+
+        <div class="endpoint-list">
+          <div class="endpoint-item">
+            <div class="ep-dot" style="background:#7b61ff"></div>
+            <div class="ep-text">geral/clientes</div>
+            <span class="ep-tag tag-ger">GER</span>
+          </div>
+          <div class="endpoint-item">
+            <div class="ep-dot" style="background:#7b61ff"></div>
+            <div class="ep-text">geral/categorias</div>
+            <span class="ep-tag tag-ger">GER</span>
+          </div>
+          <div class="endpoint-item">
+            <div class="ep-dot" style="background:#7b61ff"></div>
+            <div class="ep-text">geral/contacorrente</div>
+            <span class="ep-tag tag-ger">GER</span>
+          </div>
+          <div class="endpoint-item">
+            <div class="ep-dot" style="background:#7b61ff"></div>
+            <div class="ep-text">geral/departamentos</div>
+            <span class="ep-tag tag-ger">GER</span>
+          </div>
+          <div class="endpoint-item">
+            <div class="ep-dot" style="background:#7b61ff"></div>
+            <div class="ep-text">geral/projetos</div>
+            <span class="ep-tag tag-ger">GER</span>
+          </div>
+          <div class="sep"></div>
+          <div class="endpoint-item">
+            <div class="ep-dot" style="background:#00c9ff"></div>
+            <div class="ep-text">financas/contapagar</div>
+            <span class="ep-tag tag-fin">FIN</span>
+          </div>
+          <div class="endpoint-item">
+            <div class="ep-dot" style="background:#00c9ff"></div>
+            <div class="ep-text">financas/contareceber</div>
+            <span class="ep-tag tag-fin">FIN</span>
+          </div>
+          <div class="endpoint-item">
+            <div class="ep-dot" style="background:#00c9ff"></div>
+            <div class="ep-text">financas/extrato</div>
+            <span class="ep-tag tag-fin">FIN</span>
+          </div>
+          <div class="endpoint-item">
+            <div class="ep-dot" style="background:#00c9ff"></div>
+            <div class="ep-text">financas/mf</div>
+            <span class="ep-tag tag-fin">FIN</span>
+          </div>
+          <div class="sep"></div>
+          <div class="endpoint-item">
+            <div class="ep-dot" style="background:#00ffa3"></div>
+            <div class="ep-text">servicos/os</div>
+            <span class="ep-tag tag-srv">SRV</span>
+          </div>
+        </div>
+
+        <div class="rate-box">
+          <div class="rate-title">Rate Limit por empresa</div>
+          <div class="rate-row"><span>Omie (máx)</span><span>240 req/min</span></div>
+          <div class="rate-row"><span style="color:var(--accent3)">Nosso uso (50%)</span><span style="color:var(--accent3)">120 req/min</span></div>
+          <div class="rate-row"><span>Paralelas por método</span><span>2 de 4</span></div>
+          <div class="rate-bar-wrap"><div class="rate-bar"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== CENTER: ENGINE ===== -->
+    <div class="engine-col">
+      <div class="col-label">② Motor de Sincronização</div>
+
+      <!-- SCHEDULER -->
+      <div class="scheduler-box">
+        <div class="box-title"><span class="icon">⏱</span> Scheduler</div>
+        <div class="box-desc">Orquestrador central de ciclos</div>
+        <div class="sched-grid">
+          <div class="sched-item">
+            <div class="si-label">Incremental</div>
+            <div class="si-val">≥ 30 min</div>
+          </div>
+          <div class="sched-item">
+            <div class="si-label">Full Sync</div>
+            <div class="si-val">1x / semana</div>
+          </div>
+          <div class="sched-item">
+            <div class="si-label">Retry Worker</div>
+            <div class="si-val">Contínuo</div>
+          </div>
+          <div class="sched-item">
+            <div class="si-label">Força Full</div>
+            <div class="si-val">On demand</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ARROW -->
+      <div class="arrow-down" style="padding:10px 0; font-size:22px; color:var(--accent3);">↓</div>
+
+      <!-- ORCHESTRATOR -->
+      <div class="orch-box">
+        <div class="box-title"><span class="icon">🎛</span> Orquestrador</div>
+        <div class="box-desc">Lê _etl.empresas ativas · distribui workers · controla concorrência</div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <div style="background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text-dim);">
+            60 empresas ativas
+          </div>
+          <div style="background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text-dim);">
+            10–15 workers paralelos
+          </div>
+          <div style="background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text-dim);">
+            rate limit independente / empresa
+          </div>
+        </div>
+      </div>
+
+      <!-- ARROW -->
+      <div class="arrow-down" style="padding:10px 0; font-size:22px; color:var(--accent3);">↓</div>
+
+      <!-- WORKERS -->
+      <div class="workers-section">
+        <div class="workers-label">⚙ Workers — 1 Thread por Empresa</div>
+        <div class="workers-grid">
+
+          <div class="worker-card active">
+            <div class="worker-title">THREAD</div>
+            <div class="worker-empresa">Empresa 01</div>
+            <div class="worker-status ws-sync">SYNCING</div>
+            <div class="worker-eps">
+              <span class="wep">contapagar</span>
+              <span class="wep">contareceber</span>
+              <span class="wep">extrato</span>
+              <span class="wep">mf</span>
+              <span class="wep">clientes</span>
+              <span class="wep">categ.</span>
+              <span class="wep">depto</span>
+              <span class="wep">cc</span>
+              <span class="wep">os</span>
+              <span class="wep">proj.</span>
+            </div>
+          </div>
+
+          <div class="worker-card active">
+            <div class="worker-title">THREAD</div>
+            <div class="worker-empresa">Empresa 02</div>
+            <div class="worker-status ws-sync">SYNCING</div>
+            <div class="worker-eps">
+              <span class="wep">contapagar</span>
+              <span class="wep">contareceber</span>
+              <span class="wep">extrato</span>
+              <span class="wep">mf</span>
+              <span class="wep">+6</span>
+            </div>
+          </div>
+
+          <div class="worker-card">
+            <div class="worker-title">THREAD</div>
+            <div class="worker-empresa">Empresa 03</div>
+            <div class="worker-status ws-queue">NA FILA</div>
+            <div class="worker-eps">
+              <span class="wep">aguardando</span>
+            </div>
+          </div>
+
+        </div>
+        <div class="more-workers">· · · até 60 workers · · ·</div>
+      </div>
+
+      <!-- ARROW -->
+      <div class="arrow-down" style="padding:10px 0; font-size:22px; color:var(--accent4);">↓</div>
+
+      <!-- STAGING + PAGE CONTROL -->
+      <div class="staging-box">
+        <div class="box-title"><span class="icon">🛡</span> Staging + Garantia de Integridade</div>
+        <div class="box-desc">Nenhum dado vai para produção enquanto todas as páginas não estiverem confirmadas</div>
+
+        <div class="staging-flow">
+          <div class="sf-box">
+            <div class="sf-title">API Omie</div>
+            <div class="sf-val" style="color:var(--accent)">100 págs<br><span style="font-size:10px;color:var(--text-dim)">100 itens/pág</span></div>
+          </div>
+          <div class="sf-arrow">→</div>
+          <div class="sf-box">
+            <div class="sf-title">Staging Table</div>
+            <div class="sf-val" style="color:var(--accent5)">_etl.staging<br><span style="font-size:10px;color:var(--text-dim)">por job_id</span></div>
+          </div>
+        </div>
+
+        <div class="page-tracker">
+          <div class="pt-label">Controle de Páginas — sync_job_paginas</div>
+          <div class="pt-pages">
+            <div class="pt-page pp-ok">1</div>
+            <div class="pt-page pp-ok">2</div>
+            <div class="pt-page pp-ok">3</div>
+            <div class="pt-page pp-ok">4</div>
+            <div class="pt-page pp-ok">5</div>
+            <div class="pt-page pp-run">6</div>
+            <div class="pt-page pp-err">7</div>
+            <div class="pt-page pp-pend">8</div>
+            <div class="pt-page pp-pend">9</div>
+            <div class="pt-page pp-pend">…</div>
+          </div>
+          <div style="margin-top:8px;font-family:'JetBrains Mono',monospace;font-size:8.5px;color:var(--text-dim);">
+            <span style="color:var(--accent3)">■</span> ok &nbsp;
+            <span style="color:var(--accent)">■</span> processando &nbsp;
+            <span style="color:var(--accent4)">■</span> erro (retry) &nbsp;
+            <span style="color:var(--text-dim)">■</span> pendente
+          </div>
+        </div>
+
+        <div class="commit-guard">
+          <span style="font-size:16px;">🔒</span>
+          <span>COMMIT só quando paginas_ok == total_paginas &nbsp;→&nbsp; atomicidade garantida</span>
+        </div>
+
+        <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
+          <div class="full-sync-badge">
+            ↻ INCREMENTAL: UPSERT por codigo_omie
+          </div>
+          <div style="display:inline-flex;align-items:center;gap:5px;background:rgba(255,107,107,0.1);border:1px solid rgba(255,107,107,0.3);border-radius:4px;padding:4px 8px;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--accent4);margin-top:6px;">
+            ⚡ FULL SYNC: TRUNCATE + INSERT em transaction
+          </div>
+        </div>
+      </div>
+
+      <!-- ARROW -->
+      <div class="arrow-down" style="padding:10px 0; font-size:22px; color:var(--accent5);">↓</div>
+
+      <!-- ERROR HANDLING -->
+      <div class="error-box">
+        <div class="box-title"><span class="icon">⚠</span> Tratamento de Erros</div>
+        <div class="box-desc">Cada tipo de erro tem uma política específica</div>
+        <div class="error-types">
+          <div class="error-type">
+            <span class="et-badge et-transiente">TRANSIENTE</span>
+            <span style="color:var(--text-mid)">Timeout / 500 / 429</span>
+            <div class="et-action">Retry backoff<br>30s → 2min → 5min</div>
+          </div>
+          <div class="error-type">
+            <span class="et-badge et-estrutural">ESTRUTURAL</span>
+            <span style="color:var(--text-mid)">401 / 425 credencial</span>
+            <div class="et-action">Pausa empresa<br>Alerta admin</div>
+          </div>
+          <div class="error-type">
+            <span class="et-badge et-logico">LÓGICO</span>
+            <span style="color:var(--text-mid)">Dados inválidos / constraint</span>
+            <div class="et-action">Log em registros_erro<br>Continua restante</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ===== RIGHT: DESTINATION ===== -->
+    <div class="dest-col">
+      <div class="col-label">③ Destino — PostgreSQL</div>
+
+      <div class="db-box">
+        <div class="box-title"><span class="icon">🗄</span> Schemas por Grupo (Tenant)</div>
+        <div class="box-desc" style="margin-bottom:14px">Isolamento total entre clientes</div>
+
+        <!-- Grupo A -->
+        <div class="schema-item">
+          <div class="schema-name">
+            <span class="sn-icon">📁</span>
+            SCHEMA: grupo_alpha
+          </div>
+          <div class="table-list">
+            <div class="table-item">
+              <div class="ti-dot" style="background:#00c9ff"></div>
+              contas_a_pagar
+              <span class="ti-key">empresa_id</span>
+            </div>
+            <div class="table-item">
+              <div class="ti-dot" style="background:#00c9ff"></div>
+              contas_a_receber
+              <span class="ti-key">empresa_id</span>
+            </div>
+            <div class="table-item">
+              <div class="ti-dot" style="background:#00c9ff"></div>
+              extrato
+              <span class="ti-key">empresa_id</span>
+            </div>
+            <div class="table-item">
+              <div class="ti-dot" style="background:#00c9ff"></div>
+              movimentos_fin
+              <span class="ti-key">empresa_id</span>
+            </div>
+            <div class="table-item">
+              <div class="ti-dot" style="background:#7b61ff"></div>
+              clientes
+              <span class="ti-key">empresa_id</span>
+            </div>
+            <div class="table-item">
+              <div class="ti-dot" style="background:#7b61ff"></div>
+              categorias
+              <span class="ti-key">empresa_id</span>
+            </div>
+            <div class="table-item">
+              <div class="ti-dot" style="background:#7b61ff"></div>
+              departamentos
+              <span class="ti-key">empresa_id</span>
+            </div>
+            <div class="table-item">
+              <div class="ti-dot" style="background:#7b61ff"></div>
+              contas_correntes
+              <span class="ti-key">empresa_id</span>
+            </div>
+            <div class="table-item">
+              <div class="ti-dot" style="background:#00ffa3"></div>
+              ordens_servico
+              <span class="ti-key">empresa_id</span>
+            </div>
+            <div class="table-item">
+              <div class="ti-dot" style="background:#7b61ff"></div>
+              projetos
+              <span class="ti-key">empresa_id</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="sep"></div>
+
+        <!-- Grupo B (collapsed) -->
+        <div class="schema-item">
+          <div class="schema-name">
+            <span class="sn-icon">📁</span>
+            SCHEMA: grupo_beta
+          </div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text-dim);padding-left:16px;">
+            mesma estrutura · dados isolados
+          </div>
+        </div>
+
+        <div class="sep"></div>
+
+        <!-- N grupos -->
+        <div style="text-align:center;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text-dim);letter-spacing:2px;padding:4px;">
+          · · · N grupos · · ·
+        </div>
+
+        <div class="sep"></div>
+
+        <!-- ETL Control -->
+        <div class="etl-schema">
+          <div class="etl-schema-title">📋 Schema: _etl (controle)</div>
+          <div class="etl-tables">
+            <div class="etl-table">🏢 empresas</div>
+            <div class="etl-table">👥 grupos</div>
+            <div class="etl-table">⏱ sync_control</div>
+            <div class="etl-table">📋 sync_jobs</div>
+            <div class="etl-table">📄 job_paginas</div>
+            <div class="etl-table">🔄 retry_queue</div>
+            <div class="etl-table">⚠ reg_erros</div>
+            <div class="etl-table">🔐 credenciais</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW MATERIALIZADA -->
+      <div class="view-box">
+        <div class="box-title"><span class="icon">📊</span> View Materializada</div>
+        <div class="box-desc">Fluxo de caixa consolidado · próxima etapa</div>
+
+        <div style="display:flex;flex-direction:column;gap:5px;margin-top:8px;">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text-dim);padding:6px 8px;background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:4px;">
+            ← contas_a_pagar + contas_a_receber
+          </div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text-dim);padding:6px 8px;background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:4px;">
+            ← extrato (previsto futuro)
+          </div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text-dim);padding:6px 8px;background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:4px;">
+            ← movimentos_fin (realizado)
+          </div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text-dim);padding:6px 8px;background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:4px;">
+            + rateio categ / depto / cliente
+          </div>
+        </div>
+
+        <div class="view-refresh">
+          <span>🔃</span>
+          <span>REFRESH ao final de cada job bem-sucedido</span>
+        </div>
+
+        <div style="margin-top:8px;background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:5px;padding:8px;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text-dim);">
+          <div style="color:var(--accent);margin-bottom:4px;">Índices (próxima etapa):</div>
+          empresa_id · data_pagamento<br>
+          cod_categoria · receita_despesa<br>
+          ano · mes · departamento
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- LEGEND -->
+  <div class="legend">
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#00c9ff"></div>
+      Financeiro (FIN)
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#7b61ff"></div>
+      Geral / Cadastros (GER)
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#00ffa3"></div>
+      Serviços (SRV)
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#ffb347"></div>
+      Erro Transiente → Retry
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#ff6b6b"></div>
+      Erro Estrutural → Pausa
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#ffffff; opacity:0.3"></div>
+      1 Worker = 1 Thread por Empresa
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

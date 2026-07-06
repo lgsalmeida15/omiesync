@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>API Omie Sync — Diagrama v2</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap');
+
+  :root {
+    --bg: #07090f;
+    --s1: #0c1018;
+    --s2: #111520;
+    --border: #1a2236;
+    --border2: #243049;
+    --get: #00c896;
+    --post: #4e9eff;
+    --put: #f5a623;
+    --delete: #ff5c5c;
+    --patch: #b87cff;
+    --text: #e2eaf6;
+    --dim: #4a6080;
+    --mid: #7a96b8;
+    --accent: #4e9eff;
+    --accent2: #00c896;
+    --warn: #f5a623;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:'DM Sans',sans-serif; min-height:100vh; }
+  body::before {
+    content:''; position:fixed; inset:0;
+    background-image: linear-gradient(rgba(78,158,255,0.025) 1px,transparent 1px), linear-gradient(90deg,rgba(78,158,255,0.025) 1px,transparent 1px);
+    background-size:32px 32px; pointer-events:none; z-index:0;
+  }
+
+  .wrap { position:relative; z-index:1; max-width:1320px; margin:0 auto; padding:40px 32px 60px; }
+
+  /* HEADER */
+  .hdr { margin-bottom:36px; display:flex; align-items:flex-start; justify-content:space-between; gap:24px; flex-wrap:wrap; }
+  .hdr-left .eyebrow { font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:3px; color:var(--accent); text-transform:uppercase; margin-bottom:10px; display:flex; align-items:center; gap:8px; }
+  .hdr-left .eyebrow::before { content:''; display:inline-block; width:20px; height:1px; background:var(--accent); }
+  .hdr-left h1 { font-size:28px; font-weight:700; letter-spacing:-0.5px; color:var(--text); margin-bottom:6px; }
+  .hdr-left p { font-size:12px; color:var(--dim); font-family:'JetBrains Mono',monospace; }
+
+  .method-legend { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .ml-item { display:flex; align-items:center; gap:5px; font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--mid); }
+  .ml-badge { font-size:9px; font-weight:700; padding:2px 6px; border-radius:3px; letter-spacing:0.5px; }
+
+  /* STATS */
+  .stats-bar { display:flex; gap:14px; margin-bottom:32px; flex-wrap:wrap; }
+  .stat-item { background:var(--s1); border:1px solid var(--border); border-radius:8px; padding:12px 18px; display:flex; align-items:center; gap:10px; }
+  .stat-icon { font-size:18px; }
+  .stat-val { font-size:20px; font-weight:700; color:var(--text); font-family:'JetBrains Mono',monospace; line-height:1; }
+  .stat-label { font-size:10px; color:var(--dim); margin-top:2px; }
+
+  /* LAYOUT */
+  .layout { display:grid; grid-template-columns:220px 1fr; gap:20px; align-items:start; }
+
+  /* NAV */
+  .nav { position:sticky; top:24px; display:flex; flex-direction:column; gap:4px; }
+  .nav-section { margin-bottom:6px; }
+  .nav-label { font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:2px; color:var(--dim); text-transform:uppercase; padding:6px 10px; }
+  .nav-item { display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:6px; cursor:pointer; transition:background 0.15s; text-decoration:none; border:1px solid transparent; }
+  .nav-item:hover { background:rgba(78,158,255,0.07); border-color:var(--border); }
+  .nav-item .ni-icon { font-size:14px; }
+  .nav-item .ni-text { font-size:12px; font-weight:500; color:var(--mid); }
+  .nav-item .ni-count { margin-left:auto; font-family:'JetBrains Mono',monospace; font-size:9px; color:var(--dim); background:var(--s2); border:1px solid var(--border); padding:1px 5px; border-radius:3px; }
+
+  .nav-base-box { margin-top:16px; padding:12px; background:rgba(0,200,150,0.05); border:1px solid rgba(0,200,150,0.15); border-radius:8px; }
+  .nav-base-box .nbb-label { font-family:'JetBrains Mono',monospace; font-size:9px; color:var(--dim); letter-spacing:1px; text-transform:uppercase; margin-bottom:6px; }
+  .nav-base-box .nbb-val { font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--get); }
+  .sep-line { height:1px; background:linear-gradient(90deg,transparent,var(--border2),transparent); margin:8px 0; }
+
+  /* API GROUP */
+  .api-groups { display:flex; flex-direction:column; gap:22px; }
+  .api-group { background:var(--s1); border:1px solid var(--border); border-radius:12px; overflow:hidden; animation:fadeIn 0.4s ease backwards; }
+  .api-group:nth-child(1){animation-delay:.05s} .api-group:nth-child(2){animation-delay:.10s}
+  .api-group:nth-child(3){animation-delay:.15s} .api-group:nth-child(4){animation-delay:.20s}
+  .api-group:nth-child(5){animation-delay:.25s} .api-group:nth-child(6){animation-delay:.30s}
+
+  .ag-header { padding:16px 22px; display:flex; align-items:center; gap:14px; border-bottom:1px solid var(--border); background:linear-gradient(135deg,var(--s2),var(--s1)); }
+  .ag-icon { font-size:20px; }
+  .ag-title { font-size:15px; font-weight:600; color:var(--text); }
+  .ag-desc { font-size:11px; color:var(--dim); margin-top:2px; }
+  .ag-base { margin-left:auto; font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--dim); background:rgba(0,0,0,0.4); border:1px solid var(--border); padding:4px 10px; border-radius:4px; white-space:nowrap; }
+
+  /* MIDDLEWARE */
+  .middleware-strip { display:flex; gap:8px; padding:10px 22px; background:rgba(0,0,0,0.3); border-bottom:1px solid var(--border); flex-wrap:wrap; align-items:center; }
+  .mw-label { font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:1px; color:var(--dim); text-transform:uppercase; margin-right:4px; }
+  .mw-item { font-family:'JetBrains Mono',monospace; font-size:10px; padding:3px 9px; border-radius:20px; border:1px solid var(--border2); color:var(--mid); display:flex; align-items:center; gap:4px; }
+  .mw-arrow { color:var(--dim); font-size:12px; }
+
+  /* ENDPOINTS */
+  .ep-list { display:flex; flex-direction:column; }
+  .ep-row { display:grid; grid-template-columns:64px 1fr auto; align-items:start; gap:14px; padding:14px 22px; border-bottom:1px solid var(--border); transition:background 0.15s; }
+  .ep-row:last-child { border-bottom:none; }
+  .ep-row:hover { background:rgba(255,255,255,0.02); }
+
+  .method { font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:700; padding:4px 8px; border-radius:4px; text-align:center; letter-spacing:0.5px; margin-top:2px; }
+  .m-get    { background:rgba(0,200,150,0.15);  color:var(--get);    border:1px solid rgba(0,200,150,0.3); }
+  .m-post   { background:rgba(78,158,255,0.15); color:var(--post);   border:1px solid rgba(78,158,255,0.3); }
+  .m-put    { background:rgba(245,166,35,0.15); color:var(--put);    border:1px solid rgba(245,166,35,0.3); }
+  .m-delete { background:rgba(255,92,92,0.15);  color:var(--delete); border:1px solid rgba(255,92,92,0.3); }
+  .m-patch  { background:rgba(184,124,255,0.15);color:var(--patch);  border:1px solid rgba(184,124,255,0.3); }
+
+  .ep-path { font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--text); margin-bottom:4px; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .ep-path .param { color:var(--put); }
+  .ep-name { font-size:12px; font-weight:500; color:var(--mid); margin-bottom:4px; }
+  .ep-desc { font-size:11px; color:var(--dim); line-height:1.5; }
+  .ep-tags { display:flex; gap:5px; margin-top:6px; flex-wrap:wrap; }
+  .ep-tag { font-family:'JetBrains Mono',monospace; font-size:9px; padding:2px 6px; border-radius:3px; border:1px solid var(--border); color:var(--dim); }
+  .tag-auth   { border-color:rgba(78,158,255,0.3);  color:var(--post); }
+  .tag-admin  { border-color:rgba(255,92,92,0.3);   color:var(--delete); }
+  .tag-group  { border-color:rgba(0,200,150,0.3);   color:var(--get); }
+  .tag-queue  { border-color:rgba(184,124,255,0.3); color:var(--patch); }
+  .tag-public { border-color:rgba(245,166,35,0.3);  color:var(--put); }
+
+  .ep-codes { display:flex; flex-direction:column; gap:3px; min-width:52px; align-items:flex-end; }
+  .code { font-family:'JetBrains Mono',monospace; font-size:10px; padding:2px 7px; border-radius:3px; font-weight:600; }
+  .c-2xx { background:rgba(0,200,150,0.12); color:var(--get); }
+  .c-4xx { background:rgba(255,92,92,0.12); color:var(--delete); }
+
+  /* CALLOUT BOXES */
+  .callout { margin:14px 22px; border-radius:8px; padding:14px 16px; font-size:12px; line-height:1.7; }
+  .callout-info  { background:rgba(78,158,255,0.06);  border:1px solid rgba(78,158,255,0.2);  color:var(--mid); }
+  .callout-warn  { background:rgba(245,166,35,0.06);  border:1px solid rgba(245,166,35,0.25); color:#c8923a; }
+  .callout-loop  { background:rgba(184,124,255,0.06); border:1px solid rgba(184,124,255,0.25);color:#b87cff; }
+  .callout-skip  { background:rgba(255,92,92,0.06);   border:1px solid rgba(255,92,92,0.2);   color:#cc5555; }
+
+  .callout-title { font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:2px; text-transform:uppercase; margin-bottom:8px; opacity:0.7; }
+
+  .flow-steps { display:flex; flex-direction:column; gap:4px; margin-top:6px; font-family:'JetBrains Mono',monospace; font-size:11px; }
+  .flow-step { display:flex; align-items:flex-start; gap:8px; }
+  .fs-num { background:rgba(78,158,255,0.2); color:var(--accent); border-radius:3px; width:18px; height:18px; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:700; flex-shrink:0; margin-top:1px; }
+  .fs-num-p { background:rgba(184,124,255,0.2); color:#b87cff; border-radius:3px; width:18px; height:18px; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:700; flex-shrink:0; margin-top:1px; }
+  .fs-text { color:var(--mid); line-height:1.5; }
+  .fs-text strong { color:var(--text); }
+  .fs-text em { color:var(--get); font-style:normal; }
+
+  /* AUTH FLOW */
+  .auth-flow { background:rgba(78,158,255,0.04); border:1px solid rgba(78,158,255,0.15); border-radius:8px; padding:14px 18px; margin:14px 22px; font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--mid); line-height:2; }
+  .auth-flow .af-title { font-size:9px; letter-spacing:2px; color:var(--dim); text-transform:uppercase; margin-bottom:8px; }
+  .af-step { display:flex; align-items:center; gap:8px; }
+  .af-arrow { color:var(--accent); }
+
+  /* RESPONSE BOX */
+  .response-box { margin:14px 22px; background:rgba(0,0,0,0.35); border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+  .rb-title { padding:8px 14px; font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:2px; color:var(--dim); text-transform:uppercase; border-bottom:1px solid var(--border); background:rgba(0,0,0,0.2); }
+  .rb-code { padding:12px 14px; font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--mid); line-height:1.8; }
+  .rb-key { color:#4e9eff; } .rb-str { color:#00c896; } .rb-bool { color:#f5a623; } .rb-num { color:#b87cff; } .rb-null { color:var(--dim); }
+
+  /* SKIP BADGE */
+  .skip-badge { display:inline-flex; align-items:center; gap:6px; background:rgba(255,92,92,0.08); border:1px solid rgba(255,92,92,0.25); border-radius:6px; padding:8px 14px; margin:14px 22px; font-family:'JetBrains Mono',monospace; font-size:11px; color:#cc5555; }
+
+  @keyframes fadeIn { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+  ::-webkit-scrollbar{width:5px} ::-webkit-scrollbar-track{background:var(--bg)} ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- HEADER -->
+  <div class="hdr">
+    <div class="hdr-left">
+      <div class="eyebrow">Backend API Blueprint — v2</div>
+      <h1>Omie Sync Engine — API REST</h1>
+      <p>Laravel 11 · Sanctum · PostgreSQL multi-schema · Horizon/Redis · sem frontend</p>
+    </div>
+    <div class="method-legend">
+      <div class="ml-item"><span class="ml-badge m-get">GET</span> Listar/Buscar</div>
+      <div class="ml-item"><span class="ml-badge m-post">POST</span> Criar</div>
+      <div class="ml-item"><span class="ml-badge m-put">PUT</span> Atualizar</div>
+      <div class="ml-item"><span class="ml-badge m-delete">DELETE</span> Remover</div>
+      <div class="ml-item"><span class="ml-badge m-patch">PATCH</span> Ação pontual</div>
+    </div>
+  </div>
+
+  <!-- STATS -->
+  <div class="stats-bar">
+    <div class="stat-item"><div class="stat-icon">🔗</div><div><div class="stat-val">30</div><div class="stat-label">endpoints</div></div></div>
+    <div class="stat-item"><div class="stat-icon">📦</div><div><div class="stat-val">5</div><div class="stat-label">grupos de recursos</div></div></div>
+    <div class="stat-item"><div class="stat-icon">🔒</div><div><div class="stat-val">Sanctum</div><div class="stat-label">autenticação</div></div></div>
+    <div class="stat-item"><div class="stat-icon">🔄</div><div><div class="stat-val">loop CC</div><div class="stat-label">extrato por conta</div></div></div>
+    <div class="stat-item"><div class="stat-icon">⏳</div><div><div class="stat-val">Fase 2</div><div class="stat-label">dados/fluxo de caixa</div></div></div>
+  </div>
+
+  <div class="layout">
+
+    <!-- NAV -->
+    <div class="nav">
+      <div class="nav-section">
+        <div class="nav-label">Autenticação</div>
+        <a class="nav-item" href="#auth"><span class="ni-icon">🔑</span><span class="ni-text">Auth</span><span class="ni-count">3</span></a>
+      </div>
+      <div class="nav-section">
+        <div class="nav-label">Admin Global</div>
+        <a class="nav-item" href="#grupos"><span class="ni-icon">🏢</span><span class="ni-text">Grupos</span><span class="ni-count">5</span></a>
+        <a class="nav-item" href="#empresas"><span class="ni-icon">🏭</span><span class="ni-text">Empresas</span><span class="ni-count">6</span></a>
+      </div>
+      <div class="nav-section">
+        <div class="nav-label">Sync Engine</div>
+        <a class="nav-item" href="#sync"><span class="ni-icon">⚙️</span><span class="ni-text">Sync Control</span><span class="ni-count">5</span></a>
+      </div>
+      <div class="nav-section">
+        <div class="nav-label">Acesso</div>
+        <a class="nav-item" href="#usuarios"><span class="ni-icon">👤</span><span class="ni-text">Usuários</span><span class="ni-count">5</span></a>
+        <a class="nav-item" href="#permissoes"><span class="ni-icon">🛡️</span><span class="ni-text">Permissões</span><span class="ni-count">3</span></a>
+      </div>
+      <div class="nav-section">
+        <div class="nav-label" style="color:rgba(255,92,92,0.5)">Fase 2 — Dados</div>
+        <a class="nav-item" href="#fase2" style="opacity:0.4; pointer-events:none;">
+          <span class="ni-icon">📊</span>
+          <span class="ni-text" style="color:var(--dim);">Fluxo de Caixa</span>
+          <span class="ni-count" style="color:rgba(255,92,92,0.6);">—</span>
+        </a>
+      </div>
+
+      <div class="nav-base-box">
+        <div class="nbb-label">Base URL</div>
+        <div class="nbb-val">/api/v1</div>
+        <div class="sep-line"></div>
+        <div class="nbb-label">Header obrigatório</div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--mid);">Authorization:<br>Bearer {token}</div>
+        <div class="sep-line"></div>
+        <div class="nbb-label">Resposta padrão</div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--mid);">{ success, message,<br>data, meta? }</div>
+      </div>
+    </div>
+
+    <!-- GROUPS -->
+    <div class="api-groups">
+
+      <!-- ======= AUTH ======= -->
+      <div class="api-group" id="auth">
+        <div class="ag-header">
+          <span class="ag-icon">🔑</span>
+          <div><div class="ag-title">Autenticação</div><div class="ag-desc">Login, logout e perfil via Laravel Sanctum</div></div>
+          <div class="ag-base">/api/v1/auth</div>
+        </div>
+        <div class="auth-flow">
+          <div class="af-title">Fluxo</div>
+          <div class="af-step"><span class="af-arrow">→</span> POST /login → retorna <strong>access_token</strong> + perfil + permissões</div>
+          <div class="af-step"><span class="af-arrow">→</span> Todas as demais rotas exigem <strong>Bearer {token}</strong></div>
+          <div class="af-step"><span class="af-arrow">→</span> POST /logout invalida token atual no Sanctum</div>
+        </div>
+        <div class="ep-list">
+          <div class="ep-row">
+            <div class="method m-post">POST</div>
+            <div class="ep-info">
+              <div class="ep-path">/auth/login</div>
+              <div class="ep-name">Login</div>
+              <div class="ep-desc">Autentica com email/password. Retorna access_token, dados do usuário, grupo e lista de permissões.</div>
+              <div class="ep-tags"><span class="ep-tag tag-public">público</span></div>
+            </div>
+            <div class="ep-codes"><span class="code c-2xx">200</span><span class="code c-4xx">401</span><span class="code c-4xx">422</span></div>
+          </div>
+          <div class="ep-row">
+            <div class="method m-post">POST</div>
+            <div class="ep-info">
+              <div class="ep-path">/auth/logout</div>
+              <div class="ep-name">Logout</div>
+              <div class="ep-desc">Revoga o token atual do Sanctum.</div>
+              <div class="ep-tags"><span class="ep-tag tag-auth">auth</span></div>
+            </div>
+            <div class="ep-codes"><span class="code c-2xx">200</span><span class="code c-4xx">401</span></div>
+          </div>
+          <div class="ep-row">
+            <div class="method m-get">GET</div>
+            <div class="ep-info">
+              <div class="ep-path">/auth/me</div>
+              <div class="ep-name">Usuário autenticado</div>
+              <div class="ep-desc">Retorna perfil, grupo, empresas visíveis e permissões completas do usuário logado.</div>
+              <div class="ep-tags"><span class="ep-tag tag-auth">auth</span></div>
+            </div>
+            <div class="ep-codes"><span class="code c-2xx">200</span><span class="code c-4xx">401</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======= GRUPOS ======= -->
+      <div class="api-group" id="grupos">
+        <div class="ag-header">
+          <span class="ag-icon">🏢</span>
+          <div><div class="ag-title">Grupos (Tenants)</div><div class="ag-desc">Cada grupo = um schema PostgreSQL isolado provisionado automaticamente</div></div>
+          <div class="ag-base">/api/v1/admin/grupos</div>
+        </div>
+        <div class="middleware-strip">
+          <span class="mw-label">Middleware</span>
+          <span class="mw-item">🔒 auth:sanctum</span>
+          <span class="mw-arrow">→</span>
+          <span class="mw-item">👑 role:admin_global</span>
+        </div>
+        <div class="ep-list">
+          <div class="ep-row">
+            <div class="method m-get">GET</div>
+            <div class="ep-info">
+              <div class="ep-path">/admin/grupos</div>
+              <div class="ep-name">Listar grupos</div>
+              <div class="ep-desc">Lista todos com contagem de empresas, usuários e status do último sync de cada grupo.</div>
+              <div class="ep-tags"><span class="ep-tag tag-auth">auth</span><span class="ep-tag tag-admin">admin_global</span></div>
+            </div>
+            <div class="ep-codes"><span class="code c-2xx">200</span></div>
+          </div>
+          <div class="ep-row">
+            <div class="method m-post">POST</div>
+            <div class="ep-info">
+              <div class="ep-path">/admin/grupos</div>
+              <div class="ep-name">Criar grupo</div>
+              <div class="ep-desc">Cria grupo e provisiona o schema PostgreSQL isolado via TenantSchemaService.</div>
+              <div class="ep-tags"><span class="ep-tag tag-auth">auth</span><span class="ep-tag tag-admin">admin_global</span></div>
+            </div>
+            <div class="ep-codes"><span class="code c-2xx">201</span><span class="code c-4xx">422</span></div>
+          </div>
+          <div class="ep-row">
+            <div class="method m-get">GET</div>
+            <div class="ep-info">
+              <div class="ep-path">/admin/grupos/<span class="param">{id}</span></div>
+              <div class="ep-name">Detalhe do grupo</div>
+              <div class="ep-desc">Dados completos: empresas, usuários, configurações de sync e health do schema.</div>
+              <div class="ep-tags"><span class="ep-tag tag-auth">auth</span><span class="ep-tag tag-admin">admin_global</span></div>
+            </div>
+            <div class="ep-codes"><span class="code c-2xx">200</span><span class="code c-4xx">404</span></div>
+          </div>
+          <div class="ep-row">
+            <div class="method m-put">PUT</div>
+            <div class="ep-info">
+              <div class="ep-path">/admin/grupos/<span class="param">{id}</span></div>
+              <div class="ep-name">Atualizar grupo</div>
+              <div class="ep-desc">Atualiza nome e configurações. Schema não pode ser renomeado após criação.</div>
+              <div class="ep-tags"><span class="ep-tag tag-auth">auth</span><span class="ep-tag tag-admin">admin_global</span></div>
+            </div>
+            <div class="ep-codes"><span class="code c-2xx">200</span><span class="code c-4xx">422</span></div>
+          </div>
+          <div class="ep-row">
+            <div class="method m-delete">DELETE</div>
+            <div class="ep-info">
+              <div class="ep-path">/admin/grupos/<span class="param">{id}</span></div>
+              <div class="ep-name">Desativar grupo</div>
+              <div class="ep-desc">Soft delete — suspende todos os syncs. Schema e dados preservados.</div>
+              <div class="ep-tags"><span class="ep-tag tag-auth">auth</span><span class="ep-tag tag-admin">admin_global</span></div>
+            </div>
+            <div class="ep-codes"><span class="code c-2xx">200</span><span class="code c-4xx">404</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======= EMPRESAS ======= -->
+      <div class="api-group" id="empresas">
+        <div class="ag-header">
+          <span class="ag-icon">🏭</span>
+          <div><div class="ag-title">Empresas Omie</div><div class="ag-desc">Credenciais Omie, janela de dados, cadência de sync e controle de contas correntes</div></div>
+          <div class="ag-base">/api/v1/admin/grupos/{grupo}/empresas</div>
+        </div>
+        <div class="middleware-strip">
+          <span class="mw-label">Middleware</span>
+          <span class="mw-item">🔒 auth:sanctum</span>
+          <span class="mw-arrow">→</span>
+          <span class="mw-item">👑 role:admin_global|admin_grupo</span>
+          <span class="mw-arrow">→</span>
+          <span class="mw-item">🏢 grupo_membro</span>
+        </div>
+        <div class="ep-list">
+          <div class="ep-row">
+            <div class="method m-get">GET</div>
+            <div class="ep-info">
+              <div class="ep-path">/grupos/<span class="param">{grupo}</span>/empresas</div>
+              <div class="ep-name">Listar empresas</div>
+              <div class="ep-desc">Lista com status de sync, último incremental/full, health de credencial e contagem de contas correntes detectadas.</div>
+              <div class="ep-tags"><span class="ep-tag tag-auth">auth</span><span class="ep-tag tag-group">admin_grupo</span></div>
+            </div>
+            <div class="ep-codes"><span class="code c-2xx">200</span></div>
+          </div>
+          <div class="ep-row">
+            <div class="method m-post">POST</div>
+            <div class="ep-info">
+              <div class="ep-path">/grupos/<span class="param">{grupo}</span>/empresas</div>
+              <div class="ep-name">Cadastrar empresa</div>
+              <div class="ep-desc">
+                Campos obrigatórios: <strong>nome, app_key, app_secret</strong> (criptografado ao salvar),
+                <strong>data_inicio_coleta, data_fim_previsao, intervalo_sync_min</strong> (≥ 30),
+                <strong>dia_semana_full_sync, hora_full_sync</strong>.
+              </div>
+              <div class="ep-tags"><span class="ep-tag tag-auth">auth</span><span class="ep-tag tag-admin">admin_global</span></div>
+            </div>
+            <div class="ep-codes"><span class="code c-2xx">201</span><span class="code c-4xx">422</span></div>
+          </div>
+          <div class="ep-row">
+            <div class="method m-get">GET</div>
+            <div class="ep-info">
+              <div class="ep-path">/grupos/<span class="param">{grupo}</span>/empresas/<span class="param">{empresa}</span></div>
+              <div class="ep-name">Detalhe da empresa</div>
+              <div class="ep-desc">Configurações completas, últimos 10 sync_jobs, estatísticas de erros e lista de contas correntes sincronizadas.</div>
+              <div class="ep-tags"><span class="ep-tag tag-auth">auth</span><span class="ep-tag tag-group">admin_grupo</span></div>
+            </div>
+            <div class="ep-codes"><span class="code c-2xx">200</span><span class="code c-4xx">404</span></div>
+          </div>
+          <div class="ep-row">
+            <div class="method m-put">PUT</div>
+            <div class="ep-info">
+              <div class="ep-path">/grupos/<span class="param">{grupo}</span>/empresas/<span class="param">{empresa}</span></div>
+              <div class="ep-name">Atualizar empresa</div>
+              <div class="ep-desc">Atualiza configurações de sync e janela de dados. app_key imutável. app_secret pode ser rotacionado.</div>
+              <div class="ep-tags"><span class="ep-tag tag-auth">auth</span><span class="ep-tag tag-admin">admin_global</span></div>
+            </div>
+            <div class="ep-codes"><span class="code c-2xx">200</span><span class="code c-4xx">422</span></div>
+          </div>
+          <div class="ep-row">
+            <div class="method m-patch">PATCH</div>
+            <div class="ep-info">
+              <div class="ep-path">/grupos/<span class="param">{grupo}</span>/empresas/<span class="param">{empresa}</span>/reativar</div>
+              <div class="ep-name">Reativar empresa pausada</div>
+              <div class="ep-desc">Reativa empresa pausada por erro de credencial ou bloqueio. Valida credencial Omie antes de alterar status.</div>
+              <div class="ep-tags"><span class="ep-tag tag-auth">auth</span><span class="ep-tag tag-admin">admin_global</span></div>
+            </div>
+            <div class="ep-codes"><span class="code c-2xx">200</span><span class="code c-4xx">409</span></div>
+          </div>
+          <div class="ep-row">
+            <div class="method m-delete">DELETE</div>
+            <div class="ep-info">
+              <div class="ep-path">/grupos/<span class="param">{grupo}</span>/empresas/<span class="param">{empresa}</span></div>
+              <div class="ep-name">Remover empresa</div>
+              <div class="ep-desc">Soft delete. Cancela syncs pendentes, arquiva histórico. Dados no schema preservados.</div>
+              <div class="ep-tags"><span class="ep-tag tag-auth">auth</span><span class="ep-tag tag-admin">admin_global</span></div>
+            </div>
+            <div class="ep-codes"><span class="code c-2xx">200</span><span class="code c-4xx">404</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======= SYNC CONTROL ======= -->
+      <div class="api-group" id="sync">
+        <div class="ag-header">
+          <span class="ag-icon">⚙️</span>
+          <div><div class="ag-title">Sync Control</div><div class="ag-desc">Monitoramento e controle do motor — inclui lógica especial para extrato por conta corrente</div></div>
+          <div class="ag-base">/api/v1/admin/grupos/{grupo}/empresas/{empresa}/sync</div>
+        </div>
+        <div class="middleware-strip">
+          <span class="mw-label">Middleware</span>
+          <span class="mw-item">🔒 auth:sanctum</span>
+          <span class="mw-arrow">→</span>
+          <span class="mw-item">👑 role:admin_global|admin_grupo</span>
+          <span class="mw-arrow">→</span>
+          <span class="mw-item">⚡ queue:horizon</span>
+        </div>
+
+        <!-- EXTRATO CALLOUT — o ponto crítico -->
+        <div class="callout callout-loop">
+          <div class="callout-title">⚡ Lógica especial — Extrato por Conta Corrente</div>
+          O endpoint <strong>/financas/extrato/</strong> do Omie exige um <strong>nCodCC</strong> (código da conta corrente) por requisição.
+          Por isso, o sync de extrato não é uma chamada única — é um <strong>loop sobre todas as contas correntes da empresa</strong>.
+          <div class="flow-steps" style="margin-top:10px;">
+            <div class="flow-step">
+              <div class="fs-num-p">1</div>
+              <div class="fs-text"><strong>Pré-requisito:</strong> tabela <em>contas_correntes</em> da empresa já precisa estar sincronizada (endpoint <code>geral/contacorrente/</code>)</div>
+            </div>
+            <div class="flow-step">
+              <div class="fs-num-p">2</div>
+              <div class="fs-text"><strong>Loop:</strong> para cada conta corrente com <em>cFluxoCaixa = "S"</em>, dispara um <code>SyncExtratoContaJob</code> separado na fila</div>
+            </div>
+            <div class="flow-step">
+              <div class="fs-num-p">3</div>
+              <div class="fs-text"><strong>Parâmetros:</strong> cada job passa <em>nCodCC</em> + período (data_inicio → data_fim_previsao) para o endpoint de extrato</div>
+            </div>
+            <div class="flow-step">
+              <div class="fs-num-p">4</div>
+              <div class="fs-text"><strong>Consolidação:</strong> os dados de todas as contas são gravados na mesma tabela <em>extrato</em> do schema do grupo, com coluna <em>cod_conta_corrente</em></div>
+            </div>
+            <div class="flow-step">
+              <div class="fs-num-p">5</div>
+              <div class="fs-text"><strong>Garantia:</strong> o job pai de extrato só marca <em>status=ok</em> quando <em>todos</em> os jobs filhos (uma por CC) concluírem com sucesso</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ORDEM DE SYNC CALLOUT -->
+        <div class="callout callout-info">
+          <div class="callout-title">📋 Ordem de execução dos endpoints no sync</div>
+          <div class="flow-steps">
+            <div class="flow-step">
+              <div class="fs-num">1</div>
+              <div class="fs-text"><strong>Cadastros base primeiro</strong> (sem dependências): <em>categorias · departamentos · projetos · clientes</em></div>
+            </div>
+            <div class="flow-step">
+              <div class="fs-num">2</div>
+              <div class="fs-text"><strong>Contas correntes</strong>: precisa estar pronto antes do extrato — <em>geral/contacorrente/</em></div>
+            </div>
+            <div class="flow-step">
+              <div class="fs-num">3</div>
+              <div class="fs-text"><strong>Financeiro independente</strong>: <em>contas_a_pagar · contas_a_receber · movimentos_financeiros · ordens_servico</em> (paralelo)</div>
+            </div>
+            <div class="flow-step">
+              <div class="fs-num">4</div>
+              <div class="fs-text"><strong>Extrato por CC</strong>: só após contas correntes — loop em cada CC com <em>cFluxoCaixa="S"</em></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ep-list">
+          <div class="ep-row">
+            <div class="method m-get">GET</div>
+            <div class="ep-info">
+              <div class="ep-path">/sync/status</div>
+              <div class="ep-name">Status do sync</div>
+              <div class="ep-desc">Status atual por endpoint: último sync, próximo agendado, jobs em andamento, contas correntes sendo processadas (para extrato) e erros recentes.</div>
+              <div class="ep-tags"><span class="ep-tag tag-auth">auth</span><span class="ep-tag tag-group">admin_grupo</span></div>
+            </div>
+            <div class="ep-codes"><span class="code c-2xx">200</span></div>
+          </div>
+          <div class="ep-row">
+            <div class="method m-get">GET</div>
+            <div class="ep-info">
+              <div class="ep-path">/sync/jobs</div>
+              <div class="ep-name">Histórico de jobs</div>
+              <div class="ep-desc">Lista paginada de sync_jobs com filtros por endpoint, tipo (incremental/full), status e período. Para extrato, mostra os sub-jobs por conta corrente.</div>
+              <div class="ep-tags"><span class="ep-tag tag-auth">auth</span><span class="ep-tag tag-group">admin_grupo</span></div>
+            </div>
+            <div class="ep-codes"><span class="code c-2xx">200</span></div>
+          </div>
+          <div class="ep-row">
+            <div class="method m-get">GET</div>
+            <div class="ep-info">
+              <div class="ep-path">/sync/jobs/<span class="param">{job}</span></div>
+              <div class="ep-name">Detalhe do job</div>
+              <div class="ep-desc">Detalha páginas (ok/erro/retry), registros processados e erros lógicos. Para jobs de extrato, lista o status de cada conta corrente individualmente.</div>
+              <div class="ep-tags"><span class="ep-tag tag-auth">auth</span><span class="ep-tag tag-group">admin_grupo</span></div>
+            </div>
+            <div class="ep-codes"><span class="code c-2xx">200</span><span class="code c-4xx">404</span></div>
+          </div>
+          <div class="ep-row">
+            <div class="method m-post">POST</div>
+            <div class="ep-info">
+              <div class="ep-path">/sync/forcar-incremental</div>
+              <div class="ep-name">Forçar sync incremental</div>
+              <div class="ep-desc">Dispara sync incremental imediato. Para extrato, já dispara o loop de CCs automaticamente após sync de contas_correntes. Aceita array de endpoints ou todos.</div>
+              <div class="ep-tags"><span class="ep-tag tag-auth">auth</span><span class="ep-tag tag-admin">admin_global</span><span class="ep-tag tag-queue">enfileira</span></div>
+            </div>
+            <div class="ep-codes"><span class="code c-2xx">202</span><span class="code c-4xx">409</span></div>
+          </div>
+          <div class="ep-row">
+            <div class="method m-post">POST</div>
+            <div class="ep-info">
+              <div class="ep-path">/sync/forcar-full</div>
+              <div class="ep-name">Forçar full sync</div>
+              <div class="ep-desc">Enfileira full sync completo respeitando a ordem: cadastros → contas_correntes → financeiro paralelo → extrato (loop CC). Retorna job_ids por endpoint.</div>
+              <div class="ep-tags"><span class="ep-tag tag-auth">auth</span><span class="ep-tag tag-admin">admin_global</span><span class="ep-tag tag-queue">enfileira</span></div>
+            </div>
+            <div class="ep-codes"><span class="code c-2xx">202</span><span class="code c-4xx">409</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======= USUÁRIOS + PERMISSÕES ======= -->
+      <div class="api-group" id="usuarios">
+        <div class="ag-header">
+          <span class="ag-icon">👤</span>
+          <div><div class="ag-title">Usuários &amp; Permissões</div><div class="ag-desc">Gestão de usuários por grupo, roles e controle granular por empresa/recurso</div></div>
+          <div class="ag-base">/api/v1/admin/grupos/{grupo}/usuarios</div>
+        </div>
+        <div class="middleware-strip">
+          <span class="mw-label">Middleware</span>
+          <span class="mw-item">🔒 auth:sanctum</span>
+          <span class="mw-arrow">→</span>
+          <span class="mw-item">👑 role:admin_global|admin_grupo</span>
+          <span class="mw-arrow">→</span>
+          <span class="mw-item">🏢 grupo_membro</span>
+        </div>
+        <div class="ep-list">
+          <div class="ep-row">
+            <div class="method m-get">GET</div>
+            <div class="ep-info">
+              <div class="ep-path">/grupos/<span class="param">{grupo}</span>/usuarios</div>
+              <div class="ep-name">Listar usuários</div>
+              <div class="ep-desc">Usuários do grupo com roles, empresas com acesso e último login.</div>
+              <div class="ep-tags"><span class="ep-tag tag-auth">auth</span><span class="ep-tag tag-group">admin_grupo</span></div>
+            </div>
+            <div class="ep-codes"><span class="code c-2xx">200</span></div>
+          </div>
+          <div class="ep-row">
+            <div class="method m-post">POST</div>
+            <div class="ep-info">
+              <div class="ep-path">/grupos/<span class="param">{grupo}</span>/usuarios</div>
+              <div class="ep-name">Criar usuário</div>
+              <div class="ep-desc">Cria usuário no grupo com role (admin_grupo | viewer) e empresas com acesso inicial.</div>
+              <div class="ep-tags"><span class="ep-tag tag-auth">auth</span><span class="ep-tag tag-group">admin_grupo</span></div>
+            </div>
+            <div class="ep-codes"><span class="code c-2xx">201</span><span class="code c-4xx">422</span></div>
+          </div>
+          <div class="ep-row">
+            <div class="method m-get">GET</div>
+            <div class="ep-info">
+              <div class="ep-path">/grupos/<span class="param">{grupo}</span>/usuarios/<span class="param">{usuario}</span></div>
+              <div class="ep-name">Detalhe do usuário</div>
+              <div class="ep-desc">Perfil completo com todas as permissões por empresa e recurso.</div>
+              <div class="ep-tags"><span class="ep-tag tag-auth">auth</span><span class="ep-tag tag-group">admin_grupo</span></div>
+            </div>
+            <div class="ep-codes"><span class="code c-2xx">200</span><span class="code c-4xx">404</span></div>
+          </div>
+          <div class="ep-row">
+            <div class="method m-put">PUT</div>
+            <div class="ep-info">
+              <div class="ep-path">/grupos/<span class="param">{grupo}</span>/usuarios/<span class="param">{usuario}</span></div>
+              <div class="ep-name">Atualizar usuário</div>
+              <div class="ep-desc">Atualiza nome, email, role e status ativo/inativo.</div>
+              <div class="ep-tags"><span class="ep-tag tag-auth">auth</span><span class="ep-tag tag-group">admin_grupo</span></div>
+            </div>
+            <div class="ep-codes"><span class="code c-2xx">200</span><span class="code c-4xx">422</span></div>
+          </div>
+          <div class="ep-row">
+            <div class="method m-delete">DELETE</div>
+            <div class="ep-info">
+              <div class="ep-path">/grupos/<span class="param">{grupo}</span>/usuarios/<span class="param">{usuario}</span></div>
+              <div class="ep-name">Remover usuário</div>
+              <div class="ep-desc">Soft delete. Revoga tokens ativos e remove permissões.</div>
+              <div class="ep-tags"><span class="ep-tag tag-auth">auth</span><span class="ep-tag tag-group">admin_grupo</span></div>
+            </div>
+            <div class="ep-codes"><span class="code c-2xx">200</span><span class="code c-4xx">403</span></div>
+          </div>
+
+          <!-- PERMISSÕES inline -->
+          <div style="padding:10px 22px 4px; font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:2px; color:var(--dim); text-transform:uppercase; background:rgba(0,0,0,0.2); border-top:1px solid var(--border);">
+            Permissões — /grupos/{grupo}/usuarios/{usuario}/permissoes
+          </div>
+
+          <div class="ep-row">
+            <div class="method m-get">GET</div>
+            <div class="ep-info">
+              <div class="ep-path">/permissoes</div>
+              <div class="ep-name">Listar permissões</div>
+              <div class="ep-desc">Matriz de permissões: empresa × recurso (dashboard, sync, admin) × ação (ver, editar, forcar_sync).</div>
+              <div class="ep-tags"><span class="ep-tag tag-auth">auth</span><span class="ep-tag tag-group">admin_grupo</span></div>
+            </div>
+            <div class="ep-codes"><span class="code c-2xx">200</span></div>
+          </div>
+          <div class="ep-row">
+            <div class="method m-put">PUT</div>
+            <div class="ep-info">
+              <div class="ep-path">/permissoes</div>
+              <div class="ep-name">Atualizar permissões</div>
+              <div class="ep-desc">Substitui conjunto completo de permissões. Aceita array de {empresa_id, recurso, acao}.</div>
+              <div class="ep-tags"><span class="ep-tag tag-auth">auth</span><span class="ep-tag tag-group">admin_grupo</span></div>
+            </div>
+            <div class="ep-codes"><span class="code c-2xx">200</span><span class="code c-4xx">422</span></div>
+          </div>
+          <div class="ep-row">
+            <div class="method m-delete">DELETE</div>
+            <div class="ep-info">
+              <div class="ep-path">/permissoes/revogar-tudo</div>
+              <div class="ep-name">Revogar todas permissões</div>
+              <div class="ep-desc">Remove todas as permissões do usuário. Útil antes de suspender acesso.</div>
+              <div class="ep-tags"><span class="ep-tag tag-auth">auth</span><span class="ep-tag tag-group">admin_grupo</span></div>
+            </div>
+            <div class="ep-codes"><span class="code c-2xx">200</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======= FASE 2 PLACEHOLDER ======= -->
+      <div class="api-group" id="fase2" style="opacity:0.5; border-style:dashed;">
+        <div class="ag-header" style="background:rgba(255,92,92,0.04);">
+          <span class="ag-icon">📊</span>
+          <div><div class="ag-title" style="color:var(--dim);">Fluxo de Caixa — Fase 2</div><div class="ag-desc">Aguardando criação das views materializadas no banco</div></div>
+          <div class="ag-base" style="border-color:rgba(255,92,92,0.2); color:rgba(255,92,92,0.5);">em breve</div>
+        </div>
+        <div class="skip-badge">
+          ⏳ Este grupo será construído após a definição das views normalizadas no PostgreSQL. Os endpoints de consulta de dados dependerão da estrutura final das views materializadas por schema.
+        </div>
+        <div class="callout callout-warn" style="margin:0 22px 16px;">
+          <div class="callout-title">O que virá aqui</div>
+          Consulta ao fluxo de caixa consolidado · resumo mensal para gráficos · breakdown por categoria/departamento/cliente · saúde do sync para o grupo.
+          Tudo lendo das views materializadas por schema de grupo.
+        </div>
+      </div>
+
+    </div><!-- /api-groups -->
+  </div><!-- /layout -->
+
+</div>
+</body>
+</html>

@@ -1,0 +1,34 @@
+# Binários compilados
+*.exe
+omie-sync-api
+api
+
+# Variáveis de ambiente e secrets
+.env
+.env.*
+!.env.example
+
+# Artefatos de build Go
+/dist/
+
+# Documentação interna (não vai ao repositório)
+*.md
+!README.md
+
+# Pastas internas de desenvolvimento
+.claude/
+changes/
+
+# Frontend build
+frontend/dist/
+frontend/node_modules/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
