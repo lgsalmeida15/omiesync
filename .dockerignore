@@ -1,0 +1,25 @@
+# Frontend — não necessário para o build do backend
+frontend/node_modules/
+frontend/dist/
+
+# Artefatos locais
+*.exe
+omie-sync-api
+api
+
+# Ambiente local
+.env
+.env.*
+!.env.example
+
+# Git e CI
+.git/
+.github/
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
