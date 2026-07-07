@@ -5,7 +5,10 @@
 
 FROM golang:1.23-alpine AS builder
 
-RUN apk --no-cache add ca-certificates git
+RUN apk --no-cache add ca-certificates git curl
+
+# Instala golang-migrate
+RUN go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
 
 WORKDIR /app
 
@@ -26,6 +29,8 @@ RUN apk --no-cache add ca-certificates tzdata
 WORKDIR /app
 
 COPY --from=builder /app/omie-sync-api .
+COPY --from=builder /go/bin/migrate /usr/local/bin/migrate
+COPY --from=builder /app/db/migrations ./db/migrations
 
 EXPOSE 8080
 
