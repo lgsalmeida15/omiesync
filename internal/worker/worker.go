@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
 
+	"omie-sync-api/internal/db"
 	"omie-sync-api/internal/etl/progress"
 	"omie-sync-api/internal/omie"
 	"omie-sync-api/internal/omie_config"
@@ -121,6 +122,12 @@ func (w *Worker) execute(ctx context.Context, job *syncsvc.SyncJob, creds *Empre
 	// Marca job como rodando
 	if _, err := w.syncRepo.UpdateJobStatus(ctx, job.ID, "rodando", "", &now, nil); err != nil {
 		return fmt.Errorf("worker.execute marcar rodando: %w", err)
+	}
+
+	// Re-provisiona schema para garantir novas tabelas/views/índices em schemas existentes
+	provisioner := db.NewProvisioner(w.pool)
+	if err := provisioner.ProvisionSchema(ctx, creds.Schema); err != nil {
+		w.log.Warn().Err(err).Str("schema", creds.Schema).Msg("worker: re-provision schema falhou (continuando)")
 	}
 
 	w.hub.Publish(job.EmpresaID, syncsvc.SSEEvent{
