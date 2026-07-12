@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
 
 	"omie-sync-api/internal/etl/progress"
@@ -67,6 +69,7 @@ type Worker struct {
 	reporter   progress.Reporter
 	omieConfig omie_config.Service
 	hub        *syncsvc.SSEHub
+	pool       *pgxpool.Pool
 	log        zerolog.Logger
 }
 
@@ -78,6 +81,7 @@ func NewWorker(
 	reporter progress.Reporter,
 	omieConfig omie_config.Service,
 	hub *syncsvc.SSEHub,
+	pool *pgxpool.Pool,
 	log zerolog.Logger,
 ) *Worker {
 	return &Worker{
@@ -88,6 +92,7 @@ func NewWorker(
 		reporter:   reporter,
 		omieConfig: omieConfig,
 		hub:        hub,
+		pool:       pool,
 		log:        log.With().Str("component", "worker").Logger(),
 	}
 }
@@ -236,6 +241,23 @@ func (w *Worker) execute(ctx context.Context, job *syncsvc.SyncJob, creds *Empre
 		w.finalizarJob(ctx, job.ID, creds.GrupoID, job.EmpresaID, "erro", msg, now)
 	} else {
 		w.finalizarJob(ctx, job.ID, creds.GrupoID, job.EmpresaID, "concluido", "", now)
+
+		// Refresh assíncrono da materialized view gerencial após sync bem-sucedido
+		if w.pool != nil {
+			schema := creds.Schema
+			go func() {
+				refreshCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+				defer cancel()
+				safe := pgx.Identifier{schema}.Sanitize()
+				if _, err := w.pool.Exec(refreshCtx, fmt.Sprintf(
+					"REFRESH MATERIALIZED VIEW %s.matvw_gerencial_resultado", safe,
+				)); err != nil {
+					w.log.Warn().Err(err).Str("schema", schema).Msg("worker: refresh matvw_gerencial_resultado falhou")
+				} else {
+					w.log.Info().Str("schema", schema).Msg("worker: matvw_gerencial_resultado atualizada")
+				}
+			}()
+		}
 	}
 
 	return nil

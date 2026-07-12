@@ -97,7 +97,7 @@ func main() {
 	executors := etl.NewAllExecutors(pool, log)
 	fetcher := worker.NewEmpresaFetcher(pool)
 	reporter := progress.NewDBReporter(pool, syncRepo)
-	etlWorker := worker.NewWorker(syncRepo, fetcher, executors, dispatcher, reporter, omieConfigSvc, sseHub, log)
+	etlWorker := worker.NewWorker(syncRepo, fetcher, executors, dispatcher, reporter, omieConfigSvc, sseHub, pool, log)
 	scheduler := worker.NewScheduler(pool, syncRepo, etlWorker, cfg.WorkerMaxConcurrent, log)
 
 	// Registra o worker e o pool de concorrência no syncSvc

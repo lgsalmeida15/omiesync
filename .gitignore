@@ -14,6 +14,7 @@ omie-sync-api
 # Documentação interna (não vai ao repositório)
 *.md
 !README.md
+!docs/*.md
 
 # Pastas internas de desenvolvimento
 .claude/
