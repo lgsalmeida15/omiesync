@@ -220,7 +220,7 @@ func (e *ExtratoExecutor) fetchAdaptive(
 		if _, dbErr := e.pool.Exec(ctx, fmt.Sprintf(`
 			INSERT INTO %s.extrato
 				(empresa_id, data_lancamento, valor, tipo_lancamento, codigo_conta_corrente, descricao, raw, synced_at)
-			VALUES ($1, NULLIF($2,'')::DATE, $3, 'PROVISAO', $4, $5, $6, NOW())
+			VALUES ($1, TO_DATE(NULLIF($2,''), 'DD/MM/YYYY'), $3, 'PROVISAO', $4, $5, $6, NOW())
 		`, schema),
 			empresaID, mv.DataLancamento, mv.ValorDocumento, nCodCC, mv.Descricao, raw,
 		); dbErr != nil {

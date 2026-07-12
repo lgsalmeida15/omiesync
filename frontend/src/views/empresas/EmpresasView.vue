@@ -2,7 +2,7 @@
   <div style="padding:24px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
       <div class="section-title" style="margin:0">EMPRESAS</div>
-      <button class="btn-primary" @click="openCreate">+ Nova Empresa</button>
+      <button v-if="!auth.isAdminGlobal" class="btn-primary" @click="openCreate">+ Nova Empresa</button>
     </div>
 
     <div class="table-card">
