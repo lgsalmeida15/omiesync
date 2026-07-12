@@ -207,7 +207,7 @@ func (p *Provisioner) ProvisionSchema(ctx context.Context, schemaName string) er
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_cr_lancamento ON %s.contas_receber (empresa_id, codigo_lancamento)", schemaName, safe),
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_cr_raw ON %s.contas_receber USING GIN (raw)", schemaName, safe),
 
-		// Auto-upgrade: recria a view se não tiver a coluna empresa_id (adicionada na v2)
+		// Auto-upgrade: recria a view se não tiver a coluna nome_empresa (adicionada na v3)
 		fmt.Sprintf(`DO $$
 BEGIN
     IF EXISTS (
@@ -220,7 +220,7 @@ BEGIN
         JOIN pg_class pc ON pc.oid = pa.attrelid
         JOIN pg_namespace pn ON pn.oid = pc.relnamespace
         WHERE pn.nspname = %s AND pc.relname = 'matvw_gerencial_resultado'
-          AND pa.attname = 'empresa_id' AND NOT pa.attisdropped
+          AND pa.attname = 'nome_empresa' AND NOT pa.attisdropped
     ) THEN
         DROP MATERIALIZED VIEW %s.matvw_gerencial_resultado CASCADE;
     END IF;
@@ -363,6 +363,7 @@ movimentos_processados AS (
             ELSE dept.descricao
         END                                            AS departamento_final,
         COALESCE(cli.nome_fantasia, 'Cliente não informado') AS cliente_final,
+        emp.nome                                       AS nome_empresa,
         CASE
             WHEN c.origem = 'contas_a_receber'                                              THEN 1
             WHEN c.origem = 'contas_a_pagar'                                                THEN 2
@@ -390,9 +391,12 @@ movimentos_processados AS (
     LEFT JOIN %s.clientes cli
            ON cli.codigo_cliente_omie::TEXT = m.codigo_cliente
           AND cli.empresa_id = m.empresa_id
+    LEFT JOIN _etl.empresas emp
+           ON emp.id = m.empresa_id
 )
 SELECT
     empresa_id,
+    nome_empresa,
     codigo_conta_corrente,
     codigo_cliente,
     codigo_titulo,
