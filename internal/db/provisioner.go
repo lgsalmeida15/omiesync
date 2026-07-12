@@ -207,16 +207,37 @@ func (p *Provisioner) ProvisionSchema(ctx context.Context, schemaName string) er
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_cr_lancamento ON %s.contas_receber (empresa_id, codigo_lancamento)", schemaName, safe),
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_cr_raw ON %s.contas_receber USING GIN (raw)", schemaName, safe),
 
+		// Auto-upgrade: recria a view se não tiver a coluna empresa_id (adicionada na v2)
+		fmt.Sprintf(`DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM pg_class pc
+        JOIN pg_namespace pn ON pn.oid = pc.relnamespace
+        WHERE pn.nspname = %s AND pc.relname = 'matvw_gerencial_resultado'
+          AND pc.relkind = 'm'
+    ) AND NOT EXISTS (
+        SELECT 1 FROM pg_attribute pa
+        JOIN pg_class pc ON pc.oid = pa.attrelid
+        JOIN pg_namespace pn ON pn.oid = pc.relnamespace
+        WHERE pn.nspname = %s AND pc.relname = 'matvw_gerencial_resultado'
+          AND pa.attname = 'empresa_id' AND NOT pa.attisdropped
+    ) THEN
+        DROP MATERIALIZED VIEW %s.matvw_gerencial_resultado CASCADE;
+    END IF;
+END
+$$`, "'"+schemaName+"'", "'"+schemaName+"'", safe),
+
 		// Materialized view gerencial — resultado financeiro do ano corrente
 		// WITH NO DATA: populada posteriormente via REFRESH MATERIALIZED VIEW.
 		// REFRESH sem CONCURRENTLY (sem necessidade de UNIQUE index em colunas reais).
 		fmt.Sprintf(`CREATE MATERIALIZED VIEW IF NOT EXISTS %s.matvw_gerencial_resultado AS
 WITH categorias_processadas AS (
-    SELECT codigo, descricao FROM %s.categorias
+    SELECT empresa_id, codigo, descricao FROM %s.categorias
 ),
 movimentos_unificados AS (
     -- Lado extrato: provisões futuras de contas com fluxo de caixa
     SELECT
+        e.empresa_id,
         e.codigo_conta_corrente::TEXT          AS codigo_conta_corrente,
         e.raw ->> 'nCodCliente'                AS codigo_cliente,
         e.raw ->> 'nCodLancamento'             AS codigo_titulo,
@@ -241,6 +262,7 @@ movimentos_unificados AS (
 
     -- Lado movimentos: lançamentos realizados (CONTA_CORRENTE_REC / CONTA_CORRENTE_PAG)
     SELECT
+        mf.empresa_id,
         mf.codigo_conta_corrente::TEXT                            AS codigo_conta_corrente,
         mf.raw -> 'detalhes' ->> 'nCodCliente'                   AS codigo_cliente,
         mf.codigo_lancamento::TEXT                                AS codigo_titulo,
@@ -265,6 +287,7 @@ movimentos_unificados AS (
 -- Expande categorias de contas_pagar e contas_receber (array raw -> 'categorias')
 cp_categorias AS (
     SELECT
+        cp.empresa_id,
         cp.codigo_lancamento::TEXT                      AS id,
         cp.valor_documento,
         (cat_elem ->> 'valor')::NUMERIC                AS valor_categoria,
@@ -275,6 +298,7 @@ cp_categorias AS (
          LATERAL jsonb_array_elements(cp.raw -> 'categorias') AS cat_elem
     UNION ALL
     SELECT
+        cr.empresa_id,
         cr.codigo_lancamento::TEXT,
         cr.valor_documento,
         (cat_elem ->> 'valor')::NUMERIC,
@@ -287,6 +311,7 @@ cp_categorias AS (
 -- Expande departamentos de contas_pagar e contas_receber (array raw -> 'distribuicao')
 cp_distribuicao AS (
     SELECT
+        cp.empresa_id,
         cp.codigo_lancamento::TEXT                     AS id,
         (dist_elem ->> 'nValDep')::NUMERIC             AS valor_distribuido,
         (dist_elem ->> 'nPerDep')::NUMERIC             AS percentual_distribuicao,
@@ -295,6 +320,7 @@ cp_distribuicao AS (
          LATERAL jsonb_array_elements(cp.raw -> 'distribuicao') AS dist_elem
     UNION ALL
     SELECT
+        cr.empresa_id,
         cr.codigo_lancamento::TEXT,
         (dist_elem ->> 'nValDep')::NUMERIC,
         (dist_elem ->> 'nPerDep')::NUMERIC,
@@ -347,20 +373,26 @@ movimentos_processados AS (
             ELSE 2
         END                                            AS ajuste_receita_despesa
     FROM movimentos_unificados m
-    LEFT JOIN cp_categorias   c    ON m.codigo_titulo = c.id
-    LEFT JOIN cp_distribuicao d    ON m.codigo_titulo = d.id
+    LEFT JOIN cp_categorias   c    ON m.codigo_titulo = c.id   AND m.empresa_id = c.empresa_id
+    LEFT JOIN cp_distribuicao d    ON m.codigo_titulo = d.id   AND m.empresa_id = d.empresa_id
     LEFT JOIN %s.contas_correntes cc
            ON cc.codigo_conta_corrente::TEXT = m.codigo_conta_corrente
+          AND cc.empresa_id = m.empresa_id
     LEFT JOIN categorias_processadas cat_sup
            ON LEFT(COALESCE(c.codigo_categoria, m.codigo_categoria), 4) = cat_sup.codigo
+          AND cat_sup.empresa_id = m.empresa_id
     LEFT JOIN categorias_processadas cat_final
            ON COALESCE(c.codigo_categoria, m.codigo_categoria) = cat_final.codigo
+          AND cat_final.empresa_id = m.empresa_id
     LEFT JOIN %s.departamentos dept
            ON d.codigo_departamento = dept.codigo
+          AND dept.empresa_id = m.empresa_id
     LEFT JOIN %s.clientes cli
            ON cli.codigo_cliente_omie::TEXT = m.codigo_cliente
+          AND cli.empresa_id = m.empresa_id
 )
 SELECT
+    empresa_id,
     codigo_conta_corrente,
     codigo_cliente,
     codigo_titulo,
