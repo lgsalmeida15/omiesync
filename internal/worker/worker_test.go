@@ -134,7 +134,7 @@ func (m *mockExecutor) ExecutePage(_ context.Context, _ *omie.Client, _ string, 
 // --- testes ---
 
 func newTestWorker(repo *mockSyncRepo, fetcher *mockFetcher, dispatcher *mockDispatcher, execs []Executor) *Worker {
-	return NewWorker(repo, fetcher, execs, dispatcher, &progress.NoopReporter{}, &mockOmieConfig{}, syncsvc.NewSSEHub(), zerolog.Nop())
+	return NewWorker(repo, fetcher, execs, dispatcher, &progress.NoopReporter{}, &mockOmieConfig{}, syncsvc.NewSSEHub(), nil, zerolog.Nop())
 }
 
 func defaultCreds() *EmpresaCredentials {
