@@ -81,7 +81,7 @@ func upsertContasPagar(ctx context.Context, pool *pgxpool.Pool, schema string, e
 				 valor_documento, valor_pago, status_titulo, codigo_cliente,
 				 codigo_categoria, observacao, raw, synced_at)
 			VALUES ($1,$2,
-				NULLIF($3,'')::DATE, NULLIF($4,'')::DATE, NULLIF($5,'')::DATE,
+				TO_DATE(NULLIF($3,''), 'DD/MM/YYYY'), TO_DATE(NULLIF($4,''), 'DD/MM/YYYY'), TO_DATE(NULLIF($5,''), 'DD/MM/YYYY'),
 				$6,$7,$8,$9,$10,$11,$12,NOW())
 			ON CONFLICT (empresa_id, codigo_lancamento) DO UPDATE SET
 				data_vencimento  = EXCLUDED.data_vencimento,

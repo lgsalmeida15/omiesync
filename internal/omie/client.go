@@ -108,8 +108,11 @@ func (c *Client) call(ctx context.Context, path, method string, params any, out 
 			return nil
 		}
 
-		// Não retenta erros de negócio do Omie (credencial inválida, não encontrado etc.)
-		if _, isOmieErr := lastErr.(OmieError); isOmieErr {
+		// Erros de infraestrutura Omie (BG indisponível) são retentáveis
+		if omieErr, isOmieErr := lastErr.(OmieError); isOmieErr {
+			if omieErr.FaultCode == "SOAP-ENV:Server" {
+				continue
+			}
 			return lastErr
 		}
 	}
