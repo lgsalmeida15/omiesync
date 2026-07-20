@@ -281,7 +281,7 @@ func upsertMovimentos(ctx context.Context, pool *pgxpool.Pool, schema string, em
 			INSERT INTO %s.movimentos_financeiros
 				(empresa_id, codigo_lancamento, data_lancamento, valor, tipo,
 				 codigo_conta_corrente, codigo_categoria, historico, raw, synced_at)
-			VALUES ($1, $2, NULLIF($3,'')::DATE, $4, $5, $6, $7, $8, $9, NOW())
+			VALUES ($1, $2, NULLIF($3,'')::date, $4, $5, $6, $7, $8, $9, NOW())
 			ON CONFLICT (empresa_id, codigo_lancamento) DO UPDATE SET
 				data_lancamento       = EXCLUDED.data_lancamento,
 				valor                 = EXCLUDED.valor,
@@ -294,7 +294,7 @@ func upsertMovimentos(ctx context.Context, pool *pgxpool.Pool, schema string, em
 		`, schema),
 			empresaID,
 			d.CodigoLancamento,
-			d.DataRegistro,         // dDtRegistro — data de criação do lançamento
+			parseOmieDate(d.DataRegistro), // dDtRegistro — data de criação do lançamento
 			d.ValorTitulo,          // nValorTitulo — valor nominal (sempre preenchido)
 			d.Grupo+" "+d.Natureza, // ex: "CONTA_A_RECEBER R"
 			d.CodigoContaCorrente,

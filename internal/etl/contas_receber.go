@@ -81,7 +81,7 @@ func upsertContasReceber(ctx context.Context, pool *pgxpool.Pool, schema string,
 				 valor_documento, valor_recebido, status_titulo, codigo_cliente,
 				 codigo_categoria, observacao, raw, synced_at)
 			VALUES ($1,$2,
-				TO_DATE(NULLIF($3,''), 'DD/MM/YYYY'), TO_DATE(NULLIF($4,''), 'DD/MM/YYYY'), TO_DATE(NULLIF($5,''), 'DD/MM/YYYY'),
+				NULLIF($3,'')::date, NULLIF($4,'')::date, NULLIF($5,'')::date,
 				$6,$7,$8,$9,$10,$11,$12,NOW())
 			ON CONFLICT (empresa_id, codigo_lancamento) DO UPDATE SET
 				data_vencimento  = EXCLUDED.data_vencimento,
@@ -96,7 +96,7 @@ func upsertContasReceber(ctx context.Context, pool *pgxpool.Pool, schema string,
 				raw              = EXCLUDED.raw,
 				synced_at        = NOW()
 		`, schema),
-			empresaID, it.CodigoLancamento, it.DataVencimento, it.DataPrevisao, it.DataRecebimento,
+			empresaID, it.CodigoLancamento, parseOmieDate(it.DataVencimento), parseOmieDate(it.DataPrevisao), parseOmieDate(it.DataRecebimento),
 			it.ValorDocumento, it.ValorRecebido, it.StatusTitulo, it.CodigoCliente,
 			it.CodigoCategoria, it.Observacao, raw,
 		)

@@ -75,7 +75,7 @@ func upsertProjetos(ctx context.Context, pool *pgxpool.Pool, schema string, empr
 			INSERT INTO %s.projetos
 				(empresa_id, codigo_projeto, nome, descricao, data_inicio, data_fim, status, raw, synced_at)
 			VALUES ($1,$2,$3,$4,
-				NULLIF($5,'')::DATE, NULLIF($6,'')::DATE,
+				NULLIF($5,'')::date, NULLIF($6,'')::date,
 				$7,$8,NOW())
 			ON CONFLICT (empresa_id, codigo_projeto) DO UPDATE SET
 				nome        = EXCLUDED.nome,
@@ -87,7 +87,7 @@ func upsertProjetos(ctx context.Context, pool *pgxpool.Pool, schema string, empr
 				synced_at   = NOW()
 		`, schema),
 			empresaID, it.CodigoProjeto, it.Nome, it.Descricao,
-			it.DataInicio, it.DataFim, it.Status, raw,
+			parseOmieDate(it.DataInicio), parseOmieDate(it.DataFim), it.Status, raw,
 		)
 		if err != nil {
 			return fmt.Errorf("upsertProjetos [%d]: %w", it.CodigoProjeto, err)

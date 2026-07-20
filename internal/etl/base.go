@@ -164,6 +164,15 @@ func toJSON(v any) []byte {
 	return b
 }
 
+// parseOmieDate converte "DD/MM/YYYY" (formato Omie) para "YYYY-MM-DD" (ISO).
+// Retorna "" para strings vazias. PostgreSQL aceita ISO com ::date independente do datestyle.
+func parseOmieDate(s string) string {
+	if len(s) != 10 || s[2] != '/' || s[5] != '/' {
+		return ""
+	}
+	return s[6:10] + "-" + s[3:5] + "-" + s[0:2]
+}
+
 // extractArray extrai o array de dados de uma resposta genérica do Omie usando o nome do campo da config.
 // Retorna os itens tipados, os itens como JSON bruto original (preserva todos os campos da API) e o total de páginas.
 func extractArray[T any](raw map[string]json.RawMessage, fieldName string) ([]T, []json.RawMessage, int, error) {

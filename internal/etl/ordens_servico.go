@@ -75,7 +75,7 @@ func upsertOrdensServico(ctx context.Context, pool *pgxpool.Pool, schema string,
 				(empresa_id, numero_os, data_abertura, data_previsao, data_fechamento,
 				 status, codigo_cliente, valor_total, descricao, raw, synced_at)
 			VALUES ($1,$2,
-				NULLIF($3,'')::DATE, NULLIF($4,'')::DATE, NULLIF($5,'')::DATE,
+				NULLIF($3,'')::date, NULLIF($4,'')::date, NULLIF($5,'')::date,
 				$6,$7,$8,$9,$10,NOW())
 			ON CONFLICT (empresa_id, numero_os) DO UPDATE SET
 				data_abertura   = EXCLUDED.data_abertura,
@@ -88,7 +88,7 @@ func upsertOrdensServico(ctx context.Context, pool *pgxpool.Pool, schema string,
 				raw             = EXCLUDED.raw,
 				synced_at       = NOW()
 		`, schema),
-			empresaID, it.NumeroOS, it.DataAbertura, it.DataPrevisao, it.DataFechamento,
+			empresaID, it.NumeroOS, parseOmieDate(it.DataAbertura), parseOmieDate(it.DataPrevisao), parseOmieDate(it.DataFechamento),
 			it.Status, it.CodigoCliente, it.ValorTotal, it.Descricao, raw,
 		)
 		if err != nil {
