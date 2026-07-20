@@ -19,6 +19,9 @@ const (
 
 var retryDelays = []time.Duration{5 * time.Second, 15 * time.Second, 30 * time.Second}
 
+// retryDelaysConcorrencia é usado quando o Omie rejeita por requisição concorrente (Client-8020).
+var retryDelaysConcorrencia = []time.Duration{30 * time.Second, 60 * time.Second, 180 * time.Second}
+
 // Client é o cliente HTTP para a API do Omie.
 type Client struct {
 	appKey    string
@@ -93,13 +96,14 @@ func (c *Client) call(ctx context.Context, path, method string, params any, out 
 
 	url := c.baseURL + path
 	var lastErr error
+	delays := retryDelays
 
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		if attempt > 0 {
 			select {
 			case <-ctx.Done():
 				return fmt.Errorf("omie.client.call: %w", ctx.Err())
-			case <-time.After(retryDelays[attempt-1]):
+			case <-time.After(delays[attempt-1]):
 			}
 		}
 
@@ -108,12 +112,18 @@ func (c *Client) call(ctx context.Context, path, method string, params any, out 
 			return nil
 		}
 
-		// Erros de infraestrutura Omie (BG indisponível) são retentáveis
 		if omieErr, isOmieErr := lastErr.(OmieError); isOmieErr {
-			if omieErr.FaultCode == "SOAP-ENV:Server" {
+			switch omieErr.FaultCode {
+			case "SOAP-ENV:Server":
+				// Infraestrutura Omie indisponível — retenta com delays padrão
 				continue
+			case "SOAP-ENV:Client-8020":
+				// Requisição concorrente — aguarda mais antes de retentar
+				delays = retryDelaysConcorrencia
+				continue
+			default:
+				return lastErr
 			}
-			return lastErr
 		}
 	}
 
