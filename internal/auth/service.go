@@ -69,7 +69,11 @@ func (s *service) Login(ctx context.Context, email, password string) (*LoginResp
 		grupoID = grupos[0].ID
 	}
 
-	return s.issueTokens(ctx, usuario.ID, grupoID, usuario.Email, usuario.Role)
+	role, _ := s.repo.GetRoleNoGrupo(ctx, usuario.ID, grupoID)
+	if role == "" {
+		role = usuario.Role
+	}
+	return s.issueTokens(ctx, usuario.ID, grupoID, usuario.Email, role)
 }
 
 func (s *service) SelectGrupo(ctx context.Context, preAuthToken, grupoID string) (*LoginResponse, error) {
@@ -91,7 +95,11 @@ func (s *service) SelectGrupo(ctx context.Context, preAuthToken, grupoID string)
 		return nil, fmt.Errorf("auth.service.SelectGrupo buscar usuário: %w", err)
 	}
 
-	return s.issueTokens(ctx, usuario.ID, grupoID, usuario.Email, usuario.Role)
+	role, _ := s.repo.GetRoleNoGrupo(ctx, usuario.ID, grupoID)
+	if role == "" {
+		role = usuario.Role
+	}
+	return s.issueTokens(ctx, usuario.ID, grupoID, usuario.Email, role)
 }
 
 func (s *service) TrocaGrupo(ctx context.Context, userID, grupoID string) (*LoginResponse, error) {
@@ -108,7 +116,11 @@ func (s *service) TrocaGrupo(ctx context.Context, userID, grupoID string) (*Logi
 		return nil, fmt.Errorf("auth.service.TrocaGrupo buscar usuário: %w", err)
 	}
 
-	return s.issueTokens(ctx, usuario.ID, grupoID, usuario.Email, usuario.Role)
+	role, _ := s.repo.GetRoleNoGrupo(ctx, usuario.ID, grupoID)
+	if role == "" {
+		role = usuario.Role
+	}
+	return s.issueTokens(ctx, usuario.ID, grupoID, usuario.Email, role)
 }
 
 func (s *service) issueTokens(ctx context.Context, userID, grupoID, email, role string) (*LoginResponse, error) {
@@ -168,7 +180,13 @@ func (s *service) Refresh(ctx context.Context, refreshToken string) (*LoginRespo
 		return nil, apperror.Unauthorized("usuário inativo")
 	}
 
-	accessToken, err := s.jwt.Generate(usuario.ID, usuario.GrupoID, usuario.Email, usuario.Role)
+	// Refresh preserva o grupoID e role do contexto atual via junction table
+	grupoIDForRefresh := usuario.GrupoID
+	roleForRefresh, _ := s.repo.GetRoleNoGrupo(ctx, usuario.ID, grupoIDForRefresh)
+	if roleForRefresh == "" {
+		roleForRefresh = usuario.Role
+	}
+	accessToken, err := s.jwt.Generate(usuario.ID, grupoIDForRefresh, usuario.Email, roleForRefresh)
 	if err != nil {
 		return nil, fmt.Errorf("auth.service.Refresh gerar access token: %w", err)
 	}

@@ -22,6 +22,7 @@ type Repository interface {
 	RevokeAllUserTokens(ctx context.Context, usuarioID string) error
 	GetGruposByUsuarioID(ctx context.Context, usuarioID string) ([]GrupoInfo, error)
 	ValidateUsuarioGrupo(ctx context.Context, usuarioID, grupoID string) (bool, error)
+	GetRoleNoGrupo(ctx context.Context, usuarioID, grupoID string) (string, error)
 }
 
 type repository struct {
@@ -163,6 +164,26 @@ func (r *repository) ValidateUsuarioGrupo(ctx context.Context, usuarioID, grupoI
 		return false, fmt.Errorf("auth.repository.ValidateUsuarioGrupo: %w", err)
 	}
 	return pertence, nil
+}
+
+func (r *repository) GetRoleNoGrupo(ctx context.Context, usuarioID, grupoID string) (string, error) {
+	// Tenta ler role da junction (migration 000024). Fallback para usuarios.role se coluna não existir.
+	const q = `SELECT COALESCE(ug.role, u.role) FROM _etl.usuario_grupos ug
+	            JOIN _etl.usuarios u ON u.id = ug.usuario_id
+	            WHERE ug.usuario_id = $1::uuid AND ug.grupo_id = $2::uuid`
+	var role string
+	if err := r.pool.QueryRow(ctx, q, usuarioID, grupoID).Scan(&role); err != nil {
+		if isUndefinedTable(err) {
+			// Tabela ainda não existe: busca role do usuario diretamente
+			const qLegacy = `SELECT role FROM _etl.usuarios WHERE id = $1::uuid`
+			if err2 := r.pool.QueryRow(ctx, qLegacy, usuarioID).Scan(&role); err2 != nil {
+				return "viewer", nil
+			}
+			return role, nil
+		}
+		return "viewer", nil
+	}
+	return role, nil
 }
 
 // --- helpers ---

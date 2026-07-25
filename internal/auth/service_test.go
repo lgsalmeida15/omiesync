@@ -68,6 +68,13 @@ func (m *mockRepo) ValidateUsuarioGrupo(_ context.Context, _, _ string) (bool, e
 	return true, nil
 }
 
+func (m *mockRepo) GetRoleNoGrupo(_ context.Context, _, _ string) (string, error) {
+	if m.usuario != nil {
+		return m.usuario.Role, nil
+	}
+	return "viewer", nil
+}
+
 // --- helpers ---
 
 func hashedPassword(plain string) string {
