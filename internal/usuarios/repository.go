@@ -77,7 +77,7 @@ func (r *repository) InsertGrupoVinculo(ctx context.Context, usuarioID, grupoID 
 	const q = `INSERT INTO _etl.usuario_grupos (usuario_id, grupo_id) VALUES ($1::uuid, $2::uuid) ON CONFLICT DO NOTHING`
 	if _, err := r.pool.Exec(ctx, q, usuarioID, grupoID); err != nil {
 		if isUndefinedTable(err) {
-			return nil // migration pendente — ignora silenciosamente
+			return fmt.Errorf("tabela usuario_grupos não encontrada — aplique a migration 000023 no banco de dados")
 		}
 		return fmt.Errorf("usuarios.repository.InsertGrupoVinculo: %w", err)
 	}
@@ -104,14 +104,51 @@ func (r *repository) GetByID(ctx context.Context, id string) (*Usuario, error) {
 }
 
 func (r *repository) List(ctx context.Context, grupoID string, limit, offset int32) ([]*Usuario, error) {
+	// Tenta junction table primeiro; cai no legado se migration ainda não foi aplicada
+	const qJunction = `
+		SELECT u.id, u.grupo_id, u.nome, u.email, u.role, u.ativo, u.created_at, u.updated_at
+		FROM _etl.usuarios u
+		JOIN _etl.usuario_grupos ug ON ug.usuario_id = u.id
+		WHERE ug.grupo_id = $1::uuid AND u.deleted_at IS NULL
+		ORDER BY u.created_at DESC
+		LIMIT $2 OFFSET $3`
+
+	rows, err := r.pool.Query(ctx, qJunction, grupoID, limit, offset)
+	if err != nil {
+		if !isUndefinedTable(err) {
+			return nil, fmt.Errorf("usuarios.repository.List: %w", err)
+		}
+		// Fallback legado
+		return r.listLegacy(ctx, grupoID, limit, offset)
+	}
+	defer rows.Close()
+
+	var result []*Usuario
+	for rows.Next() {
+		var u Usuario
+		var id, gid pgtype.UUID
+		var ca, ua pgtype.Timestamptz
+		if err := rows.Scan(&id, &gid, &u.Nome, &u.Email, &u.Role, &u.Ativo, &ca, &ua); err != nil {
+			return nil, fmt.Errorf("usuarios.repository.List scan: %w", err)
+		}
+		u.ID = uuidToStr(id)
+		u.GrupoID = uuidToStr(gid)
+		u.CreatedAt = ca.Time
+		u.UpdatedAt = ua.Time
+		result = append(result, &u)
+	}
+	return result, rows.Err()
+}
+
+func (r *repository) listLegacy(ctx context.Context, grupoID string, limit, offset int32) ([]*Usuario, error) {
 	q := sqlcgen.New(r.pool)
 	var gid pgtype.UUID
 	if err := gid.Scan(grupoID); err != nil {
-		return nil, fmt.Errorf("usuarios.repository.List scan grupo_id: %w", err)
+		return nil, fmt.Errorf("usuarios.repository.listLegacy scan: %w", err)
 	}
 	rows, err := q.ListUsuariosByGrupo(ctx, sqlcgen.ListUsuariosByGrupoParams{GrupoID: gid, Limit: limit, Offset: offset})
 	if err != nil {
-		return nil, fmt.Errorf("usuarios.repository.List: %w", err)
+		return nil, fmt.Errorf("usuarios.repository.listLegacy: %w", err)
 	}
 	result := make([]*Usuario, len(rows))
 	for i, row := range rows {
@@ -121,14 +158,33 @@ func (r *repository) List(ctx context.Context, grupoID string, limit, offset int
 }
 
 func (r *repository) Count(ctx context.Context, grupoID string) (int64, error) {
+	const qJunction = `
+		SELECT COUNT(*)
+		FROM _etl.usuarios u
+		JOIN _etl.usuario_grupos ug ON ug.usuario_id = u.id
+		WHERE ug.grupo_id = $1::uuid AND u.deleted_at IS NULL`
+
+	var n int64
+	err := r.pool.QueryRow(ctx, qJunction, grupoID).Scan(&n)
+	if err != nil {
+		if !isUndefinedTable(err) {
+			return 0, fmt.Errorf("usuarios.repository.Count: %w", err)
+		}
+		// Fallback legado
+		return r.countLegacy(ctx, grupoID)
+	}
+	return n, nil
+}
+
+func (r *repository) countLegacy(ctx context.Context, grupoID string) (int64, error) {
 	q := sqlcgen.New(r.pool)
 	var gid pgtype.UUID
 	if err := gid.Scan(grupoID); err != nil {
-		return 0, fmt.Errorf("usuarios.repository.Count scan grupo_id: %w", err)
+		return 0, fmt.Errorf("usuarios.repository.countLegacy scan: %w", err)
 	}
 	n, err := q.CountUsuariosByGrupo(ctx, gid)
 	if err != nil {
-		return 0, fmt.Errorf("usuarios.repository.Count: %w", err)
+		return 0, fmt.Errorf("usuarios.repository.countLegacy: %w", err)
 	}
 	return n, nil
 }
