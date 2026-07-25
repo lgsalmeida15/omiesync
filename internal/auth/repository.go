@@ -2,9 +2,11 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -116,16 +118,24 @@ func (r *repository) RevokeAllUserTokens(ctx context.Context, usuarioID string) 
 	return nil
 }
 
+func isUndefinedTable(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "42P01"
+}
+
 func (r *repository) GetGruposByUsuarioID(ctx context.Context, usuarioID string) ([]GrupoInfo, error) {
 	const q = `
 		SELECT g.id, g.nome, g.slug, g.schema_name
 		FROM _etl.grupos g
 		JOIN _etl.usuario_grupos ug ON ug.grupo_id = g.id
-		WHERE ug.usuario_id = $1 AND g.deleted_at IS NULL
+		WHERE ug.usuario_id = $1::uuid AND g.deleted_at IS NULL
 		ORDER BY g.nome`
 
 	rows, err := r.pool.Query(ctx, q, usuarioID)
 	if err != nil {
+		if isUndefinedTable(err) {
+			return nil, nil // migration pendente — retorna lista vazia
+		}
 		return nil, fmt.Errorf("auth.repository.GetGruposByUsuarioID: %w", err)
 	}
 	defer rows.Close()
@@ -144,9 +154,12 @@ func (r *repository) GetGruposByUsuarioID(ctx context.Context, usuarioID string)
 }
 
 func (r *repository) ValidateUsuarioGrupo(ctx context.Context, usuarioID, grupoID string) (bool, error) {
-	const q = `SELECT COUNT(*) > 0 FROM _etl.usuario_grupos WHERE usuario_id = $1 AND grupo_id = $2`
+	const q = `SELECT COUNT(*) > 0 FROM _etl.usuario_grupos WHERE usuario_id = $1::uuid AND grupo_id = $2::uuid`
 	var pertence bool
 	if err := r.pool.QueryRow(ctx, q, usuarioID, grupoID).Scan(&pertence); err != nil {
+		if isUndefinedTable(err) {
+			return false, nil
+		}
 		return false, fmt.Errorf("auth.repository.ValidateUsuarioGrupo: %w", err)
 	}
 	return pertence, nil

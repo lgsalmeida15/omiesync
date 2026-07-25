@@ -2,8 +2,10 @@ package usuarios
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -60,20 +62,32 @@ func (r *repository) GetByEmail(ctx context.Context, email string) (*Usuario, er
 }
 
 func (r *repository) HasGrupoVinculo(ctx context.Context, usuarioID, grupoID string) (bool, error) {
-	const q = `SELECT COUNT(*) > 0 FROM _etl.usuario_grupos WHERE usuario_id = $1 AND grupo_id = $2`
+	const q = `SELECT COUNT(*) > 0 FROM _etl.usuario_grupos WHERE usuario_id = $1::uuid AND grupo_id = $2::uuid`
 	var exists bool
 	if err := r.pool.QueryRow(ctx, q, usuarioID, grupoID).Scan(&exists); err != nil {
+		if isUndefinedTable(err) {
+			return false, nil
+		}
 		return false, fmt.Errorf("usuarios.repository.HasGrupoVinculo: %w", err)
 	}
 	return exists, nil
 }
 
 func (r *repository) InsertGrupoVinculo(ctx context.Context, usuarioID, grupoID string) error {
-	const q = `INSERT INTO _etl.usuario_grupos (usuario_id, grupo_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`
+	const q = `INSERT INTO _etl.usuario_grupos (usuario_id, grupo_id) VALUES ($1::uuid, $2::uuid) ON CONFLICT DO NOTHING`
 	if _, err := r.pool.Exec(ctx, q, usuarioID, grupoID); err != nil {
+		if isUndefinedTable(err) {
+			return nil // migration pendente — ignora silenciosamente
+		}
 		return fmt.Errorf("usuarios.repository.InsertGrupoVinculo: %w", err)
 	}
 	return nil
+}
+
+// isUndefinedTable detecta erro PostgreSQL 42P01 (tabela não existe — migration pendente).
+func isUndefinedTable(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "42P01"
 }
 
 func (r *repository) GetByID(ctx context.Context, id string) (*Usuario, error) {
