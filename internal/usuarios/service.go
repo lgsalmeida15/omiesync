@@ -51,6 +51,12 @@ func (s *service) Create(ctx context.Context, grupoID string, req CreateRequest)
 	if err != nil {
 		return nil, fmt.Errorf("usuarios.service.Create: %w", err)
 	}
+
+	// Registra vínculo na junction table para suporte a multi-grupo
+	if err := s.repo.InsertGrupoVinculo(ctx, u.ID, grupoID); err != nil {
+		return nil, fmt.Errorf("usuarios.service.Create vincular grupo: %w", err)
+	}
+
 	return u, nil
 }
 

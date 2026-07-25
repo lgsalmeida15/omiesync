@@ -65,6 +65,10 @@ import {
   IconUsers, IconKey, IconSync, IconUser, IconDatabase
 } from '@/components/ui/icons'
 
+const IconSwitch = {
+  template: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4"/></svg>`
+}
+
 defineProps<{ mobileOpen: boolean }>()
 defineEmits<{ close: [] }>()
 
@@ -129,6 +133,7 @@ const navSections = computed(() => {
   if (role === 'admin_global' || role === 'admin_grupo') {
     systemItems.push({ to: '/sql-explorer', label: 'SQL Explorer', icon: IconDatabase })
   }
+  systemItems.push({ to: '/select-grupo', label: 'Trocar Grupo', icon: IconSwitch })
   systemItems.push({ to: '/perfil', label: 'Perfil', icon: IconUser })
   sections.push({ label: 'SISTEMA', items: systemItems })
 

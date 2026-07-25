@@ -31,3 +31,17 @@ WHERE token = $1;
 UPDATE _etl.refresh_tokens
 SET revoked = true
 WHERE usuario_id = $1;
+
+-- name: GetGruposByUsuarioID :many
+SELECT g.id, g.nome, g.slug, g.schema_name
+FROM _etl.grupos g
+JOIN _etl.usuario_grupos ug ON ug.grupo_id = g.id
+WHERE ug.usuario_id = $1
+  AND g.deleted_at IS NULL
+ORDER BY g.nome;
+
+-- name: ValidateUsuarioGrupo :one
+SELECT COUNT(*) > 0 AS pertence
+FROM _etl.usuario_grupos
+WHERE usuario_id = $1
+  AND grupo_id = $2;

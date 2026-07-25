@@ -16,6 +16,9 @@ const refreshTokenDuration = 7 * 24 * time.Hour
 
 type Service interface {
 	Login(ctx context.Context, email, password string) (*LoginResponse, error)
+	SelectGrupo(ctx context.Context, preAuthToken, grupoID string) (*LoginResponse, error)
+	TrocaGrupo(ctx context.Context, userID, grupoID string) (*LoginResponse, error)
+	GetGrupos(ctx context.Context, userID string) ([]GrupoInfo, error)
 	Logout(ctx context.Context, refreshToken string) error
 	Refresh(ctx context.Context, refreshToken string) (*LoginResponse, error)
 	Me(ctx context.Context, userID string) (*MeResponse, error)
@@ -44,18 +47,86 @@ func (s *service) Login(ctx context.Context, email, password string) (*LoginResp
 		return nil, apperror.Unauthorized("credenciais inválidas")
 	}
 
-	accessToken, err := s.jwt.Generate(usuario.ID, usuario.GrupoID, usuario.Email, usuario.Role)
+	// Buscar grupos via junction table
+	grupos, err := s.repo.GetGruposByUsuarioID(ctx, usuario.ID)
 	if err != nil {
-		return nil, fmt.Errorf("auth.service.Login gerar access token: %w", err)
+		return nil, fmt.Errorf("auth.service.Login buscar grupos: %w", err)
+	}
+
+	// Múltiplos grupos: exige seleção antes de emitir access token
+	if len(grupos) > 1 {
+		preAuthToken, err := s.jwt.GeneratePreAuth(usuario.ID, usuario.Email)
+		if err != nil {
+			return nil, fmt.Errorf("auth.service.Login gerar pre-auth token: %w", err)
+		}
+		return &LoginResponse{
+			NeedsSelect:  true,
+			PreAuthToken: preAuthToken,
+			Grupos:       grupos,
+		}, nil
+	}
+
+	// Único grupo ou fallback para grupo_id legado
+	grupoID := usuario.GrupoID
+	if len(grupos) == 1 {
+		grupoID = grupos[0].ID
+	}
+
+	return s.issueTokens(ctx, usuario.ID, grupoID, usuario.Email, usuario.Role)
+}
+
+func (s *service) SelectGrupo(ctx context.Context, preAuthToken, grupoID string) (*LoginResponse, error) {
+	claims, err := s.jwt.ValidatePreAuth(preAuthToken)
+	if err != nil {
+		return nil, apperror.Unauthorized("pre_auth_token inválido ou expirado")
+	}
+
+	pertence, err := s.repo.ValidateUsuarioGrupo(ctx, claims.UserID, grupoID)
+	if err != nil {
+		return nil, fmt.Errorf("auth.service.SelectGrupo validar grupo: %w", err)
+	}
+	if !pertence {
+		return nil, apperror.Forbidden("usuário não pertence a este grupo")
+	}
+
+	usuario, err := s.repo.GetUsuarioByID(ctx, claims.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("auth.service.SelectGrupo buscar usuário: %w", err)
+	}
+
+	return s.issueTokens(ctx, usuario.ID, grupoID, usuario.Email, usuario.Role)
+}
+
+func (s *service) TrocaGrupo(ctx context.Context, userID, grupoID string) (*LoginResponse, error) {
+	pertence, err := s.repo.ValidateUsuarioGrupo(ctx, userID, grupoID)
+	if err != nil {
+		return nil, fmt.Errorf("auth.service.TrocaGrupo validar grupo: %w", err)
+	}
+	if !pertence {
+		return nil, apperror.Forbidden("usuário não pertence a este grupo")
+	}
+
+	usuario, err := s.repo.GetUsuarioByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("auth.service.TrocaGrupo buscar usuário: %w", err)
+	}
+
+	return s.issueTokens(ctx, usuario.ID, grupoID, usuario.Email, usuario.Role)
+}
+
+func (s *service) issueTokens(ctx context.Context, userID, grupoID, email, role string) (*LoginResponse, error) {
+	accessToken, err := s.jwt.Generate(userID, grupoID, email, role)
+	if err != nil {
+		return nil, fmt.Errorf("auth.service.issueTokens gerar access token: %w", err)
 	}
 
 	refreshToken, err := generateOpaqueToken()
 	if err != nil {
-		return nil, fmt.Errorf("auth.service.Login gerar refresh token: %w", err)
+		return nil, fmt.Errorf("auth.service.issueTokens gerar refresh token: %w", err)
 	}
 
-	if _, err := s.repo.InsertRefreshToken(ctx, usuario.ID, refreshToken, time.Now().Add(refreshTokenDuration)); err != nil {
-		return nil, fmt.Errorf("auth.service.Login salvar refresh token: %w", err)
+	if _, err := s.repo.InsertRefreshToken(ctx, userID, refreshToken, time.Now().Add(refreshTokenDuration)); err != nil {
+		return nil, fmt.Errorf("auth.service.issueTokens salvar refresh token: %w", err)
 	}
 
 	return &LoginResponse{
@@ -63,6 +134,14 @@ func (s *service) Login(ctx context.Context, email, password string) (*LoginResp
 		RefreshToken: refreshToken,
 		ExpiresIn:    int(15 * time.Minute / time.Second),
 	}, nil
+}
+
+func (s *service) GetGrupos(ctx context.Context, userID string) ([]GrupoInfo, error) {
+	grupos, err := s.repo.GetGruposByUsuarioID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("auth.service.GetGrupos: %w", err)
+	}
+	return grupos, nil
 }
 
 func (s *service) Logout(ctx context.Context, refreshToken string) error {

@@ -11,6 +11,12 @@ const router = createRouter({
       component: () => import('@/views/LoginView.vue'),
       meta: { public: true }
     },
+    {
+      path: '/select-grupo',
+      name: 'SelectGrupo',
+      component: () => import('@/views/SelectGrupoView.vue'),
+      meta: { selectGrupo: true }
+    },
 
     // ── Autenticado ──────────────────────────────────────────
     {
@@ -124,12 +130,22 @@ const router = createRouter({
 router.beforeEach(async to => {
   const auth = useAuthStore()
 
-  // Rota pública
-  if (to.meta.public) {
-    // Já logado e tenta acessar /login → vai para home
-    if (auth.isAuthenticated) return { name: 'Dashboard' }
+  // Rota de seleção de grupo
+  if (to.meta.selectGrupo) {
+    // Permite acesso se tem preAuthToken (fluxo login multi-grupo) OU se já autenticado (fluxo troca-grupo)
+    if (!auth.needsGroupSelect && !auth.isAuthenticated) return { name: 'Login' }
     return true
   }
+
+  // Rota pública
+  if (to.meta.public) {
+    if (auth.needsGroupSelect) return { name: 'SelectGrupo' }
+    if (auth.isAuthenticated)  return { name: 'Dashboard' }
+    return true
+  }
+
+  // Seleção de grupo pendente — bloqueia acesso a rotas protegidas até selecionar
+  if (auth.needsGroupSelect) return { name: 'SelectGrupo' }
 
   // Requer autenticação
   if (to.meta.requiresAuth !== false) {

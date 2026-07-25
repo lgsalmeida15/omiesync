@@ -37,8 +37,9 @@ func (m *mockRepo) Update(_ context.Context, id, nome, role string, ativo bool) 
 	}
 	return &Usuario{ID: id, Nome: nome, Role: role, Ativo: ativo}, nil
 }
-func (m *mockRepo) UpdatePassword(_ context.Context, _, _ string) error { return m.err }
-func (m *mockRepo) SoftDelete(_ context.Context, _ string) error        { return m.err }
+func (m *mockRepo) UpdatePassword(_ context.Context, _, _ string) error    { return m.err }
+func (m *mockRepo) SoftDelete(_ context.Context, _ string) error           { return m.err }
+func (m *mockRepo) InsertGrupoVinculo(_ context.Context, _, _ string) error { return m.err }
 
 func activeUser() *Usuario {
 	return &Usuario{ID: "u1", GrupoID: "g1", Nome: "João", Email: "j@t.com", Role: "viewer", Ativo: true}

@@ -180,6 +180,12 @@ type EtlUsuario struct {
 	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
 }
 
+type EtlUsuarioGrupo struct {
+	UsuarioID pgtype.UUID        `json:"usuario_id"`
+	GrupoID   pgtype.UUID        `json:"grupo_id"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type EtlWebhook struct {
 	ID        pgtype.UUID        `json:"id"`
 	GrupoID   pgtype.UUID        `json:"grupo_id"`

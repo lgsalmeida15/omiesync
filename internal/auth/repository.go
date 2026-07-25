@@ -18,6 +18,8 @@ type Repository interface {
 	GetRefreshToken(ctx context.Context, token string) (*RefreshToken, error)
 	RevokeRefreshToken(ctx context.Context, token string) error
 	RevokeAllUserTokens(ctx context.Context, usuarioID string) error
+	GetGruposByUsuarioID(ctx context.Context, usuarioID string) ([]GrupoInfo, error)
+	ValidateUsuarioGrupo(ctx context.Context, usuarioID, grupoID string) (bool, error)
 }
 
 type repository struct {
@@ -112,6 +114,42 @@ func (r *repository) RevokeAllUserTokens(ctx context.Context, usuarioID string) 
 		return fmt.Errorf("auth.repository.RevokeAllUserTokens: %w", err)
 	}
 	return nil
+}
+
+func (r *repository) GetGruposByUsuarioID(ctx context.Context, usuarioID string) ([]GrupoInfo, error) {
+	const q = `
+		SELECT g.id, g.nome, g.slug, g.schema_name
+		FROM _etl.grupos g
+		JOIN _etl.usuario_grupos ug ON ug.grupo_id = g.id
+		WHERE ug.usuario_id = $1 AND g.deleted_at IS NULL
+		ORDER BY g.nome`
+
+	rows, err := r.pool.Query(ctx, q, usuarioID)
+	if err != nil {
+		return nil, fmt.Errorf("auth.repository.GetGruposByUsuarioID: %w", err)
+	}
+	defer rows.Close()
+
+	var grupos []GrupoInfo
+	for rows.Next() {
+		var g GrupoInfo
+		var rawID pgtype.UUID
+		if err := rows.Scan(&rawID, &g.Nome, &g.Slug, &g.SchemaName); err != nil {
+			return nil, fmt.Errorf("auth.repository.GetGruposByUsuarioID scan: %w", err)
+		}
+		g.ID = uuidToStr(rawID)
+		grupos = append(grupos, g)
+	}
+	return grupos, rows.Err()
+}
+
+func (r *repository) ValidateUsuarioGrupo(ctx context.Context, usuarioID, grupoID string) (bool, error) {
+	const q = `SELECT COUNT(*) > 0 FROM _etl.usuario_grupos WHERE usuario_id = $1 AND grupo_id = $2`
+	var pertence bool
+	if err := r.pool.QueryRow(ctx, q, usuarioID, grupoID).Scan(&pertence); err != nil {
+		return false, fmt.Errorf("auth.repository.ValidateUsuarioGrupo: %w", err)
+	}
+	return pertence, nil
 }
 
 // --- helpers ---

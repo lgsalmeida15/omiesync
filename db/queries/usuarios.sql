@@ -38,3 +38,36 @@ WHERE id = $1;
 UPDATE _etl.usuarios
 SET deleted_at = NOW(), updated_at = NOW()
 WHERE id = $1;
+
+-- name: InsertUsuarioGrupo :exec
+INSERT INTO _etl.usuario_grupos (usuario_id, grupo_id)
+VALUES ($1, $2)
+ON CONFLICT DO NOTHING;
+
+-- name: DeleteUsuarioGrupo :exec
+DELETE FROM _etl.usuario_grupos
+WHERE usuario_id = $1 AND grupo_id = $2;
+
+-- name: GetGruposByUsuario :many
+SELECT g.id, g.nome, g.slug, g.schema_name
+FROM _etl.grupos g
+JOIN _etl.usuario_grupos ug ON ug.grupo_id = g.id
+WHERE ug.usuario_id = $1
+  AND g.deleted_at IS NULL
+ORDER BY g.nome;
+
+-- name: ListUsuariosByGrupoFromJunction :many
+SELECT u.id, u.grupo_id, u.nome, u.email, u.role, u.ativo, u.created_at, u.updated_at
+FROM _etl.usuarios u
+JOIN _etl.usuario_grupos ug ON ug.usuario_id = u.id
+WHERE ug.grupo_id = $1
+  AND u.deleted_at IS NULL
+ORDER BY u.created_at DESC
+LIMIT $2 OFFSET $3;
+
+-- name: CountUsuariosByGrupoFromJunction :one
+SELECT COUNT(*)
+FROM _etl.usuarios u
+JOIN _etl.usuario_grupos ug ON ug.usuario_id = u.id
+WHERE ug.grupo_id = $1
+  AND u.deleted_at IS NULL;

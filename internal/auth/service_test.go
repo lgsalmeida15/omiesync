@@ -56,6 +56,18 @@ func (m *mockRepo) RevokeAllUserTokens(_ context.Context, _ string) error {
 	return m.revokeErr
 }
 
+func (m *mockRepo) GetGruposByUsuarioID(_ context.Context, _ string) ([]GrupoInfo, error) {
+	if m.usuario == nil {
+		return nil, nil
+	}
+	// retorna um grupo único para simular usuário mono-grupo
+	return []GrupoInfo{{ID: m.usuario.GrupoID, Nome: "Grupo Teste", Slug: "grupo-teste", SchemaName: "grupo_teste"}}, nil
+}
+
+func (m *mockRepo) ValidateUsuarioGrupo(_ context.Context, _, _ string) (bool, error) {
+	return true, nil
+}
+
 // --- helpers ---
 
 func hashedPassword(plain string) string {

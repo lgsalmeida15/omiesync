@@ -195,6 +195,15 @@ type nullAuthSvc struct{}
 func (s *nullAuthSvc) Login(_ context.Context, _, _ string) (*auth.LoginResponse, error) {
 	return nil, nil
 }
+func (s *nullAuthSvc) SelectGrupo(_ context.Context, _, _ string) (*auth.LoginResponse, error) {
+	return nil, nil
+}
+func (s *nullAuthSvc) TrocaGrupo(_ context.Context, _, _ string) (*auth.LoginResponse, error) {
+	return nil, nil
+}
+func (s *nullAuthSvc) GetGrupos(_ context.Context, _ string) ([]auth.GrupoInfo, error) {
+	return nil, nil
+}
 func (s *nullAuthSvc) Logout(_ context.Context, _ string) error { return nil }
 func (s *nullAuthSvc) Refresh(_ context.Context, _ string) (*auth.LoginResponse, error) {
 	return nil, nil
@@ -324,8 +333,9 @@ func (r *nullUsuariosRepo) Count(_ context.Context, _ string) (int64, error) { r
 func (r *nullUsuariosRepo) Update(_ context.Context, _, _, _ string, _ bool) (*usuarios.Usuario, error) {
 	return nil, nil
 }
-func (r *nullUsuariosRepo) UpdatePassword(_ context.Context, _, _ string) error { return nil }
-func (r *nullUsuariosRepo) SoftDelete(_ context.Context, _ string) error        { return nil }
+func (r *nullUsuariosRepo) UpdatePassword(_ context.Context, _, _ string) error    { return nil }
+func (r *nullUsuariosRepo) SoftDelete(_ context.Context, _ string) error           { return nil }
+func (r *nullUsuariosRepo) InsertGrupoVinculo(_ context.Context, _, _ string) error { return nil }
 
 type nullPermissoesRepo struct{}
 

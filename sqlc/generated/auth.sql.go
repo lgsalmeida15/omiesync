@@ -11,6 +11,47 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getGruposByUsuarioID = `-- name: GetGruposByUsuarioID :many
+SELECT g.id, g.nome, g.slug, g.schema_name
+FROM _etl.grupos g
+JOIN _etl.usuario_grupos ug ON ug.grupo_id = g.id
+WHERE ug.usuario_id = $1
+  AND g.deleted_at IS NULL
+ORDER BY g.nome
+`
+
+type GetGruposByUsuarioIDRow struct {
+	ID         pgtype.UUID `json:"id"`
+	Nome       string      `json:"nome"`
+	Slug       string      `json:"slug"`
+	SchemaName string      `json:"schema_name"`
+}
+
+func (q *Queries) GetGruposByUsuarioID(ctx context.Context, usuarioID pgtype.UUID) ([]GetGruposByUsuarioIDRow, error) {
+	rows, err := q.db.Query(ctx, getGruposByUsuarioID, usuarioID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetGruposByUsuarioIDRow
+	for rows.Next() {
+		var i GetGruposByUsuarioIDRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Nome,
+			&i.Slug,
+			&i.SchemaName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getRefreshToken = `-- name: GetRefreshToken :one
 SELECT id, usuario_id, token, expires_at, revoked, created_at
 FROM _etl.refresh_tokens
@@ -151,4 +192,23 @@ WHERE token = $1
 func (q *Queries) RevokeRefreshToken(ctx context.Context, token string) error {
 	_, err := q.db.Exec(ctx, revokeRefreshToken, token)
 	return err
+}
+
+const validateUsuarioGrupo = `-- name: ValidateUsuarioGrupo :one
+SELECT COUNT(*) > 0 AS pertence
+FROM _etl.usuario_grupos
+WHERE usuario_id = $1
+  AND grupo_id = $2
+`
+
+type ValidateUsuarioGrupoParams struct {
+	UsuarioID pgtype.UUID `json:"usuario_id"`
+	GrupoID   pgtype.UUID `json:"grupo_id"`
+}
+
+func (q *Queries) ValidateUsuarioGrupo(ctx context.Context, arg ValidateUsuarioGrupoParams) (bool, error) {
+	row := q.db.QueryRow(ctx, validateUsuarioGrupo, arg.UsuarioID, arg.GrupoID)
+	var pertence bool
+	err := row.Scan(&pertence)
+	return pertence, err
 }

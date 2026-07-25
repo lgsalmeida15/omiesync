@@ -12,6 +12,7 @@ import (
 
 type Repository interface {
 	Insert(ctx context.Context, grupoID, nome, email, passwordHash, role string) (*Usuario, error)
+	InsertGrupoVinculo(ctx context.Context, usuarioID, grupoID string) error
 	GetByID(ctx context.Context, id string) (*Usuario, error)
 	List(ctx context.Context, grupoID string, limit, offset int32) ([]*Usuario, error)
 	Count(ctx context.Context, grupoID string) (int64, error)
@@ -45,6 +46,14 @@ func (r *repository) Insert(ctx context.Context, grupoID, nome, email, passwordH
 		return nil, fmt.Errorf("usuarios.repository.Insert: %w", err)
 	}
 	return toUsuario(row.ID, row.GrupoID, row.Nome, row.Email, row.Role, row.Ativo, row.CreatedAt, row.UpdatedAt), nil
+}
+
+func (r *repository) InsertGrupoVinculo(ctx context.Context, usuarioID, grupoID string) error {
+	const q = `INSERT INTO _etl.usuario_grupos (usuario_id, grupo_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`
+	if _, err := r.pool.Exec(ctx, q, usuarioID, grupoID); err != nil {
+		return fmt.Errorf("usuarios.repository.InsertGrupoVinculo: %w", err)
+	}
+	return nil
 }
 
 func (r *repository) GetByID(ctx context.Context, id string) (*Usuario, error) {

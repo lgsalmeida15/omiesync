@@ -24,6 +24,77 @@ func (q *Queries) CountUsuariosByGrupo(ctx context.Context, grupoID pgtype.UUID)
 	return count, err
 }
 
+const countUsuariosByGrupoFromJunction = `-- name: CountUsuariosByGrupoFromJunction :one
+SELECT COUNT(*)
+FROM _etl.usuarios u
+JOIN _etl.usuario_grupos ug ON ug.usuario_id = u.id
+WHERE ug.grupo_id = $1
+  AND u.deleted_at IS NULL
+`
+
+func (q *Queries) CountUsuariosByGrupoFromJunction(ctx context.Context, grupoID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countUsuariosByGrupoFromJunction, grupoID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const deleteUsuarioGrupo = `-- name: DeleteUsuarioGrupo :exec
+DELETE FROM _etl.usuario_grupos
+WHERE usuario_id = $1 AND grupo_id = $2
+`
+
+type DeleteUsuarioGrupoParams struct {
+	UsuarioID pgtype.UUID `json:"usuario_id"`
+	GrupoID   pgtype.UUID `json:"grupo_id"`
+}
+
+func (q *Queries) DeleteUsuarioGrupo(ctx context.Context, arg DeleteUsuarioGrupoParams) error {
+	_, err := q.db.Exec(ctx, deleteUsuarioGrupo, arg.UsuarioID, arg.GrupoID)
+	return err
+}
+
+const getGruposByUsuario = `-- name: GetGruposByUsuario :many
+SELECT g.id, g.nome, g.slug, g.schema_name
+FROM _etl.grupos g
+JOIN _etl.usuario_grupos ug ON ug.grupo_id = g.id
+WHERE ug.usuario_id = $1
+  AND g.deleted_at IS NULL
+ORDER BY g.nome
+`
+
+type GetGruposByUsuarioRow struct {
+	ID         pgtype.UUID `json:"id"`
+	Nome       string      `json:"nome"`
+	Slug       string      `json:"slug"`
+	SchemaName string      `json:"schema_name"`
+}
+
+func (q *Queries) GetGruposByUsuario(ctx context.Context, usuarioID pgtype.UUID) ([]GetGruposByUsuarioRow, error) {
+	rows, err := q.db.Query(ctx, getGruposByUsuario, usuarioID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetGruposByUsuarioRow
+	for rows.Next() {
+		var i GetGruposByUsuarioRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Nome,
+			&i.Slug,
+			&i.SchemaName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getUsuarioByIDFull = `-- name: GetUsuarioByIDFull :one
 SELECT id, grupo_id, nome, email, role, ativo, created_at, updated_at
 FROM _etl.usuarios
@@ -105,6 +176,22 @@ func (q *Queries) InsertUsuario(ctx context.Context, arg InsertUsuarioParams) (I
 	return i, err
 }
 
+const insertUsuarioGrupo = `-- name: InsertUsuarioGrupo :exec
+INSERT INTO _etl.usuario_grupos (usuario_id, grupo_id)
+VALUES ($1, $2)
+ON CONFLICT DO NOTHING
+`
+
+type InsertUsuarioGrupoParams struct {
+	UsuarioID pgtype.UUID `json:"usuario_id"`
+	GrupoID   pgtype.UUID `json:"grupo_id"`
+}
+
+func (q *Queries) InsertUsuarioGrupo(ctx context.Context, arg InsertUsuarioGrupoParams) error {
+	_, err := q.db.Exec(ctx, insertUsuarioGrupo, arg.UsuarioID, arg.GrupoID)
+	return err
+}
+
 const listUsuariosByGrupo = `-- name: ListUsuariosByGrupo :many
 SELECT id, grupo_id, nome, email, role, ativo, created_at, updated_at
 FROM _etl.usuarios
@@ -140,6 +227,62 @@ func (q *Queries) ListUsuariosByGrupo(ctx context.Context, arg ListUsuariosByGru
 	var items []ListUsuariosByGrupoRow
 	for rows.Next() {
 		var i ListUsuariosByGrupoRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.GrupoID,
+			&i.Nome,
+			&i.Email,
+			&i.Role,
+			&i.Ativo,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUsuariosByGrupoFromJunction = `-- name: ListUsuariosByGrupoFromJunction :many
+SELECT u.id, u.grupo_id, u.nome, u.email, u.role, u.ativo, u.created_at, u.updated_at
+FROM _etl.usuarios u
+JOIN _etl.usuario_grupos ug ON ug.usuario_id = u.id
+WHERE ug.grupo_id = $1
+  AND u.deleted_at IS NULL
+ORDER BY u.created_at DESC
+LIMIT $2 OFFSET $3
+`
+
+type ListUsuariosByGrupoFromJunctionParams struct {
+	GrupoID pgtype.UUID `json:"grupo_id"`
+	Limit   int32       `json:"limit"`
+	Offset  int32       `json:"offset"`
+}
+
+type ListUsuariosByGrupoFromJunctionRow struct {
+	ID        pgtype.UUID        `json:"id"`
+	GrupoID   pgtype.UUID        `json:"grupo_id"`
+	Nome      string             `json:"nome"`
+	Email     string             `json:"email"`
+	Role      string             `json:"role"`
+	Ativo     bool               `json:"ativo"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) ListUsuariosByGrupoFromJunction(ctx context.Context, arg ListUsuariosByGrupoFromJunctionParams) ([]ListUsuariosByGrupoFromJunctionRow, error) {
+	rows, err := q.db.Query(ctx, listUsuariosByGrupoFromJunction, arg.GrupoID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUsuariosByGrupoFromJunctionRow
+	for rows.Next() {
+		var i ListUsuariosByGrupoFromJunctionRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.GrupoID,

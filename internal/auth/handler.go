@@ -29,9 +29,12 @@ func (h *Handler) Routes() http.Handler {
 	r := chi.NewRouter()
 
 	r.With(httprate.LimitByIP(10, 1*time.Minute)).Post("/login", h.Login)
+	r.With(httprate.LimitByIP(10, 1*time.Minute)).Post("/select-grupo", h.SelectGrupo)
 	r.Post("/logout", h.Logout)
 	r.With(httprate.LimitByIP(20, 1*time.Minute)).Post("/refresh", h.Refresh)
 	r.With(RequireAuth(h.jwtSvc)).Get("/me", h.Me)
+	r.With(RequireAuth(h.jwtSvc)).Get("/grupos", h.Grupos)
+	r.With(RequireAuth(h.jwtSvc)).Post("/troca-grupo", h.TrocaGrupo)
 
 	return r
 }
@@ -94,6 +97,79 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		response.Error(w, http.StatusInternalServerError, "erro ao renovar token", err)
+		return
+	}
+
+	response.OK(w, resp)
+}
+
+// GET /auth/grupos
+func (h *Handler) Grupos(w http.ResponseWriter, r *http.Request) {
+	claims, ok := ClaimsFromContext(r.Context())
+	if !ok {
+		response.Unauthorized(w, "não autenticado")
+		return
+	}
+
+	grupos, err := h.svc.GetGrupos(r.Context(), claims.UserID)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "erro ao buscar grupos", err)
+		return
+	}
+
+	response.OK(w, grupos)
+}
+
+// POST /auth/select-grupo
+func (h *Handler) SelectGrupo(w http.ResponseWriter, r *http.Request) {
+	var req SelectGrupoRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusUnprocessableEntity, "body inválido", err)
+		return
+	}
+	if req.PreAuthToken == "" || req.GrupoID == "" {
+		response.Error(w, http.StatusUnprocessableEntity, "pre_auth_token e grupo_id são obrigatórios", nil)
+		return
+	}
+
+	resp, err := h.svc.SelectGrupo(r.Context(), req.PreAuthToken, req.GrupoID)
+	if err != nil {
+		if ae, ok := apperror.IsAppError(err); ok {
+			response.FromAppError(w, ae)
+			return
+		}
+		response.Error(w, http.StatusInternalServerError, "erro ao selecionar grupo", err)
+		return
+	}
+
+	response.OK(w, resp)
+}
+
+// POST /auth/troca-grupo
+func (h *Handler) TrocaGrupo(w http.ResponseWriter, r *http.Request) {
+	claims, ok := ClaimsFromContext(r.Context())
+	if !ok {
+		response.Unauthorized(w, "não autenticado")
+		return
+	}
+
+	var req TrocaGrupoRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusUnprocessableEntity, "body inválido", err)
+		return
+	}
+	if req.GrupoID == "" {
+		response.Error(w, http.StatusUnprocessableEntity, "grupo_id é obrigatório", nil)
+		return
+	}
+
+	resp, err := h.svc.TrocaGrupo(r.Context(), claims.UserID, req.GrupoID)
+	if err != nil {
+		if ae, ok := apperror.IsAppError(err); ok {
+			response.FromAppError(w, ae)
+			return
+		}
+		response.Error(w, http.StatusInternalServerError, "erro ao trocar grupo", err)
 		return
 	}
 

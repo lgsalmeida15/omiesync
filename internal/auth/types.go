@@ -23,15 +23,40 @@ type RefreshToken struct {
 	CreatedAt time.Time
 }
 
+type GrupoInfo struct {
+	ID         string `json:"id"`
+	Nome       string `json:"nome"`
+	Slug       string `json:"slug"`
+	SchemaName string `json:"schema_name"`
+}
+
 type LoginRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
 }
 
+// LoginResponse cobre dois cenários:
+// 1. Login direto (único grupo ou grupo padrão): access_token + refresh_token preenchidos.
+// 2. Seleção pendente (múltiplos grupos): needs_select=true, pre_auth_token + grupos preenchidos.
 type LoginResponse struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-	ExpiresIn    int    `json:"expires_in"`
+	// Cenário 1 — login completo
+	AccessToken  string `json:"access_token,omitempty"`
+	RefreshToken string `json:"refresh_token,omitempty"`
+	ExpiresIn    int    `json:"expires_in,omitempty"`
+
+	// Cenário 2 — seleção de grupo pendente
+	NeedsSelect   bool        `json:"needs_select,omitempty"`
+	PreAuthToken  string      `json:"pre_auth_token,omitempty"`
+	Grupos        []GrupoInfo `json:"grupos,omitempty"`
+}
+
+type SelectGrupoRequest struct {
+	PreAuthToken string `json:"pre_auth_token"`
+	GrupoID      string `json:"grupo_id"`
+}
+
+type TrocaGrupoRequest struct {
+	GrupoID string `json:"grupo_id"`
 }
 
 type RefreshRequest struct {

@@ -10,36 +10,88 @@ export interface User {
   role:     'admin_global' | 'admin_grupo' | 'viewer'
 }
 
+export interface GrupoInfo {
+  id:          string
+  nome:        string
+  slug:        string
+  schema_name: string
+}
+
 export const useAuthStore = defineStore('auth', () => {
   const accessToken  = ref(localStorage.getItem('access_token') || '')
   const refreshToken = ref(localStorage.getItem('refresh_token') || '')
   const user         = ref<User | null>(null)
 
-  const isAuthenticated = computed(() => !!accessToken.value)
-  const isAdminGlobal   = computed(() => user.value?.role === 'admin_global')
-  const isAdminGrupo    = computed(() => user.value?.role === 'admin_grupo')
-  const isViewer        = computed(() => user.value?.role === 'viewer')
-  const isAdmin         = computed(() => ['admin_global', 'admin_grupo'].includes(user.value?.role ?? ''))
+  // Estado de seleção pendente de grupo (multi-grupo no login)
+  const preAuthToken  = ref(localStorage.getItem('pre_auth_token') || '')
+  const pendingGrupos = ref<GrupoInfo[]>(JSON.parse(localStorage.getItem('pending_grupos') || '[]'))
+
+  const isAuthenticated  = computed(() => !!accessToken.value)
+  const needsGroupSelect = computed(() => !!preAuthToken.value && !accessToken.value)
+  const isAdminGlobal    = computed(() => user.value?.role === 'admin_global')
+  const isAdminGrupo     = computed(() => user.value?.role === 'admin_grupo')
+  const isViewer         = computed(() => user.value?.role === 'viewer')
+  const isAdmin          = computed(() => ['admin_global', 'admin_grupo'].includes(user.value?.role ?? ''))
 
   function setTokens(access: string, refresh: string) {
     accessToken.value  = access
     refreshToken.value = refresh
     localStorage.setItem('access_token',  access)
     localStorage.setItem('refresh_token', refresh)
+    // Limpar estado de seleção pendente após receber tokens reais
+    preAuthToken.value  = ''
+    pendingGrupos.value = []
+    localStorage.removeItem('pre_auth_token')
+    localStorage.removeItem('pending_grupos')
   }
 
   function clearTokens() {
-    accessToken.value  = ''
-    refreshToken.value = ''
-    user.value         = null
+    accessToken.value   = ''
+    refreshToken.value  = ''
+    preAuthToken.value  = ''
+    pendingGrupos.value = []
+    user.value          = null
     localStorage.removeItem('access_token')
     localStorage.removeItem('refresh_token')
+    localStorage.removeItem('pre_auth_token')
+    localStorage.removeItem('pending_grupos')
   }
 
   async function login(email: string, password: string) {
     const { data } = await api.post('/auth/login', { email, password })
+    const resp = data.data
+
+    if (resp.needs_select) {
+      // Múltiplos grupos — salva estado de seleção pendente
+      preAuthToken.value  = resp.pre_auth_token
+      pendingGrupos.value = resp.grupos ?? []
+      localStorage.setItem('pre_auth_token',  resp.pre_auth_token)
+      localStorage.setItem('pending_grupos', JSON.stringify(resp.grupos ?? []))
+      return
+    }
+
+    setTokens(resp.access_token, resp.refresh_token)
+    await fetchMe()
+  }
+
+  async function selectGrupo(grupoID: string) {
+    const { data } = await api.post('/auth/select-grupo', {
+      pre_auth_token: preAuthToken.value,
+      grupo_id: grupoID
+    })
     setTokens(data.data.access_token, data.data.refresh_token)
     await fetchMe()
+  }
+
+  async function trocaGrupo(grupoID: string) {
+    const { data } = await api.post('/auth/troca-grupo', { grupo_id: grupoID })
+    setTokens(data.data.access_token, data.data.refresh_token)
+    await fetchMe()
+  }
+
+  async function fetchGrupos(): Promise<GrupoInfo[]> {
+    const { data } = await api.get('/auth/grupos')
+    return data.data ?? []
   }
 
   async function refresh() {
@@ -63,8 +115,9 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   return {
-    accessToken, refreshToken, user,
-    isAuthenticated, isAdminGlobal, isAdminGrupo, isViewer, isAdmin,
-    login, logout, refresh, fetchMe, clearTokens, setTokens
+    accessToken, refreshToken, user, preAuthToken, pendingGrupos,
+    isAuthenticated, needsGroupSelect, isAdminGlobal, isAdminGrupo, isViewer, isAdmin,
+    login, selectGrupo, trocaGrupo, fetchGrupos,
+    logout, refresh, fetchMe, clearTokens, setTokens
   }
 })
