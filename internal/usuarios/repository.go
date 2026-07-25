@@ -12,6 +12,9 @@ import (
 	"omie-sync-api/sqlc/generated"
 )
 
+// ErrMigrationPendente é retornado quando usuario_grupos ainda não existe.
+var ErrMigrationPendente = errors.New("migration 000023 pendente")
+
 type Repository interface {
 	Insert(ctx context.Context, grupoID, nome, email, passwordHash, role string) (*Usuario, error)
 	InsertGrupoVinculo(ctx context.Context, usuarioID, grupoID string) error
@@ -77,7 +80,7 @@ func (r *repository) InsertGrupoVinculo(ctx context.Context, usuarioID, grupoID 
 	const q = `INSERT INTO _etl.usuario_grupos (usuario_id, grupo_id) VALUES ($1::uuid, $2::uuid) ON CONFLICT DO NOTHING`
 	if _, err := r.pool.Exec(ctx, q, usuarioID, grupoID); err != nil {
 		if isUndefinedTable(err) {
-			return fmt.Errorf("tabela usuario_grupos não encontrada — aplique a migration 000023 no banco de dados")
+			return ErrMigrationPendente
 		}
 		return fmt.Errorf("usuarios.repository.InsertGrupoVinculo: %w", err)
 	}

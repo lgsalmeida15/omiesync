@@ -2,6 +2,7 @@ package usuarios
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -43,6 +44,9 @@ func (s *service) Create(ctx context.Context, grupoID string, req CreateRequest)
 		}
 		// Adicionar ao grupo sem recriar
 		if err := s.repo.InsertGrupoVinculo(ctx, existing.ID, grupoID); err != nil {
+			if errors.Is(err, ErrMigrationPendente) {
+				return nil, apperror.Unprocessable("funcionalidade multi-grupo indisponível: migration 000023 pendente no banco de dados")
+			}
 			return nil, fmt.Errorf("usuarios.service.Create vincular grupo existente: %w", err)
 		}
 		return &CreateResult{Usuario: existing, AddedToGroup: true}, nil
@@ -74,6 +78,9 @@ func (s *service) Create(ctx context.Context, grupoID string, req CreateRequest)
 	}
 
 	if err := s.repo.InsertGrupoVinculo(ctx, u.ID, grupoID); err != nil {
+		if errors.Is(err, ErrMigrationPendente) {
+			return nil, apperror.Unprocessable("funcionalidade multi-grupo indisponível: migration 000023 pendente no banco de dados")
+		}
 		return nil, fmt.Errorf("usuarios.service.Create vincular grupo: %w", err)
 	}
 
