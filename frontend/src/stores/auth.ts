@@ -25,6 +25,7 @@ export const useAuthStore = defineStore('auth', () => {
   // Estado de seleção pendente de grupo (multi-grupo no login)
   const preAuthToken  = ref(localStorage.getItem('pre_auth_token') || '')
   const pendingGrupos = ref<GrupoInfo[]>(JSON.parse(localStorage.getItem('pending_grupos') || '[]'))
+  const meusGrupos    = ref<GrupoInfo[]>(JSON.parse(localStorage.getItem('meus_grupos') || '[]'))
 
   const isAuthenticated  = computed(() => !!accessToken.value)
   const needsGroupSelect = computed(() => !!preAuthToken.value && !accessToken.value)
@@ -38,7 +39,6 @@ export const useAuthStore = defineStore('auth', () => {
     refreshToken.value = refresh
     localStorage.setItem('access_token',  access)
     localStorage.setItem('refresh_token', refresh)
-    // Limpar estado de seleção pendente após receber tokens reais
     preAuthToken.value  = ''
     pendingGrupos.value = []
     localStorage.removeItem('pre_auth_token')
@@ -50,11 +50,13 @@ export const useAuthStore = defineStore('auth', () => {
     refreshToken.value  = ''
     preAuthToken.value  = ''
     pendingGrupos.value = []
+    meusGrupos.value    = []
     user.value          = null
     localStorage.removeItem('access_token')
     localStorage.removeItem('refresh_token')
     localStorage.removeItem('pre_auth_token')
     localStorage.removeItem('pending_grupos')
+    localStorage.removeItem('meus_grupos')
   }
 
   async function login(email: string, password: string) {
@@ -72,6 +74,7 @@ export const useAuthStore = defineStore('auth', () => {
 
     setTokens(resp.access_token, resp.refresh_token)
     await fetchMe()
+    await refreshMeusGrupos()
   }
 
   async function selectGrupo(grupoID: string) {
@@ -81,17 +84,29 @@ export const useAuthStore = defineStore('auth', () => {
     })
     setTokens(data.data.access_token, data.data.refresh_token)
     await fetchMe()
+    await refreshMeusGrupos()
   }
 
   async function trocaGrupo(grupoID: string) {
     const { data } = await api.post('/auth/troca-grupo', { grupo_id: grupoID })
     setTokens(data.data.access_token, data.data.refresh_token)
     await fetchMe()
+    await refreshMeusGrupos()
   }
 
   async function fetchGrupos(): Promise<GrupoInfo[]> {
     const { data } = await api.get('/auth/grupos')
     return data.data ?? []
+  }
+
+  async function refreshMeusGrupos() {
+    try {
+      const grupos = await fetchGrupos()
+      meusGrupos.value = grupos
+      localStorage.setItem('meus_grupos', JSON.stringify(grupos))
+    } catch {
+      // silencioso — não crítico
+    }
   }
 
   async function refresh() {
@@ -115,9 +130,9 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   return {
-    accessToken, refreshToken, user, preAuthToken, pendingGrupos,
+    accessToken, refreshToken, user, preAuthToken, pendingGrupos, meusGrupos,
     isAuthenticated, needsGroupSelect, isAdminGlobal, isAdminGrupo, isViewer, isAdmin,
-    login, selectGrupo, trocaGrupo, fetchGrupos,
+    login, selectGrupo, trocaGrupo, fetchGrupos, refreshMeusGrupos,
     logout, refresh, fetchMe, clearTokens, setTokens
   }
 })

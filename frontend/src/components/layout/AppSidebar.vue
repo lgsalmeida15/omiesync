@@ -133,7 +133,9 @@ const navSections = computed(() => {
   if (role === 'admin_global' || role === 'admin_grupo') {
     systemItems.push({ to: '/sql-explorer', label: 'SQL Explorer', icon: IconDatabase })
   }
-  systemItems.push({ to: '/select-grupo', label: 'Trocar Grupo', icon: IconSwitch })
+  if (auth.meusGrupos.length > 1) {
+    systemItems.push({ to: '/select-grupo', label: 'Trocar Grupo', icon: IconSwitch })
+  }
   systemItems.push({ to: '/perfil', label: 'Perfil', icon: IconUser })
   sections.push({ label: 'SISTEMA', items: systemItems })
 
