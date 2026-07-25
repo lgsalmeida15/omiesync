@@ -14,6 +14,7 @@ import (
 	"omie-sync-api/internal/config"
 	"omie-sync-api/internal/dados"
 	"omie-sync-api/internal/db"
+	rootdb "omie-sync-api/db"
 	"omie-sync-api/internal/empresas"
 	"omie-sync-api/internal/etl"
 	"omie-sync-api/internal/etl/progress"
@@ -51,6 +52,12 @@ func main() {
 	}
 	defer pool.Close()
 	log.Info().Msg("conexão com banco estabelecida")
+
+	// --- Migrations ---
+	if err := rootdb.RunMigrations(context.Background(), pool); err != nil {
+		log.Fatal().Err(err).Msg("falha ao aplicar migrations")
+	}
+	log.Info().Msg("migrations aplicadas")
 
 	// --- Repositories ---
 	auditRepo := audit.NewRepository(pool)
