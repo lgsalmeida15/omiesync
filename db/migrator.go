@@ -5,6 +5,7 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"sort"
 	"strings"
 
@@ -14,90 +15,91 @@ import (
 //go:embed migrations/*.up.sql
 var migrationsFS embed.FS
 
-// RunMigrations aplica todas as migrations *.up.sql que ainda não foram executadas.
-// Cria a tabela _etl.schema_migrations se necessário e executa cada arquivo uma única vez.
-func RunMigrations(ctx context.Context, pool *pgxpool.Pool) error {
+// MigrationResult resume o que foi feito.
+type MigrationResult struct {
+	Applied []string
+	Skipped []string
+	Failed  []string
+}
+
+// RunMigrations aplica migrations pendentes. Nunca retorna erro fatal —
+// falhas individuais são registradas em result.Failed e o servidor continua.
+func RunMigrations(ctx context.Context, pool *pgxpool.Pool) MigrationResult {
+	var result MigrationResult
+
 	conn, err := pool.Acquire(ctx)
 	if err != nil {
-		return fmt.Errorf("db.RunMigrations acquire: %w", err)
+		slog.Error("db.RunMigrations: falha ao adquirir conexão", "err", err)
+		return result
 	}
 	defer conn.Release()
 
-	_, err = conn.Exec(ctx, `
+	// Cria tabela de controle se não existir (requer que _etl já exista)
+	if _, err := conn.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS _etl.schema_migrations (
 			version     TEXT PRIMARY KEY,
 			applied_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-		)`)
-	if err != nil {
-		return fmt.Errorf("db.RunMigrations criar schema_migrations: %w", err)
+		)`); err != nil {
+		slog.Error("db.RunMigrations: falha ao criar schema_migrations", "err", err)
+		return result
 	}
 
-	// Verifica se o banco já existia antes do migrator ser introduzido.
-	// Se schema_migrations está vazia mas _etl.grupos já existe, é um banco
-	// inicializado manualmente — marca todas as migrations como aplicadas (baseline)
-	// para não re-executar o que já está lá.
+	// Baseline: se schema_migrations está vazia mas _etl.grupos existe,
+	// o banco foi inicializado manualmente — registra tudo sem re-executar.
 	var count int
 	if err := conn.QueryRow(ctx, `SELECT COUNT(*) FROM _etl.schema_migrations`).Scan(&count); err != nil {
-		return fmt.Errorf("db.RunMigrations contar versões: %w", err)
+		slog.Error("db.RunMigrations: falha ao contar versões", "err", err)
+		return result
 	}
 	if count == 0 {
 		var gruposExists bool
-		if err := conn.QueryRow(ctx, `
+		_ = conn.QueryRow(ctx, `
 			SELECT EXISTS (
 				SELECT 1 FROM information_schema.tables
 				WHERE table_schema = '_etl' AND table_name = 'grupos'
-			)`).Scan(&gruposExists); err != nil {
-			return fmt.Errorf("db.RunMigrations verificar baseline: %w", err)
-		}
+			)`).Scan(&gruposExists)
+
 		if gruposExists {
-			// Banco pré-existente: registra todas as migrations como já aplicadas
-			// exceto as que precisam rodar agora (serão executadas normalmente abaixo)
-			// Estratégia: marca tudo como aplicado; só as realmente novas rodarão
-			// porque não existem no banco ainda (CREATE TABLE IF NOT EXISTS / idempotentes).
-			// Para migrations não-idempotentes, registramos sem executar.
-			entries2, _ := fs.ReadDir(migrationsFS, "migrations")
-			tx, err := conn.Begin(ctx)
-			if err != nil {
-				return fmt.Errorf("db.RunMigrations begin baseline: %w", err)
-			}
-			for _, e := range entries2 {
-				if e.IsDir() || !strings.HasSuffix(e.Name(), ".up.sql") {
-					continue
-				}
-				v := strings.TrimSuffix(e.Name(), ".up.sql")
-				if _, err := tx.Exec(ctx,
-					`INSERT INTO _etl.schema_migrations (version) VALUES ($1) ON CONFLICT DO NOTHING`, v); err != nil {
-					_ = tx.Rollback(ctx)
-					return fmt.Errorf("db.RunMigrations baseline insert %s: %w", v, err)
+			if entries, err := fs.ReadDir(migrationsFS, "migrations"); err == nil {
+				tx, err := conn.Begin(ctx)
+				if err == nil {
+					for _, e := range entries {
+						if !e.IsDir() && strings.HasSuffix(e.Name(), ".up.sql") {
+							v := strings.TrimSuffix(e.Name(), ".up.sql")
+							_, _ = tx.Exec(ctx,
+								`INSERT INTO _etl.schema_migrations (version) VALUES ($1) ON CONFLICT DO NOTHING`, v)
+							result.Skipped = append(result.Skipped, v)
+						}
+					}
+					if err := tx.Commit(ctx); err != nil {
+						_ = tx.Rollback(ctx)
+						slog.Error("db.RunMigrations: falha no baseline commit", "err", err)
+					}
 				}
 			}
-			if err := tx.Commit(ctx); err != nil {
-				return fmt.Errorf("db.RunMigrations baseline commit: %w", err)
-			}
+			return result
 		}
 	}
 
+	// Lê versões já aplicadas
 	rows, err := conn.Query(ctx, `SELECT version FROM _etl.schema_migrations`)
 	if err != nil {
-		return fmt.Errorf("db.RunMigrations ler versões: %w", err)
+		slog.Error("db.RunMigrations: falha ao ler versões", "err", err)
+		return result
 	}
 	applied := make(map[string]bool)
 	for rows.Next() {
 		var v string
-		if err := rows.Scan(&v); err != nil {
-			rows.Close()
-			return fmt.Errorf("db.RunMigrations scan versão: %w", err)
+		if err := rows.Scan(&v); err == nil {
+			applied[v] = true
 		}
-		applied[v] = true
 	}
 	rows.Close()
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("db.RunMigrations rows.Err: %w", err)
-	}
 
 	entries, err := fs.ReadDir(migrationsFS, "migrations")
 	if err != nil {
-		return fmt.Errorf("db.RunMigrations ler dir: %w", err)
+		slog.Error("db.RunMigrations: falha ao listar arquivos", "err", err)
+		return result
 	}
 
 	var files []string
@@ -111,33 +113,47 @@ func RunMigrations(ctx context.Context, pool *pgxpool.Pool) error {
 	for _, name := range files {
 		version := strings.TrimSuffix(name, ".up.sql")
 		if applied[version] {
+			result.Skipped = append(result.Skipped, version)
 			continue
 		}
 
 		sql, err := migrationsFS.ReadFile("migrations/" + name)
 		if err != nil {
-			return fmt.Errorf("db.RunMigrations ler %s: %w", name, err)
+			slog.Error("db.RunMigrations: falha ao ler arquivo", "file", name, "err", err)
+			result.Failed = append(result.Failed, fmt.Sprintf("%s: %v", version, err))
+			continue
 		}
 
 		tx, err := conn.Begin(ctx)
 		if err != nil {
-			return fmt.Errorf("db.RunMigrations begin %s: %w", name, err)
+			slog.Error("db.RunMigrations: falha ao iniciar transação", "file", name, "err", err)
+			result.Failed = append(result.Failed, fmt.Sprintf("%s: %v", version, err))
+			continue
 		}
 
 		if _, err := tx.Exec(ctx, string(sql)); err != nil {
 			_ = tx.Rollback(ctx)
-			return fmt.Errorf("db.RunMigrations executar %s: %w", name, err)
+			slog.Error("db.RunMigrations: falha ao executar migration", "file", name, "err", err)
+			result.Failed = append(result.Failed, fmt.Sprintf("%s: %v", version, err))
+			continue
 		}
 
 		if _, err := tx.Exec(ctx, `INSERT INTO _etl.schema_migrations (version) VALUES ($1)`, version); err != nil {
 			_ = tx.Rollback(ctx)
-			return fmt.Errorf("db.RunMigrations registrar %s: %w", name, err)
+			slog.Error("db.RunMigrations: falha ao registrar migration", "file", name, "err", err)
+			result.Failed = append(result.Failed, fmt.Sprintf("%s: %v", version, err))
+			continue
 		}
 
 		if err := tx.Commit(ctx); err != nil {
-			return fmt.Errorf("db.RunMigrations commit %s: %w", name, err)
+			slog.Error("db.RunMigrations: falha no commit", "file", name, "err", err)
+			result.Failed = append(result.Failed, fmt.Sprintf("%s: %v", version, err))
+			continue
 		}
+
+		slog.Info("db.RunMigrations: migration aplicada", "version", version)
+		result.Applied = append(result.Applied, version)
 	}
 
-	return nil
+	return result
 }

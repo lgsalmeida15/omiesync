@@ -54,10 +54,12 @@ func main() {
 	log.Info().Msg("conexão com banco estabelecida")
 
 	// --- Migrations ---
-	if err := rootdb.RunMigrations(context.Background(), pool); err != nil {
-		log.Fatal().Err(err).Msg("falha ao aplicar migrations")
-	}
-	log.Info().Msg("migrations aplicadas")
+	migResult := rootdb.RunMigrations(context.Background(), pool)
+	log.Info().
+		Strs("applied", migResult.Applied).
+		Strs("failed", migResult.Failed).
+		Int("skipped", len(migResult.Skipped)).
+		Msg("migrations concluídas")
 
 	// --- Repositories ---
 	auditRepo := audit.NewRepository(pool)
