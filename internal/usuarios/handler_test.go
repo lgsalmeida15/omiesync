@@ -33,7 +33,7 @@ func (m *mockSvc) GetByID(_ context.Context, _ string) (*Usuario, error) {
 func (m *mockSvc) List(_ context.Context, _ ListParams) ([]*Usuario, int64, error) {
 	return m.usuarios, m.total, m.err
 }
-func (m *mockSvc) Update(_ context.Context, _ string, _ UpdateRequest) (*Usuario, error) {
+func (m *mockSvc) Update(_ context.Context, _, _ string, _ UpdateRequest) (*Usuario, error) {
 	return m.usuario, m.err
 }
 func (m *mockSvc) UpdatePassword(_ context.Context, _ string, _ UpdatePasswordRequest) error {

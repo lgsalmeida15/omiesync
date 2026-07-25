@@ -17,13 +17,13 @@ var ErrMigrationPendente = errors.New("migration 000023 pendente")
 
 type Repository interface {
 	Insert(ctx context.Context, grupoID, nome, email, passwordHash, role string) (*Usuario, error)
-	InsertGrupoVinculo(ctx context.Context, usuarioID, grupoID string) error
+	InsertGrupoVinculo(ctx context.Context, usuarioID, grupoID, role string) error
 	GetByID(ctx context.Context, id string) (*Usuario, error)
 	GetByEmail(ctx context.Context, email string) (*Usuario, error)
 	HasGrupoVinculo(ctx context.Context, usuarioID, grupoID string) (bool, error)
 	List(ctx context.Context, grupoID string, limit, offset int32) ([]*Usuario, error)
 	Count(ctx context.Context, grupoID string) (int64, error)
-	Update(ctx context.Context, id, nome, role string, ativo bool) (*Usuario, error)
+	Update(ctx context.Context, id, grupoID, nome, role string, ativo bool) (*Usuario, error)
 	UpdatePassword(ctx context.Context, id, passwordHash string) error
 	SoftDelete(ctx context.Context, id string) error
 }
@@ -76,11 +76,25 @@ func (r *repository) HasGrupoVinculo(ctx context.Context, usuarioID, grupoID str
 	return exists, nil
 }
 
-func (r *repository) InsertGrupoVinculo(ctx context.Context, usuarioID, grupoID string) error {
-	const q = `INSERT INTO _etl.usuario_grupos (usuario_id, grupo_id) VALUES ($1::uuid, $2::uuid) ON CONFLICT DO NOTHING`
-	if _, err := r.pool.Exec(ctx, q, usuarioID, grupoID); err != nil {
+func (r *repository) InsertGrupoVinculo(ctx context.Context, usuarioID, grupoID, role string) error {
+	const q = `
+		INSERT INTO _etl.usuario_grupos (usuario_id, grupo_id, role)
+		VALUES ($1::uuid, $2::uuid, $3)
+		ON CONFLICT (usuario_id, grupo_id) DO UPDATE SET role = EXCLUDED.role`
+	if _, err := r.pool.Exec(ctx, q, usuarioID, grupoID, role); err != nil {
 		if isUndefinedTable(err) {
 			return ErrMigrationPendente
+		}
+		// Coluna role pode não existir ainda (migration 000024 pendente) — fallback sem role
+		if isUndefinedColumn(err) {
+			const qFallback = `INSERT INTO _etl.usuario_grupos (usuario_id, grupo_id) VALUES ($1::uuid, $2::uuid) ON CONFLICT DO NOTHING`
+			if _, err2 := r.pool.Exec(ctx, qFallback, usuarioID, grupoID); err2 != nil {
+				if isUndefinedTable(err2) {
+					return ErrMigrationPendente
+				}
+				return fmt.Errorf("usuarios.repository.InsertGrupoVinculo fallback: %w", err2)
+			}
+			return nil
 		}
 		return fmt.Errorf("usuarios.repository.InsertGrupoVinculo: %w", err)
 	}
@@ -91,6 +105,12 @@ func (r *repository) InsertGrupoVinculo(ctx context.Context, usuarioID, grupoID 
 func isUndefinedTable(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "42P01"
+}
+
+// isUndefinedColumn detecta erro PostgreSQL 42703 (coluna não existe — migration pendente).
+func isUndefinedColumn(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "42703"
 }
 
 func (r *repository) GetByID(ctx context.Context, id string) (*Usuario, error) {
@@ -107,9 +127,11 @@ func (r *repository) GetByID(ctx context.Context, id string) (*Usuario, error) {
 }
 
 func (r *repository) List(ctx context.Context, grupoID string, limit, offset int32) ([]*Usuario, error) {
-	// Tenta junction table primeiro; cai no legado se migration ainda não foi aplicada
+	// Role vem de ug.role (por grupo), com fallback para u.role se a coluna ainda não existir
 	const qJunction = `
-		SELECT u.id, u.grupo_id, u.nome, u.email, u.role, u.ativo, u.created_at, u.updated_at
+		SELECT u.id, u.grupo_id, u.nome, u.email,
+		       COALESCE(ug.role, u.role) AS role,
+		       u.ativo, u.created_at, u.updated_at
 		FROM _etl.usuarios u
 		JOIN _etl.usuario_grupos ug ON ug.usuario_id = u.id
 		WHERE ug.grupo_id = $1::uuid AND u.deleted_at IS NULL
@@ -121,7 +143,6 @@ func (r *repository) List(ctx context.Context, grupoID string, limit, offset int
 		if !isUndefinedTable(err) {
 			return nil, fmt.Errorf("usuarios.repository.List: %w", err)
 		}
-		// Fallback legado
 		return r.listLegacy(ctx, grupoID, limit, offset)
 	}
 	defer rows.Close()
@@ -192,17 +213,28 @@ func (r *repository) countLegacy(ctx context.Context, grupoID string) (int64, er
 	return n, nil
 }
 
-func (r *repository) Update(ctx context.Context, id, nome, role string, ativo bool) (*Usuario, error) {
+func (r *repository) Update(ctx context.Context, id, grupoID, nome, role string, ativo bool) (*Usuario, error) {
 	q := sqlcgen.New(r.pool)
 	var uid pgtype.UUID
 	if err := uid.Scan(id); err != nil {
 		return nil, fmt.Errorf("usuarios.repository.Update scan uuid: %w", err)
 	}
+	// Atualiza nome e ativo na tabela base (role fica por grupo)
 	row, err := q.UpdateUsuario(ctx, sqlcgen.UpdateUsuarioParams{ID: uid, Nome: nome, Role: role, Ativo: ativo})
 	if err != nil {
 		return nil, fmt.Errorf("usuarios.repository.Update: %w", err)
 	}
-	return toUsuario(row.ID, row.GrupoID, row.Nome, row.Email, row.Role, row.Ativo, row.CreatedAt, row.UpdatedAt), nil
+	// Atualiza role na junction — isolado por grupo
+	const qRole = `
+		UPDATE _etl.usuario_grupos SET role = $1
+		WHERE usuario_id = $2::uuid AND grupo_id = $3::uuid`
+	if _, err := r.pool.Exec(ctx, qRole, role, id, grupoID); err != nil && !isUndefinedColumn(err) {
+		return nil, fmt.Errorf("usuarios.repository.Update role por grupo: %w", err)
+	}
+	// Retorna com o role do grupo (não o da tabela base)
+	u := toUsuario(row.ID, row.GrupoID, row.Nome, row.Email, row.Role, row.Ativo, row.CreatedAt, row.UpdatedAt)
+	u.Role = role
+	return u, nil
 }
 
 func (r *repository) UpdatePassword(ctx context.Context, id, passwordHash string) error {

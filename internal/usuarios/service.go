@@ -15,7 +15,7 @@ type Service interface {
 	Create(ctx context.Context, grupoID string, req CreateRequest) (*CreateResult, error)
 	GetByID(ctx context.Context, id string) (*Usuario, error)
 	List(ctx context.Context, params ListParams) ([]*Usuario, int64, error)
-	Update(ctx context.Context, id string, req UpdateRequest) (*Usuario, error)
+	Update(ctx context.Context, id, grupoID string, req UpdateRequest) (*Usuario, error)
 	UpdatePassword(ctx context.Context, id string, req UpdatePasswordRequest) error
 	Delete(ctx context.Context, id string) error
 }
@@ -42,8 +42,12 @@ func (s *service) Create(ctx context.Context, grupoID string, req CreateRequest)
 		if already {
 			return nil, apperror.Conflict("usuário já pertence a este grupo")
 		}
-		// Adicionar ao grupo sem recriar
-		if err := s.repo.InsertGrupoVinculo(ctx, existing.ID, grupoID); err != nil {
+		// Adicionar ao grupo sem recriar (preserva o role solicitado)
+		addRole := req.Role
+		if addRole == "" {
+			addRole = "viewer"
+		}
+		if err := s.repo.InsertGrupoVinculo(ctx, existing.ID, grupoID, addRole); err != nil {
 			if errors.Is(err, ErrMigrationPendente) {
 				return nil, apperror.Unprocessable("funcionalidade multi-grupo indisponível: migration 000023 pendente no banco de dados")
 			}
@@ -77,7 +81,7 @@ func (s *service) Create(ctx context.Context, grupoID string, req CreateRequest)
 		return nil, fmt.Errorf("usuarios.service.Create: %w", err)
 	}
 
-	if err := s.repo.InsertGrupoVinculo(ctx, u.ID, grupoID); err != nil {
+	if err := s.repo.InsertGrupoVinculo(ctx, u.ID, grupoID, role); err != nil {
 		if errors.Is(err, ErrMigrationPendente) {
 			return nil, apperror.Unprocessable("funcionalidade multi-grupo indisponível: migration 000023 pendente no banco de dados")
 		}
@@ -115,7 +119,7 @@ func (s *service) List(ctx context.Context, params ListParams) ([]*Usuario, int6
 	return us, total, nil
 }
 
-func (s *service) Update(ctx context.Context, id string, req UpdateRequest) (*Usuario, error) {
+func (s *service) Update(ctx context.Context, id, grupoID string, req UpdateRequest) (*Usuario, error) {
 	if strings.TrimSpace(req.Nome) == "" {
 		return nil, apperror.Unprocessable("nome é obrigatório")
 	}
@@ -132,7 +136,7 @@ func (s *service) Update(ctx context.Context, id string, req UpdateRequest) (*Us
 		role = "viewer"
 	}
 
-	u, err := s.repo.Update(ctx, id, strings.TrimSpace(req.Nome), role, req.Ativo)
+	u, err := s.repo.Update(ctx, id, grupoID, strings.TrimSpace(req.Nome), role, req.Ativo)
 	if err != nil {
 		return nil, fmt.Errorf("usuarios.service.Update: %w", err)
 	}

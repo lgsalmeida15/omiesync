@@ -331,7 +331,7 @@ func (r *nullUsuariosRepo) List(_ context.Context, _ string, _, _ int32) ([]*usu
 	return nil, nil
 }
 func (r *nullUsuariosRepo) Count(_ context.Context, _ string) (int64, error) { return 0, nil }
-func (r *nullUsuariosRepo) Update(_ context.Context, _, _, _ string, _ bool) (*usuarios.Usuario, error) {
+func (r *nullUsuariosRepo) Update(_ context.Context, _, _, _, _ string, _ bool) (*usuarios.Usuario, error) {
 	return nil, nil
 }
 func (r *nullUsuariosRepo) GetByEmail(_ context.Context, _ string) (*usuarios.Usuario, error) {
@@ -340,9 +340,9 @@ func (r *nullUsuariosRepo) GetByEmail(_ context.Context, _ string) (*usuarios.Us
 func (r *nullUsuariosRepo) HasGrupoVinculo(_ context.Context, _, _ string) (bool, error) {
 	return false, nil
 }
-func (r *nullUsuariosRepo) UpdatePassword(_ context.Context, _, _ string) error     { return nil }
-func (r *nullUsuariosRepo) SoftDelete(_ context.Context, _ string) error            { return nil }
-func (r *nullUsuariosRepo) InsertGrupoVinculo(_ context.Context, _, _ string) error { return nil }
+func (r *nullUsuariosRepo) UpdatePassword(_ context.Context, _, _ string) error        { return nil }
+func (r *nullUsuariosRepo) SoftDelete(_ context.Context, _ string) error               { return nil }
+func (r *nullUsuariosRepo) InsertGrupoVinculo(_ context.Context, _, _, _ string) error { return nil }
 
 type nullPermissoesRepo struct{}
 

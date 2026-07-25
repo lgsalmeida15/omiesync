@@ -31,7 +31,7 @@ func (m *mockRepo) List(_ context.Context, _ string, _, _ int32) ([]*Usuario, er
 	return m.usuarios, m.err
 }
 func (m *mockRepo) Count(_ context.Context, _ string) (int64, error) { return m.total, m.err }
-func (m *mockRepo) Update(_ context.Context, id, nome, role string, ativo bool) (*Usuario, error) {
+func (m *mockRepo) Update(_ context.Context, id, _, nome, role string, ativo bool) (*Usuario, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -43,9 +43,9 @@ func (m *mockRepo) GetByEmail(_ context.Context, _ string) (*Usuario, error) {
 func (m *mockRepo) HasGrupoVinculo(_ context.Context, _, _ string) (bool, error) {
 	return false, m.err
 }
-func (m *mockRepo) UpdatePassword(_ context.Context, _, _ string) error     { return m.err }
-func (m *mockRepo) SoftDelete(_ context.Context, _ string) error            { return m.err }
-func (m *mockRepo) InsertGrupoVinculo(_ context.Context, _, _ string) error { return m.err }
+func (m *mockRepo) UpdatePassword(_ context.Context, _, _ string) error        { return m.err }
+func (m *mockRepo) SoftDelete(_ context.Context, _ string) error               { return m.err }
+func (m *mockRepo) InsertGrupoVinculo(_ context.Context, _, _, _ string) error { return m.err }
 
 func activeUser() *Usuario {
 	return &Usuario{ID: "u1", GrupoID: "g1", Nome: "João", Email: "j@t.com", Role: "viewer", Ativo: true}
@@ -105,7 +105,7 @@ func TestService_Create_Validacoes(t *testing.T) {
 
 func TestService_Update_RoleInvalida(t *testing.T) {
 	svc := NewService(&mockRepo{usuario: activeUser()})
-	_, err := svc.Update(context.Background(), "u1", UpdateRequest{Nome: "X", Role: "superadmin"})
+	_, err := svc.Update(context.Background(), "u1", "g1", UpdateRequest{Nome: "X", Role: "superadmin"})
 	ae, ok := apperror.IsAppError(err)
 	if !ok || ae.Code != 422 {
 		t.Errorf("esperava 422, got %v", err)
@@ -114,7 +114,7 @@ func TestService_Update_RoleInvalida(t *testing.T) {
 
 func TestService_Update_NotFound(t *testing.T) {
 	svc := NewService(&mockRepo{})
-	_, err := svc.Update(context.Background(), "x", UpdateRequest{Nome: "X", Role: "viewer"})
+	_, err := svc.Update(context.Background(), "x", "g1", UpdateRequest{Nome: "X", Role: "viewer"})
 	ae, ok := apperror.IsAppError(err)
 	if !ok || ae.Code != 404 {
 		t.Errorf("esperava 404, got %v", err)

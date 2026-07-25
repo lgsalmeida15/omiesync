@@ -93,13 +93,19 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "usuarioID")
 
+	claims, ok := auth.ClaimsFromContext(r.Context())
+	if !ok {
+		response.Unauthorized(w, "não autenticado")
+		return
+	}
+
 	var req UpdateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.Error(w, http.StatusUnprocessableEntity, "body inválido", err)
 		return
 	}
 
-	u, err := h.svc.Update(r.Context(), id, req)
+	u, err := h.svc.Update(r.Context(), id, claims.GrupoID, req)
 	if err != nil {
 		if ae, ok := apperror.IsAppError(err); ok {
 			response.FromAppError(w, ae)
