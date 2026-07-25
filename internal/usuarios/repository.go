@@ -14,6 +14,8 @@ type Repository interface {
 	Insert(ctx context.Context, grupoID, nome, email, passwordHash, role string) (*Usuario, error)
 	InsertGrupoVinculo(ctx context.Context, usuarioID, grupoID string) error
 	GetByID(ctx context.Context, id string) (*Usuario, error)
+	GetByEmail(ctx context.Context, email string) (*Usuario, error)
+	HasGrupoVinculo(ctx context.Context, usuarioID, grupoID string) (bool, error)
 	List(ctx context.Context, grupoID string, limit, offset int32) ([]*Usuario, error)
 	Count(ctx context.Context, grupoID string) (int64, error)
 	Update(ctx context.Context, id, nome, role string, ativo bool) (*Usuario, error)
@@ -46,6 +48,24 @@ func (r *repository) Insert(ctx context.Context, grupoID, nome, email, passwordH
 		return nil, fmt.Errorf("usuarios.repository.Insert: %w", err)
 	}
 	return toUsuario(row.ID, row.GrupoID, row.Nome, row.Email, row.Role, row.Ativo, row.CreatedAt, row.UpdatedAt), nil
+}
+
+func (r *repository) GetByEmail(ctx context.Context, email string) (*Usuario, error) {
+	q := sqlcgen.New(r.pool)
+	row, err := q.GetUsuarioByEmail(ctx, email)
+	if err != nil {
+		return nil, fmt.Errorf("usuarios.repository.GetByEmail: %w", err)
+	}
+	return toUsuario(row.ID, row.GrupoID, row.Nome, row.Email, row.Role, row.Ativo, row.CreatedAt, row.UpdatedAt), nil
+}
+
+func (r *repository) HasGrupoVinculo(ctx context.Context, usuarioID, grupoID string) (bool, error) {
+	const q = `SELECT COUNT(*) > 0 FROM _etl.usuario_grupos WHERE usuario_id = $1 AND grupo_id = $2`
+	var exists bool
+	if err := r.pool.QueryRow(ctx, q, usuarioID, grupoID).Scan(&exists); err != nil {
+		return false, fmt.Errorf("usuarios.repository.HasGrupoVinculo: %w", err)
+	}
+	return exists, nil
 }
 
 func (r *repository) InsertGrupoVinculo(ctx context.Context, usuarioID, grupoID string) error {

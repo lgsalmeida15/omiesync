@@ -64,7 +64,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	u, err := h.svc.Create(r.Context(), grupoID, req)
+	result, err := h.svc.Create(r.Context(), grupoID, req)
 	if err != nil {
 		if ae, ok := apperror.IsAppError(err); ok {
 			response.FromAppError(w, ae)
@@ -73,7 +73,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusInternalServerError, "erro ao criar usuário", err)
 		return
 	}
-	response.Created(w, u)
+	response.Created(w, result)
 }
 
 func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {

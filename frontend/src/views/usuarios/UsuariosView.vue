@@ -1,5 +1,8 @@
 ﻿<template>
   <div style="padding:24px">
+    <div v-if="successMsg" style="margin-bottom:16px;padding:12px 16px;background:rgba(0,229,255,0.08);border:1px solid rgba(0,229,255,0.25);border-radius:8px;font-size:13px;color:var(--accent)">
+      {{ successMsg }}
+    </div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
       <div class="section-title" style="margin:0">USUARIOS</div>
       <button class="btn-primary" @click="openCreate">+ Novo Usuario</button>
@@ -111,6 +114,7 @@ const form=ref({nome:"",email:"",password:"",role:"viewer",ativo:true})
 const fe=ref({nome:"",email:"",password:""})
 const saveErr=ref(""); const pwdErr=ref(""); const delErr=ref("")
 const saving=ref(false); const savingPwd=ref(false); const deleting=ref(false)
+const successMsg=ref("")
 const pwd=ref({p1:"",p2:""})
 const roles = computed(() => {
   const base = [{value:"admin_grupo",label:"Admin Grupo"},{value:"viewer",label:"Viewer"}]
@@ -129,15 +133,23 @@ function openEdit(u:Usuario){editing.value=u;form.value={nome:u.nome,email:u.ema
 function openPwd(u:Usuario){pwdTarget.value=u;pwd.value={p1:"",p2:""};pwdErr.value="";showPwd.value=true}
 function confirmDel(u:Usuario){delTarget.value=u;delErr.value="";showConfirm.value=true}
 async function save() {
-  fe.value={nome:"",email:"",password:""}; saveErr.value=""
+  fe.value={nome:"",email:"",password:""}; saveErr.value=""; successMsg.value=""
   if(!form.value.nome.trim()){fe.value.nome="Obrigatorio";return}
   if(!editing.value && !form.value.email.trim()){fe.value.email="Obrigatorio";return}
   if(!editing.value && form.value.password.length<8){fe.value.password="Minimo 8 caracteres";return}
   saving.value=true
   try {
-    if(editing.value) { await api.put(`/admin/grupos/${grupoId.value}/usuarios/${editing.value.id}`,{nome:form.value.nome,role:form.value.role,ativo:form.value.ativo}) }
-    else { await api.post(`/admin/grupos/${grupoId.value}/usuarios`,{nome:form.value.nome,email:form.value.email,password:form.value.password,role:form.value.role}) }
-    showModal.value=false; await load()
+    if(editing.value) {
+      await api.put(`/admin/grupos/${grupoId.value}/usuarios/${editing.value.id}`,{nome:form.value.nome,role:form.value.role,ativo:form.value.ativo})
+      showModal.value=false; await load()
+    } else {
+      const r = await api.post(`/admin/grupos/${grupoId.value}/usuarios`,{nome:form.value.nome,email:form.value.email,password:form.value.password,role:form.value.role})
+      showModal.value=false; await load()
+      if(r.data?.data?.added_to_group) {
+        successMsg.value="Usuário já existia no sistema e foi adicionado a este grupo. Role e senha não foram alterados."
+        setTimeout(()=>successMsg.value="",6000)
+      }
+    }
   } catch(e:any){saveErr.value=e?.response?.data?.message??"Erro"} finally{saving.value=false}
 }
 async function savePwd() {

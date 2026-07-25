@@ -11,7 +11,7 @@ import (
 )
 
 type Service interface {
-	Create(ctx context.Context, grupoID string, req CreateRequest) (*Usuario, error)
+	Create(ctx context.Context, grupoID string, req CreateRequest) (*CreateResult, error)
 	GetByID(ctx context.Context, id string) (*Usuario, error)
 	List(ctx context.Context, params ListParams) ([]*Usuario, int64, error)
 	Update(ctx context.Context, id string, req UpdateRequest) (*Usuario, error)
@@ -27,7 +27,28 @@ func NewService(repo Repository) Service {
 	return &service{repo: repo}
 }
 
-func (s *service) Create(ctx context.Context, grupoID string, req CreateRequest) (*Usuario, error) {
+func (s *service) Create(ctx context.Context, grupoID string, req CreateRequest) (*CreateResult, error) {
+	email := strings.ToLower(strings.TrimSpace(req.Email))
+
+	// Verificar se o usuário já existe pelo e-mail
+	existing, err := s.repo.GetByEmail(ctx, email)
+	if err == nil && existing != nil {
+		// Usuário já existe — verificar se já está neste grupo
+		already, err := s.repo.HasGrupoVinculo(ctx, existing.ID, grupoID)
+		if err != nil {
+			return nil, fmt.Errorf("usuarios.service.Create verificar vínculo: %w", err)
+		}
+		if already {
+			return nil, apperror.Conflict("usuário já pertence a este grupo")
+		}
+		// Adicionar ao grupo sem recriar
+		if err := s.repo.InsertGrupoVinculo(ctx, existing.ID, grupoID); err != nil {
+			return nil, fmt.Errorf("usuarios.service.Create vincular grupo existente: %w", err)
+		}
+		return &CreateResult{Usuario: existing, AddedToGroup: true}, nil
+	}
+
+	// Usuário novo — validação completa
 	if err := validateCreate(req); err != nil {
 		return nil, err
 	}
@@ -44,7 +65,7 @@ func (s *service) Create(ctx context.Context, grupoID string, req CreateRequest)
 
 	u, err := s.repo.Insert(ctx, grupoID,
 		strings.TrimSpace(req.Nome),
-		strings.ToLower(strings.TrimSpace(req.Email)),
+		email,
 		string(hash),
 		role,
 	)
@@ -52,12 +73,11 @@ func (s *service) Create(ctx context.Context, grupoID string, req CreateRequest)
 		return nil, fmt.Errorf("usuarios.service.Create: %w", err)
 	}
 
-	// Registra vínculo na junction table para suporte a multi-grupo
 	if err := s.repo.InsertGrupoVinculo(ctx, u.ID, grupoID); err != nil {
 		return nil, fmt.Errorf("usuarios.service.Create vincular grupo: %w", err)
 	}
 
-	return u, nil
+	return &CreateResult{Usuario: u, AddedToGroup: false}, nil
 }
 
 func (s *service) GetByID(ctx context.Context, id string) (*Usuario, error) {

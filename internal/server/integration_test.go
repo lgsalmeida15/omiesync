@@ -3,6 +3,7 @@
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -333,8 +334,14 @@ func (r *nullUsuariosRepo) Count(_ context.Context, _ string) (int64, error) { r
 func (r *nullUsuariosRepo) Update(_ context.Context, _, _, _ string, _ bool) (*usuarios.Usuario, error) {
 	return nil, nil
 }
-func (r *nullUsuariosRepo) UpdatePassword(_ context.Context, _, _ string) error    { return nil }
-func (r *nullUsuariosRepo) SoftDelete(_ context.Context, _ string) error           { return nil }
+func (r *nullUsuariosRepo) GetByEmail(_ context.Context, _ string) (*usuarios.Usuario, error) {
+	return nil, errors.New("not found")
+}
+func (r *nullUsuariosRepo) HasGrupoVinculo(_ context.Context, _, _ string) (bool, error) {
+	return false, nil
+}
+func (r *nullUsuariosRepo) UpdatePassword(_ context.Context, _, _ string) error     { return nil }
+func (r *nullUsuariosRepo) SoftDelete(_ context.Context, _ string) error            { return nil }
 func (r *nullUsuariosRepo) InsertGrupoVinculo(_ context.Context, _, _ string) error { return nil }
 
 type nullPermissoesRepo struct{}

@@ -37,8 +37,14 @@ func (m *mockRepo) Update(_ context.Context, id, nome, role string, ativo bool) 
 	}
 	return &Usuario{ID: id, Nome: nome, Role: role, Ativo: ativo}, nil
 }
-func (m *mockRepo) UpdatePassword(_ context.Context, _, _ string) error    { return m.err }
-func (m *mockRepo) SoftDelete(_ context.Context, _ string) error           { return m.err }
+func (m *mockRepo) GetByEmail(_ context.Context, _ string) (*Usuario, error) {
+	return m.usuario, m.err
+}
+func (m *mockRepo) HasGrupoVinculo(_ context.Context, _, _ string) (bool, error) {
+	return false, m.err
+}
+func (m *mockRepo) UpdatePassword(_ context.Context, _, _ string) error     { return m.err }
+func (m *mockRepo) SoftDelete(_ context.Context, _ string) error            { return m.err }
 func (m *mockRepo) InsertGrupoVinculo(_ context.Context, _, _ string) error { return m.err }
 
 func activeUser() *Usuario {
@@ -47,17 +53,20 @@ func activeUser() *Usuario {
 
 func TestService_Create_Success(t *testing.T) {
 	svc := NewService(&mockRepo{})
-	u, err := svc.Create(context.Background(), "g1", CreateRequest{
+	result, err := svc.Create(context.Background(), "g1", CreateRequest{
 		Nome: "Ana", Email: "ana@t.com", Password: "senha123",
 	})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	if u.Role != "viewer" {
-		t.Errorf("role default: got %q", u.Role)
+	if result.AddedToGroup {
+		t.Error("novo usuário não deveria ter AddedToGroup=true")
 	}
-	if u.Email != "ana@t.com" {
-		t.Errorf("email: got %q", u.Email)
+	if result.Usuario.Role != "viewer" {
+		t.Errorf("role default: got %q", result.Usuario.Role)
+	}
+	if result.Usuario.Email != "ana@t.com" {
+		t.Errorf("email: got %q", result.Usuario.Email)
 	}
 }
 

@@ -21,8 +21,11 @@ type mockSvc struct {
 	err      error
 }
 
-func (m *mockSvc) Create(_ context.Context, _ string, _ CreateRequest) (*Usuario, error) {
-	return m.usuario, m.err
+func (m *mockSvc) Create(_ context.Context, _ string, _ CreateRequest) (*CreateResult, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return &CreateResult{Usuario: m.usuario, AddedToGroup: false}, nil
 }
 func (m *mockSvc) GetByID(_ context.Context, _ string) (*Usuario, error) {
 	return m.usuario, m.err

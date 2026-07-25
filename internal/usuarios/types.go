@@ -20,6 +20,11 @@ type CreateRequest struct {
 	Role     string `json:"role"`
 }
 
+type CreateResult struct {
+	Usuario      *Usuario `json:"usuario"`
+	AddedToGroup bool     `json:"added_to_group"`
+}
+
 type UpdateRequest struct {
 	Nome  string `json:"nome"`
 	Role  string `json:"role"`
