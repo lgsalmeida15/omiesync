@@ -190,5 +190,10 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Role e GrupoID vêm do JWT — refletem o contexto do grupo atual,
+	// não o valor estático do banco (que pode diferir após troca de grupo).
+	me.Role    = claims.Role
+	me.GrupoID = claims.GrupoID
+
 	response.OK(w, me)
 }
