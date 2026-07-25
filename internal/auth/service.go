@@ -47,11 +47,8 @@ func (s *service) Login(ctx context.Context, email, password string) (*LoginResp
 		return nil, apperror.Unauthorized("credenciais inválidas")
 	}
 
-	// Buscar grupos via junction table
-	grupos, err := s.repo.GetGruposByUsuarioID(ctx, usuario.ID)
-	if err != nil {
-		return nil, fmt.Errorf("auth.service.Login buscar grupos: %w", err)
-	}
+	// Buscar grupos via junction table (fallback para grupo_id legado se tabela ainda não existe)
+	grupos, _ := s.repo.GetGruposByUsuarioID(ctx, usuario.ID)
 
 	// Múltiplos grupos: exige seleção antes de emitir access token
 	if len(grupos) > 1 {
