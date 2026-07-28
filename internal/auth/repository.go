@@ -124,6 +124,11 @@ func isUndefinedTable(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == "42P01"
 }
 
+func isUndefinedColumn(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "42703"
+}
+
 func (r *repository) GetGruposByUsuarioID(ctx context.Context, usuarioID string) ([]GrupoInfo, error) {
 	const q = `
 		SELECT g.id, g.nome, g.slug, g.schema_name
@@ -167,23 +172,37 @@ func (r *repository) ValidateUsuarioGrupo(ctx context.Context, usuarioID, grupoI
 }
 
 func (r *repository) GetRoleNoGrupo(ctx context.Context, usuarioID, grupoID string) (string, error) {
-	// Tenta ler role da junction (migration 000024). Fallback para usuarios.role se coluna não existir.
-	const q = `SELECT COALESCE(ug.role, u.role) FROM _etl.usuario_grupos ug
-	            JOIN _etl.usuarios u ON u.id = ug.usuario_id
-	            WHERE ug.usuario_id = $1::uuid AND ug.grupo_id = $2::uuid`
+	// admin_global é um privilégio de plataforma — prevalece sobre qualquer configuração de grupo.
+	// A query usa CASE para garantir isso mesmo se ug.role estiver desatualizado.
+	const q = `
+		SELECT CASE WHEN u.role = 'admin_global' THEN 'admin_global'
+		            ELSE COALESCE(ug.role, u.role)
+		       END
+		FROM _etl.usuario_grupos ug
+		JOIN _etl.usuarios u ON u.id = ug.usuario_id
+		WHERE ug.usuario_id = $1::uuid AND ug.grupo_id = $2::uuid`
+
 	var role string
-	if err := r.pool.QueryRow(ctx, q, usuarioID, grupoID).Scan(&role); err != nil {
-		if isUndefinedTable(err) {
-			// Tabela ainda não existe: busca role do usuario diretamente
-			const qLegacy = `SELECT role FROM _etl.usuarios WHERE id = $1::uuid`
-			if err2 := r.pool.QueryRow(ctx, qLegacy, usuarioID).Scan(&role); err2 != nil {
-				return "viewer", nil
-			}
+	err := r.pool.QueryRow(ctx, q, usuarioID, grupoID).Scan(&role)
+	if err == nil {
+		return role, nil
+	}
+
+	// Tabela ou coluna ainda não existe (migrations pendentes) — fallback direto em usuarios
+	if isUndefinedTable(err) || isUndefinedColumn(err) {
+		const qLegacy = `SELECT role FROM _etl.usuarios WHERE id = $1::uuid`
+		if err2 := r.pool.QueryRow(ctx, qLegacy, usuarioID).Scan(&role); err2 == nil {
 			return role, nil
 		}
-		return "viewer", nil
 	}
-	return role, nil
+
+	// Usuário não encontrado na junction — tenta pelo menos buscar o role global
+	const qFallback = `SELECT role FROM _etl.usuarios WHERE id = $1::uuid`
+	if err2 := r.pool.QueryRow(ctx, qFallback, usuarioID).Scan(&role); err2 == nil {
+		return role, nil
+	}
+
+	return "viewer", nil
 }
 
 // --- helpers ---
