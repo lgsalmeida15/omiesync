@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -56,6 +58,8 @@ func (h *Handler) Routes() http.Handler {
 
 	r.Get("/{empresaID}/projetos", h.queryHandler("projetos",
 		"SELECT id, codigo_projeto, nome, descricao, data_inicio, data_fim, status, synced_at FROM %s.projetos ORDER BY nome"))
+
+	r.Get("/{grupoID}/dashboard", h.dashboardHandler)
 
 	return r
 }
@@ -132,6 +136,60 @@ func (h *Handler) queryHandler(tabela, sqlTemplate string) http.HandlerFunc {
 			Page: page, PerPage: perPage, Total: int(total),
 		})
 	}
+}
+
+func (h *Handler) dashboardHandler(w http.ResponseWriter, r *http.Request) {
+	grupoID := chi.URLParam(r, "grupoID")
+
+	claims, ok := auth.ClaimsFromContext(r.Context())
+	if !ok {
+		response.Unauthorized(w, "não autenticado")
+		return
+	}
+	if claims.Role != "admin_global" && claims.GrupoID != grupoID {
+		response.FromAppError(w, apperror.Forbidden("acesso negado"))
+		return
+	}
+
+	// Parâmetros de filtro
+	ano := time.Now().Year()
+	if v := r.URL.Query().Get("ano"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil && parsed > 2000 {
+			ano = parsed
+		}
+	}
+
+	split := func(s string) []string {
+		if s == "" {
+			return nil
+		}
+		parts := strings.Split(s, ",")
+		out := make([]string, 0, len(parts))
+		for _, p := range parts {
+			if t := strings.TrimSpace(p); t != "" {
+				out = append(out, t)
+			}
+		}
+		return out
+	}
+
+	params := DashboardParams{
+		GrupoID:         grupoID,
+		Ano:             ano,
+		Empresas:        split(r.URL.Query().Get("empresas")),
+		ContasCorrentes: split(r.URL.Query().Get("contas_correntes")),
+		Departamentos:   split(r.URL.Query().Get("departamentos")),
+		Categorias:      split(r.URL.Query().Get("categorias")),
+		Cliente:         strings.TrimSpace(r.URL.Query().Get("cliente")),
+	}
+
+	data, err := QueryDashboard(r.Context(), h.pool, params)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "erro ao consultar dashboard", err)
+		return
+	}
+
+	response.OK(w, data)
 }
 
 func (h *Handler) schemaForEmpresa(ctx context.Context, empresaID string) (schema, grupoID string, err error) {
