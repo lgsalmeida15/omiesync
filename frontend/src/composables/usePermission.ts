@@ -12,20 +12,20 @@ export function usePermission() {
   }
 
   /** admin_global pode gerenciar qualquer grupo */
-  const canManageGroups = computed(() => auth.isAdminGlobal.value)
+  const canManageGroups = computed(() => auth.isAdminGlobal)
 
   /** admin_global ou admin_grupo podem gerenciar empresas/usuários */
-  const canManageResources = computed(() => auth.isAdmin.value)
+  const canManageResources = computed(() => auth.isAdmin)
 
   /** Só admin_global pode criar outros admin_global */
   function canAssignRole(targetRole: string): boolean {
-    if (targetRole === 'admin_global') return auth.isAdminGlobal.value
-    return auth.isAdmin.value
+    if (targetRole === 'admin_global') return auth.isAdminGlobal
+    return auth.isAdmin
   }
 
   /** Roles disponíveis para criar usuário (baseado na role do logado) */
   const assignableRoles = computed(() => {
-    if (auth.isAdminGlobal.value) return [
+    if (auth.isAdminGlobal) return [
       { value: 'admin_global', label: 'Admin Global' },
       { value: 'admin_grupo',  label: 'Admin Grupo' },
       { value: 'viewer',       label: 'Viewer' }

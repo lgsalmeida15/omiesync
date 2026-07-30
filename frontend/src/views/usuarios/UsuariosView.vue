@@ -101,7 +101,7 @@ const auth = useAuthStore()
 const grupos = ref<{id:string;nome:string}[]>([])
 const grupoId = ref(auth.user?.grupo_id ?? "")
 async function loadGrupos() {
-  if(auth.isAdminGlobal.value) {
+  if(auth.isAdminGlobal) {
     try { const r=await api.get("/admin/grupos?page=1&per_page=100"); grupos.value=r.data.data??[] }
     catch{}
   }
@@ -118,7 +118,7 @@ const successMsg=ref("")
 const pwd=ref({p1:"",p2:""})
 const roles = computed(() => {
   const base = [{value:"admin_grupo",label:"Admin Grupo"},{value:"viewer",label:"Viewer"}]
-  if(auth.isAdminGlobal.value) return [{value:"admin_global",label:"Admin Global"},...base]
+  if(auth.isAdminGlobal) return [{value:"admin_global",label:"Admin Global"},...base]
   return base
 })
 async function load() {

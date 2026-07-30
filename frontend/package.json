@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint src --ext .vue,.ts,.js"
+    "lint": "eslint src --ext .vue,.ts,.js",
+    "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
     "@lucide/vue": "^1.18.0",
@@ -29,6 +30,7 @@
     "postcss": "^8.4.38",
     "tailwindcss": "^3.4.4",
     "typescript": "^5.4.5",
-    "vite": "^5.3.1"
+    "vite": "^5.3.1",
+    "vue-tsc": "^2.2.12"
   }
 }

@@ -133,22 +133,40 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = data.data
   }
 
-  // Chamado no startup do App para restaurar o estado do usuário a partir do token salvo.
+  // Restaura o estado do usuário a partir do token salvo.
+  // Idempotente e deduplicado: App.vue (startup) e o guard do router chamam os
+  // dois, e sem o cache da promise em voo isso dispararia dois GET /auth/me
+  // concorrentes — que, com token expirado, viram dois refresh concorrentes
+  // disputando um refresh token de uso único (rotação obrigatória).
+  let bootstrapPromise: Promise<void> | null = null
+
+  async function ensureLoaded() {
+    if (!accessToken.value || user.value) return
+    if (bootstrapPromise) return bootstrapPromise
+
+    bootstrapPromise = (async () => {
+      try {
+        await fetchMe()
+        await refreshMeusGrupos()
+      } catch {
+        clearTokens()
+      } finally {
+        bootstrapPromise = null
+      }
+    })()
+
+    return bootstrapPromise
+  }
+
+  // Mantido como alias — App.vue chama init() no startup.
   async function init() {
-    if (!accessToken.value) return
-    if (user.value) return
-    try {
-      await fetchMe()
-      await refreshMeusGrupos()
-    } catch {
-      clearTokens()
-    }
+    return ensureLoaded()
   }
 
   return {
     accessToken, refreshToken, user, preAuthToken, pendingGrupos, meusGrupos,
     isAuthenticated, needsGroupSelect, isAdminGlobal, isAdminGrupo, isViewer, isAdmin,
     login, selectGrupo, trocaGrupo, fetchGrupos, refreshMeusGrupos,
-    logout, refresh, fetchMe, init, clearTokens, setTokens
+    logout, refresh, fetchMe, init, ensureLoaded, clearTokens, setTokens
   }
 })

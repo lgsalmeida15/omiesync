@@ -84,7 +84,7 @@ async function handleLogout() {
   }
 }
 
-const isExpanded = computed(() => ui.sidebarPinned.value || hovering.value)
+const isExpanded = computed(() => ui.sidebarPinned || hovering.value)
 
 const initials = computed(() => {
   const name = auth.user?.nome ?? ''

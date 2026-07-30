@@ -107,7 +107,7 @@ watch(() => auth.user?.grupo_id, (gid) => {
   }
 })
 async function loadGrupos() {
-  if(auth.isAdminGlobal.value) {
+  if(auth.isAdminGlobal) {
     try { const r=await api.get("/admin/grupos?page=1&per_page=100"); grupos.value=r.data.data??[] }
     catch{}
   }

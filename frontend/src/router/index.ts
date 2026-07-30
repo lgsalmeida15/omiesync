@@ -151,14 +151,11 @@ router.beforeEach(async to => {
   if (to.meta.requiresAuth !== false) {
     if (!auth.isAuthenticated) return { name: 'Login' }
 
-    // Carrega dados do usuário se ainda não carregou
+    // Carrega dados do usuário se ainda não carregou.
+    // ensureLoaded() é deduplicado — compartilha a chamada em voo com App.vue.
     if (!auth.user) {
-      try {
-        await auth.fetchMe()
-      } catch {
-        auth.clearTokens()
-        return { name: 'Login' }
-      }
+      await auth.ensureLoaded()
+      if (!auth.user) return { name: 'Login' }
     }
 
     // Verifica role

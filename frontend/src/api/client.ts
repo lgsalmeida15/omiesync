@@ -6,7 +6,10 @@
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL ?? 'http://localhost:8080',
-  headers: { 'Content-Type': 'application/json' }
+  headers: { 'Content-Type': 'application/json' },
+  // Rede de segurança: nenhum request pode ficar pendente indefinidamente.
+  // O backend já usa Read/WriteTimeout de 15s.
+  timeout: 30000
 })
 
 // Injeta Bearer token em todas as requests
@@ -53,12 +56,17 @@ api.interceptors.response.use(
       }
       original._retry = true
       isRefreshing = true
-      const refreshToken = localStorage.getItem('refresh_token')
-      if (!refreshToken) {
-        redirectToLogin()
-        return Promise.reject(error)
-      }
+      // O finally cobre TODOS os caminhos de saída — incluindo o early-return
+      // por falta de refresh token. Se isRefreshing vazar como true, todo 401
+      // seguinte entra em failedQueue e nunca é resolvido (deadlock silencioso).
       try {
+        const refreshToken = localStorage.getItem('refresh_token')
+        if (!refreshToken) {
+          // Rejeita a fila em vez de abandoná-la
+          processQueue(error, null)
+          redirectToLogin()
+          return Promise.reject(error)
+        }
         const { data } = await api.post('/auth/refresh', { refresh_token: refreshToken })
         const newToken = data.data.access_token
         localStorage.setItem('access_token', newToken)
