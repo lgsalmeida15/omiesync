@@ -65,8 +65,8 @@ async function savePwd() {
   } catch(e:any){pwErr.value=e?.response?.data?.message??"Erro"} finally{savingPw.value=false}
 }
 async function logout() {
-  try { await auth.logout() } catch{}
-  router.push("/login")
+  await auth.logout()   // não rejeita; limpa o estado local em qualquer cenário
+  router.replace("/login")
 }
 </script>
 

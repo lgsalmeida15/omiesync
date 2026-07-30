@@ -116,9 +116,13 @@ export const useAuthStore = defineStore('auth', () => {
     setTokens(data.data.access_token, data.data.refresh_token)
   }
 
+  // Nunca rejeita: revogar o token no servidor é best-effort. O estado local é
+  // sempre limpo, para que o redirect do chamador aconteça em qualquer cenário.
   async function logout() {
     try {
       await api.post('/auth/logout', { refresh_token: refreshToken.value })
+    } catch {
+      // 401 (token já expirado), 422 ou falha de rede não devem impedir a saída
     } finally {
       clearTokens()
     }

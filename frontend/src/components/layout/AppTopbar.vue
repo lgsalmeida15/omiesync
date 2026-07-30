@@ -52,8 +52,8 @@ const auth  = useAuthStore()
 
 async function handleLogout() {
   if (confirm('Deseja realmente sair do sistema?')) {
-    await auth.logout()
-    router.push('/login')
+    await auth.logout()   // não rejeita; limpa o estado local em qualquer cenário
+    router.replace('/login')
   }
 }
 

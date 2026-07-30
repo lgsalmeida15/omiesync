@@ -1,8 +1,11 @@
 <template>
   <div class="dash-root">
 
-    <!-- Filtros teleportados para dentro da topbar -->
-    <Teleport to="#topbar-filters">
+    <!-- Filtros teleportados para dentro da topbar.
+         `defer` é obrigatório: #topbar-filters é renderizado por AppTopbar, um irmão
+         na mesma árvore. O Vue monta os filhos antes de inserir o elemento pai no
+         documento, então sem `defer` o querySelector do target retorna null. -->
+    <Teleport defer to="#topbar-filters">
       <div class="tf-inner" @click.stop>
         <!-- Ano -->
         <div class="fi">
