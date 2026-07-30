@@ -432,10 +432,12 @@ function buildChartAcum() {
   })
 }
 
-// Retenta carregar se auth.user chegar depois do mount (race condition pós-login)
+// Dispara imediatamente com o valor atual de auth.user (immediate: true).
+// Se user já existe ao montar → chama carregar() de imediato.
+// Se user ainda é null (edge case de timing) → aguarda até ser definido.
 watch(() => auth.user, (user) => {
   if (user && !dados.value && !carregando.value) carregar()
-})
+}, { immediate: true })
 
 // Reconstrói após dados atualizados (flush:post garante DOM pronto)
 watch(dados, () => {
@@ -454,7 +456,10 @@ watch(
 // ── Carregamento ───────────────────────────────────────────────────────────
 async function carregar() {
   if (!auth.user) {
-    try { await auth.fetchMe() } catch { return }
+    try { await auth.fetchMe() } catch {
+      erro.value = 'Sessão inválida. Faça login novamente.'
+      return
+    }
   }
   // admin_global pode não ter grupo_id no token — usa o primeiro grupo disponível
   const grupoID = auth.user?.grupo_id || auth.meusGrupos[0]?.id
@@ -551,11 +556,7 @@ function selecionarCliente(nome: string) {
   carregar()
 }
 
-onMounted(async () => {
-  if (!auth.user) {
-    try { await auth.fetchMe() } catch { /* guard já trata */ }
-  }
-  carregar()
+onMounted(() => {
   document.addEventListener('click', closeDropdown)
 })
 
