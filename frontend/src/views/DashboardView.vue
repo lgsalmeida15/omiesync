@@ -405,8 +405,15 @@ watch(
 
 // ── Carregamento ───────────────────────────────────────────────────────────
 async function carregar() {
-  const grupoID = auth.user?.grupo_id
-  if (!grupoID) return
+  if (!auth.user) {
+    try { await auth.fetchMe() } catch { return }
+  }
+  // admin_global pode não ter grupo_id no token — usa o primeiro grupo disponível
+  const grupoID = auth.user?.grupo_id || auth.meusGrupos[0]?.id
+  if (!grupoID) {
+    erro.value = 'Nenhum grupo associado. Faça login novamente.'
+    return
+  }
 
   carregando.value = true
   erro.value = ''
@@ -457,7 +464,10 @@ function toggleDropdown(key: string) {
   dropdown.value = dropdown.value === key ? null : key
 }
 
-onMounted(() => {
+onMounted(async () => {
+  if (!auth.user) {
+    try { await auth.fetchMe() } catch { /* guard já trata */ }
+  }
   carregar()
   document.addEventListener('click', () => { dropdown.value = null })
 })
