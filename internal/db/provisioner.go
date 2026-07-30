@@ -8,6 +8,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// CurrentSchemaVersion é incrementado sempre que ProvisionSchema ganhar novas
+// tabelas, views ou índices. O worker só re-provisiona quando a versão gravada
+// em _etl.schema_versions for menor que este valor.
+const CurrentSchemaVersion = 5
+
 // Provisioner cria e inicializa schemas de tenant.
 type Provisioner struct {
 	pool *pgxpool.Pool
@@ -17,10 +22,33 @@ func NewProvisioner(pool *pgxpool.Pool) *Provisioner {
 	return &Provisioner{pool: pool}
 }
 
+// NeedsProvisioning retorna true se o schema ainda não foi provisionado na
+// versão atual (ou se nunca foi provisionado).
+func (p *Provisioner) NeedsProvisioning(ctx context.Context, schemaName string) bool {
+	var version int
+	err := p.pool.QueryRow(ctx,
+		`SELECT version FROM _etl.schema_versions WHERE schema_name = $1`,
+		schemaName).Scan(&version)
+	if err != nil {
+		return true // sem entrada = precisa provisionar
+	}
+	return version < CurrentSchemaVersion
+}
+
+// markProvisioned grava (ou atualiza) a versão atual do schema na tabela de controle.
+func (p *Provisioner) markProvisioned(ctx context.Context, schemaName string) error {
+	_, err := p.pool.Exec(ctx, `
+		INSERT INTO _etl.schema_versions (schema_name, version, updated_at)
+		VALUES ($1, $2, NOW())
+		ON CONFLICT (schema_name) DO UPDATE SET version = $2, updated_at = NOW()
+	`, schemaName, CurrentSchemaVersion)
+	return err
+}
+
 // ProvisionSchema cria o schema do tenant e todas as tabelas Omie necessarias.
-// E idempotente — pode ser chamado multiplas vezes sem efeitos colaterais.
+// É idempotente — pode ser chamado multiplas vezes sem efeitos colaterais.
+// Ao concluir com sucesso, marca a versão em _etl.schema_versions.
 func (p *Provisioner) ProvisionSchema(ctx context.Context, schemaName string) error {
-	// Sanitiza o nome do schema para evitar SQL injection
 	safe := pgx.Identifier{schemaName}.Sanitize()
 
 	stmts := []string{
@@ -192,22 +220,24 @@ func (p *Provisioner) ProvisionSchema(ctx context.Context, schemaName string) er
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_cr_venc ON %s.contas_receber (empresa_id, data_vencimento, status_titulo)", schemaName, safe),
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_mov_data ON %s.movimentos_financeiros (empresa_id, data_lancamento)", schemaName, safe),
 
-		// Índices para a view gerencial — extrato
+		// Índices para as views gerenciais — extrato
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_extrato_data ON %s.extrato (empresa_id, data_lancamento)", schemaName, safe),
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_extrato_cc ON %s.extrato (empresa_id, codigo_conta_corrente)", schemaName, safe),
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_extrato_raw ON %s.extrato USING GIN (raw)", schemaName, safe),
 
-		// Índices para a view gerencial — movimentos_financeiros
+		// Índices para as views gerenciais — movimentos_financeiros
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_mf_lancamento ON %s.movimentos_financeiros (empresa_id, codigo_lancamento)", schemaName, safe),
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_mf_raw ON %s.movimentos_financeiros USING GIN (raw)", schemaName, safe),
 
-		// Índices para a view gerencial — contas_pagar / contas_receber
+		// Índices para as views gerenciais — contas_pagar / contas_receber
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_cp_lancamento ON %s.contas_pagar (empresa_id, codigo_lancamento)", schemaName, safe),
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_cp_raw ON %s.contas_pagar USING GIN (raw)", schemaName, safe),
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_cr_lancamento ON %s.contas_receber (empresa_id, codigo_lancamento)", schemaName, safe),
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_cr_raw ON %s.contas_receber USING GIN (raw)", schemaName, safe),
 
-		// Auto-upgrade: recria a view se não tiver a coluna nome_empresa (adicionada na v3)
+		// Auto-upgrade v5: remove a view unificada antiga (matvw_gerencial_resultado),
+		// substituída pelas views separadas ano_corrente e historico.
+		// Engloba os upgrade blocks v3 e v4 — drop incondicional se existir.
 		fmt.Sprintf(`DO $$
 BEGIN
     IF EXISTS (
@@ -215,46 +245,22 @@ BEGIN
         JOIN pg_namespace pn ON pn.oid = pc.relnamespace
         WHERE pn.nspname = %s AND pc.relname = 'matvw_gerencial_resultado'
           AND pc.relkind = 'm'
-    ) AND NOT EXISTS (
-        SELECT 1 FROM pg_attribute pa
-        JOIN pg_class pc ON pc.oid = pa.attrelid
-        JOIN pg_namespace pn ON pn.oid = pc.relnamespace
-        WHERE pn.nspname = %s AND pc.relname = 'matvw_gerencial_resultado'
-          AND pa.attname = 'nome_empresa' AND NOT pa.attisdropped
     ) THEN
-        DROP MATERIALIZED VIEW %s.matvw_gerencial_resultado CASCADE;
-    END IF;
-END
-$$`, "'"+schemaName+"'", "'"+schemaName+"'", safe),
-
-		// Auto-upgrade v4: recria a view se ainda tiver filtro de ano corrente (CURRENT_DATE).
-		// A v4 remove esse filtro para expor histórico completo + previsões futuras do extrato.
-		fmt.Sprintf(`DO $$
-DECLARE
-    vdef TEXT;
-BEGIN
-    SELECT pg_get_viewdef(pc.oid) INTO vdef
-    FROM pg_class pc
-    JOIN pg_namespace pn ON pn.oid = pc.relnamespace
-    WHERE pn.nspname = %s AND pc.relname = 'matvw_gerencial_resultado'
-      AND pc.relkind = 'm';
-
-    IF vdef IS NOT NULL AND vdef LIKE '%%CURRENT_DATE%%' THEN
         DROP MATERIALIZED VIEW %s.matvw_gerencial_resultado CASCADE;
     END IF;
 END
 $$`, "'"+schemaName+"'", safe),
 
-		// Materialized view gerencial — resultado financeiro completo (todos os anos).
-		// Inclui histórico passado, ano corrente e previsões futuras via extrato.
-		// WITH NO DATA: populada posteriormente via REFRESH MATERIALIZED VIEW.
-		// REFRESH sem CONCURRENTLY (sem necessidade de UNIQUE index em colunas reais).
-		fmt.Sprintf(`CREATE MATERIALIZED VIEW IF NOT EXISTS %s.matvw_gerencial_resultado AS
+		// ── View: ano corrente + previsões futuras ────────────────────────────────
+		// Filtro: ano >= ano atual (captura previsões de extrato para anos futuros).
+		// REFRESH: após todo sync (incremental e full) — dataset pequeno, rápido.
+		// WITH NO DATA: populada pelo primeiro REFRESH após criação.
+		fmt.Sprintf(`CREATE MATERIALIZED VIEW IF NOT EXISTS %s.matvw_gerencial_ano_corrente AS
 WITH categorias_processadas AS (
     SELECT empresa_id, codigo, descricao FROM %s.categorias
 ),
 movimentos_unificados AS (
-    -- Lado extrato: provisões futuras de contas com fluxo de caixa
+    -- Extrato: provisões com fluxo de caixa do ano corrente em diante
     SELECT
         e.empresa_id,
         e.codigo_conta_corrente::TEXT          AS codigo_conta_corrente,
@@ -275,10 +281,11 @@ movimentos_unificados AS (
        AND cc.empresa_id = e.empresa_id
     WHERE cc.raw ->> 'cFluxoCaixa' = 'S'
       AND e.raw ->> 'cSituacao'    = 'Previsto'
+      AND EXTRACT(YEAR FROM e.data_lancamento) >= EXTRACT(YEAR FROM CURRENT_DATE)
 
     UNION ALL
 
-    -- Lado movimentos: lançamentos realizados (CONTA_CORRENTE_REC / CONTA_CORRENTE_PAG)
+    -- Movimentos realizados do ano corrente em diante
     SELECT
         mf.empresa_id,
         mf.codigo_conta_corrente::TEXT                            AS codigo_conta_corrente,
@@ -299,8 +306,9 @@ movimentos_unificados AS (
     FROM %s.movimentos_financeiros mf
     WHERE mf.raw -> 'detalhes' ->> 'cGrupo' IN ('CONTA_CORRENTE_REC','CONTA_CORRENTE_PAG')
       AND NULLIF(mf.raw -> 'detalhes' ->> 'dDtPagamento','') IS NOT NULL
+      AND EXTRACT(YEAR FROM TO_DATE(NULLIF(mf.raw -> 'detalhes' ->> 'dDtPagamento',''), 'DD/MM/YYYY'))
+          >= EXTRACT(YEAR FROM CURRENT_DATE)
 ),
--- Expande categorias de contas_pagar e contas_receber (array raw -> 'categorias')
 cp_categorias AS (
     SELECT
         cp.empresa_id,
@@ -324,7 +332,6 @@ cp_categorias AS (
     FROM %s.contas_receber cr,
          LATERAL jsonb_array_elements(cr.raw -> 'categorias') AS cat_elem
 ),
--- Expande departamentos de contas_pagar e contas_receber (array raw -> 'distribuicao')
 cp_distribuicao AS (
     SELECT
         cp.empresa_id,
@@ -411,63 +418,242 @@ movimentos_processados AS (
            ON emp.id = m.empresa_id
 )
 SELECT
-    empresa_id,
-    nome_empresa,
-    codigo_conta_corrente,
-    codigo_cliente,
-    codigo_titulo,
-    grupo,
-    data_pagamento,
-    data_previsao,
-    codigo_categoria,
-    status_mov,
-    valor_titulo_mov_ext,
-    ano,
-    mes,
-    mov_ou_extrato,
-    categoria_join,
-    percentual_categoria,
-    origem,
-    codigo_departamento_join,
-    percentual_distribuicao_join,
-    valor_distribuido_join,
-    conta_considerada,
-    cod_categoria_final_superior,
-    cod_categoria_final,
-    percentual_cat_final,
-    receita_despesa,
-    ajuste_receita_despesa,
-    valor_final,
-    movimento_considerado,
-    descricao_categoria_superior,
-    descricao_categoria_final,
-    departamento_final,
-    cliente_final
+    empresa_id, nome_empresa, codigo_conta_corrente, codigo_cliente,
+    codigo_titulo, grupo, data_pagamento, data_previsao, codigo_categoria,
+    status_mov, valor_titulo_mov_ext, ano, mes, mov_ou_extrato,
+    categoria_join, percentual_categoria, origem, codigo_departamento_join,
+    percentual_distribuicao_join, valor_distribuido_join, conta_considerada,
+    cod_categoria_final_superior, cod_categoria_final, percentual_cat_final,
+    receita_despesa, ajuste_receita_despesa, valor_final, movimento_considerado,
+    descricao_categoria_superior, descricao_categoria_final,
+    departamento_final, cliente_final
 FROM movimentos_processados
 WHERE movimento_considerado = 1
 WITH NO DATA`,
-			safe,                   // %s.matvw_gerencial_resultado
-			safe,                   // categorias_processadas: %s.categorias
-			safe, safe,             // movimentos_unificados extrato: %s.extrato, %s.contas_correntes
-			safe,                   // movimentos_unificados mf: %s.movimentos_financeiros
-			safe, safe,             // cp_categorias: %s.contas_pagar, %s.contas_receber
-			safe, safe,             // cp_distribuicao: %s.contas_pagar, %s.contas_receber
-			safe,                   // movimentos_processados: %s.contas_correntes
-			safe,                   // movimentos_processados: %s.departamentos
-			safe,                   // movimentos_processados: %s.clientes
+			safe,           // matvw_gerencial_ano_corrente
+			safe,           // categorias_processadas: categorias
+			safe, safe,     // extrato, contas_correntes
+			safe,           // movimentos_financeiros
+			safe, safe,     // cp_categorias: contas_pagar, contas_receber
+			safe, safe,     // cp_distribuicao: contas_pagar, contas_receber
+			safe,           // movimentos_processados: contas_correntes
+			safe,           // movimentos_processados: departamentos
+			safe,           // movimentos_processados: clientes
 		),
 
-		// Índices na materialized view (REFRESH sem CONCURRENTLY — não requer UNIQUE)
-		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_mvw_ano ON %s.matvw_gerencial_resultado (ano)", schemaName, safe),
-		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_mvw_ano_mes ON %s.matvw_gerencial_resultado (ano, mes)", schemaName, safe),
-		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_mvw_receita ON %s.matvw_gerencial_resultado (receita_despesa)", schemaName, safe),
-		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_mvw_categoria ON %s.matvw_gerencial_resultado (cod_categoria_final)", schemaName, safe),
+		// Índices: ano_corrente (dataset pequeno — mes é o filtro mais comum)
+		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_ac_mes ON %s.matvw_gerencial_ano_corrente (mes)", schemaName, safe),
+		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_ac_receita ON %s.matvw_gerencial_ano_corrente (receita_despesa)", schemaName, safe),
+		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_ac_categoria ON %s.matvw_gerencial_ano_corrente (cod_categoria_final)", schemaName, safe),
+		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_ac_empresa ON %s.matvw_gerencial_ano_corrente (empresa_id)", schemaName, safe),
+
+		// ── View: histórico (anos anteriores) ────────────────────────────────────
+		// Filtro: ano < ano atual.
+		// REFRESH: apenas após sync full — dataset grande, muda raramente.
+		// WITH NO DATA: populada pelo REFRESH do primeiro full sync após criação.
+		fmt.Sprintf(`CREATE MATERIALIZED VIEW IF NOT EXISTS %s.matvw_gerencial_historico AS
+WITH categorias_processadas AS (
+    SELECT empresa_id, codigo, descricao FROM %s.categorias
+),
+movimentos_unificados AS (
+    -- Extrato: registros de anos anteriores com fluxo de caixa
+    SELECT
+        e.empresa_id,
+        e.codigo_conta_corrente::TEXT          AS codigo_conta_corrente,
+        e.raw ->> 'nCodCliente'                AS codigo_cliente,
+        e.raw ->> 'nCodLancamento'             AS codigo_titulo,
+        NULL::TEXT                             AS grupo,
+        TO_CHAR(e.data_lancamento, 'DD/MM/YYYY') AS data_pagamento,
+        NULL::TEXT                             AS data_previsao,
+        e.raw ->> 'cCodCategoria'              AS codigo_categoria,
+        NULL::TEXT                             AS status_mov,
+        ABS(e.valor)                           AS valor_titulo_mov_ext,
+        EXTRACT(YEAR  FROM e.data_lancamento)::INT AS ano,
+        EXTRACT(MONTH FROM e.data_lancamento)::INT AS mes,
+        'ext'::TEXT                            AS mov_ou_extrato
+    FROM %s.extrato e
+    JOIN %s.contas_correntes cc
+        ON cc.codigo_conta_corrente = e.codigo_conta_corrente
+       AND cc.empresa_id = e.empresa_id
+    WHERE cc.raw ->> 'cFluxoCaixa' = 'S'
+      AND e.raw ->> 'cSituacao'    = 'Previsto'
+      AND EXTRACT(YEAR FROM e.data_lancamento) < EXTRACT(YEAR FROM CURRENT_DATE)
+
+    UNION ALL
+
+    -- Movimentos realizados de anos anteriores
+    SELECT
+        mf.empresa_id,
+        mf.codigo_conta_corrente::TEXT                            AS codigo_conta_corrente,
+        mf.raw -> 'detalhes' ->> 'nCodCliente'                   AS codigo_cliente,
+        mf.codigo_lancamento::TEXT                                AS codigo_titulo,
+        mf.raw -> 'detalhes' ->> 'cGrupo'                        AS grupo,
+        mf.raw -> 'detalhes' ->> 'dDtPagamento'                  AS data_pagamento,
+        mf.raw -> 'detalhes' ->> 'dDtPrevisao'                   AS data_previsao,
+        mf.codigo_categoria                                       AS codigo_categoria,
+        mf.raw -> 'detalhes' ->> 'cStatus'                       AS status_mov,
+        COALESCE(
+            NULLIF(mf.raw -> 'resumo' ->> 'nValLiquido', '')::NUMERIC,
+            NULLIF(mf.raw -> 'resumo' ->> 'nValPago',    '')::NUMERIC
+        )                                                         AS valor_titulo_mov_ext,
+        EXTRACT(YEAR  FROM TO_DATE(NULLIF(mf.raw -> 'detalhes' ->> 'dDtPagamento',''), 'DD/MM/YYYY'))::INT AS ano,
+        EXTRACT(MONTH FROM TO_DATE(NULLIF(mf.raw -> 'detalhes' ->> 'dDtPagamento',''), 'DD/MM/YYYY'))::INT AS mes,
+        'mov'::TEXT                                               AS mov_ou_extrato
+    FROM %s.movimentos_financeiros mf
+    WHERE mf.raw -> 'detalhes' ->> 'cGrupo' IN ('CONTA_CORRENTE_REC','CONTA_CORRENTE_PAG')
+      AND NULLIF(mf.raw -> 'detalhes' ->> 'dDtPagamento','') IS NOT NULL
+      AND EXTRACT(YEAR FROM TO_DATE(NULLIF(mf.raw -> 'detalhes' ->> 'dDtPagamento',''), 'DD/MM/YYYY'))
+          < EXTRACT(YEAR FROM CURRENT_DATE)
+),
+cp_categorias AS (
+    SELECT
+        cp.empresa_id,
+        cp.codigo_lancamento::TEXT                      AS id,
+        cp.valor_documento,
+        (cat_elem ->> 'valor')::NUMERIC                AS valor_categoria,
+        (cat_elem ->> 'percentual')::NUMERIC           AS percentual_categoria,
+        cat_elem ->> 'codigo_categoria'                AS codigo_categoria,
+        'contas_a_pagar'::TEXT                         AS origem
+    FROM %s.contas_pagar cp,
+         LATERAL jsonb_array_elements(cp.raw -> 'categorias') AS cat_elem
+    UNION ALL
+    SELECT
+        cr.empresa_id,
+        cr.codigo_lancamento::TEXT,
+        cr.valor_documento,
+        (cat_elem ->> 'valor')::NUMERIC,
+        (cat_elem ->> 'percentual')::NUMERIC,
+        cat_elem ->> 'codigo_categoria',
+        'contas_a_receber'::TEXT
+    FROM %s.contas_receber cr,
+         LATERAL jsonb_array_elements(cr.raw -> 'categorias') AS cat_elem
+),
+cp_distribuicao AS (
+    SELECT
+        cp.empresa_id,
+        cp.codigo_lancamento::TEXT                     AS id,
+        (dist_elem ->> 'nValDep')::NUMERIC             AS valor_distribuido,
+        (dist_elem ->> 'nPerDep')::NUMERIC             AS percentual_distribuicao,
+        dist_elem ->> 'cCodDep'                        AS codigo_departamento
+    FROM %s.contas_pagar cp,
+         LATERAL jsonb_array_elements(cp.raw -> 'distribuicao') AS dist_elem
+    UNION ALL
+    SELECT
+        cr.empresa_id,
+        cr.codigo_lancamento::TEXT,
+        (dist_elem ->> 'nValDep')::NUMERIC,
+        (dist_elem ->> 'nPerDep')::NUMERIC,
+        dist_elem ->> 'cCodDep'
+    FROM %s.contas_receber cr,
+         LATERAL jsonb_array_elements(cr.raw -> 'distribuicao') AS dist_elem
+),
+movimentos_processados AS (
+    SELECT
+        m.*,
+        c.codigo_categoria                             AS categoria_join,
+        c.percentual_categoria,
+        c.origem,
+        d.codigo_departamento                          AS codigo_departamento_join,
+        d.percentual_distribuicao                      AS percentual_distribuicao_join,
+        d.valor_distribuido                            AS valor_distribuido_join,
+        cc.raw ->> 'cFluxoCaixa'                      AS conta_considerada,
+        LEFT(COALESCE(c.codigo_categoria, m.codigo_categoria), 4) AS cod_categoria_final_superior,
+        cat_sup.descricao                              AS descricao_categoria_superior,
+        COALESCE(c.codigo_categoria, m.codigo_categoria) AS cod_categoria_final,
+        COALESCE(c.percentual_categoria, 100)          AS percentual_cat_final,
+        CASE
+            WHEN c.origem = 'contas_a_receber'                                              THEN 'receita'
+            WHEN c.origem = 'contas_a_pagar'                                                THEN 'despesa'
+            WHEN c.origem IS NULL AND m.mov_ou_extrato = 'mov' AND UPPER(m.status_mov) = 'RECEBIDO' THEN 'receita'
+            WHEN c.origem IS NULL AND m.mov_ou_extrato = 'mov' AND UPPER(m.status_mov) = 'PAGO'     THEN 'despesa'
+            WHEN c.origem IS NULL AND m.mov_ou_extrato = 'ext' AND m.valor_titulo_mov_ext > 0        THEN 'receita'
+            WHEN c.origem IS NULL AND m.mov_ou_extrato = 'ext' AND m.valor_titulo_mov_ext < 0        THEN 'despesa'
+        END                                            AS receita_despesa,
+        m.valor_titulo_mov_ext * COALESCE(c.percentual_categoria, 100) / 100.0 AS valor_final,
+        CASE
+            WHEN m.mov_ou_extrato = 'ext'                                                   THEN 1
+            WHEN m.mov_ou_extrato = 'mov'
+             AND m.grupo IN ('CONTA_CORRENTE_PAG','CONTA_CORRENTE_REC')                     THEN 1
+            ELSE 0
+        END                                            AS movimento_considerado,
+        cat_final.descricao                            AS descricao_categoria_final,
+        CASE
+            WHEN d.codigo_departamento IS NULL THEN 'Sem departamento'
+            ELSE dept.descricao
+        END                                            AS departamento_final,
+        COALESCE(cli.nome_fantasia, 'Cliente não informado') AS cliente_final,
+        emp.nome                                       AS nome_empresa,
+        CASE
+            WHEN c.origem = 'contas_a_receber'                                              THEN 1
+            WHEN c.origem = 'contas_a_pagar'                                                THEN 2
+            WHEN c.origem IS NULL AND m.mov_ou_extrato = 'mov' AND UPPER(m.status_mov) = 'RECEBIDO' THEN 1
+            WHEN c.origem IS NULL AND m.mov_ou_extrato = 'mov' AND UPPER(m.status_mov) = 'PAGO'     THEN 2
+            WHEN c.origem IS NULL AND m.mov_ou_extrato = 'ext' AND m.valor_titulo_mov_ext > 0        THEN 1
+            WHEN c.origem IS NULL AND m.mov_ou_extrato = 'ext' AND m.valor_titulo_mov_ext < 0        THEN 2
+            ELSE 2
+        END                                            AS ajuste_receita_despesa
+    FROM movimentos_unificados m
+    LEFT JOIN cp_categorias   c    ON m.codigo_titulo = c.id   AND m.empresa_id = c.empresa_id
+    LEFT JOIN cp_distribuicao d    ON m.codigo_titulo = d.id   AND m.empresa_id = d.empresa_id
+    LEFT JOIN %s.contas_correntes cc
+           ON cc.codigo_conta_corrente::TEXT = m.codigo_conta_corrente
+          AND cc.empresa_id = m.empresa_id
+    LEFT JOIN categorias_processadas cat_sup
+           ON LEFT(COALESCE(c.codigo_categoria, m.codigo_categoria), 4) = cat_sup.codigo
+          AND cat_sup.empresa_id = m.empresa_id
+    LEFT JOIN categorias_processadas cat_final
+           ON COALESCE(c.codigo_categoria, m.codigo_categoria) = cat_final.codigo
+          AND cat_final.empresa_id = m.empresa_id
+    LEFT JOIN %s.departamentos dept
+           ON d.codigo_departamento = dept.codigo
+          AND dept.empresa_id = m.empresa_id
+    LEFT JOIN %s.clientes cli
+           ON cli.codigo_cliente_omie::TEXT = m.codigo_cliente
+          AND cli.empresa_id = m.empresa_id
+    LEFT JOIN _etl.empresas emp
+           ON emp.id = m.empresa_id
+)
+SELECT
+    empresa_id, nome_empresa, codigo_conta_corrente, codigo_cliente,
+    codigo_titulo, grupo, data_pagamento, data_previsao, codigo_categoria,
+    status_mov, valor_titulo_mov_ext, ano, mes, mov_ou_extrato,
+    categoria_join, percentual_categoria, origem, codigo_departamento_join,
+    percentual_distribuicao_join, valor_distribuido_join, conta_considerada,
+    cod_categoria_final_superior, cod_categoria_final, percentual_cat_final,
+    receita_despesa, ajuste_receita_despesa, valor_final, movimento_considerado,
+    descricao_categoria_superior, descricao_categoria_final,
+    departamento_final, cliente_final
+FROM movimentos_processados
+WHERE movimento_considerado = 1
+WITH NO DATA`,
+			safe,           // matvw_gerencial_historico
+			safe,           // categorias_processadas: categorias
+			safe, safe,     // extrato, contas_correntes
+			safe,           // movimentos_financeiros
+			safe, safe,     // cp_categorias: contas_pagar, contas_receber
+			safe, safe,     // cp_distribuicao: contas_pagar, contas_receber
+			safe,           // movimentos_processados: contas_correntes
+			safe,           // movimentos_processados: departamentos
+			safe,           // movimentos_processados: clientes
+		),
+
+		// Índices: historico (dataset grande — ano é filtro primário)
+		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_hist_ano ON %s.matvw_gerencial_historico (ano)", schemaName, safe),
+		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_hist_ano_mes ON %s.matvw_gerencial_historico (ano, mes)", schemaName, safe),
+		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_hist_receita ON %s.matvw_gerencial_historico (receita_despesa)", schemaName, safe),
+		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_hist_categoria ON %s.matvw_gerencial_historico (cod_categoria_final)", schemaName, safe),
+		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_hist_empresa ON %s.matvw_gerencial_historico (empresa_id)", schemaName, safe),
 	}
 
 	for _, stmt := range stmts {
 		if _, err := p.pool.Exec(ctx, stmt); err != nil {
 			return fmt.Errorf("db.Provisioner.ProvisionSchema [%s]: %w", schemaName, err)
 		}
+	}
+
+	if err := p.markProvisioned(ctx, schemaName); err != nil {
+		// Não fatal — schema está correto, só o registro de versão falhou
+		fmt.Printf("db.Provisioner.ProvisionSchema: markProvisioned falhou para %s: %v\n", schemaName, err)
 	}
 
 	return nil
@@ -480,5 +666,7 @@ func (p *Provisioner) DropSchema(ctx context.Context, schemaName string) error {
 	if err != nil {
 		return fmt.Errorf("db.Provisioner.DropSchema [%s]: %w", schemaName, err)
 	}
+	// Remove entrada de versão ao dropar o schema
+	_, _ = p.pool.Exec(ctx, `DELETE FROM _etl.schema_versions WHERE schema_name = $1`, schemaName)
 	return nil
 }

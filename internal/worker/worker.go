@@ -124,10 +124,12 @@ func (w *Worker) execute(ctx context.Context, job *syncsvc.SyncJob, creds *Empre
 		return fmt.Errorf("worker.execute marcar rodando: %w", err)
 	}
 
-	// Re-provisiona schema para garantir novas tabelas/views/índices em schemas existentes
+	// Provisiona schema apenas quando a versão está desatualizada — evita DDL lock contention
 	provisioner := db.NewProvisioner(w.pool)
-	if err := provisioner.ProvisionSchema(ctx, creds.Schema); err != nil {
-		w.log.Warn().Err(err).Str("schema", creds.Schema).Msg("worker: re-provision schema falhou (continuando)")
+	if provisioner.NeedsProvisioning(ctx, creds.Schema) {
+		if err := provisioner.ProvisionSchema(ctx, creds.Schema); err != nil {
+			w.log.Warn().Err(err).Str("schema", creds.Schema).Msg("worker: re-provision schema falhou (continuando)")
+		}
 	}
 
 	w.hub.Publish(job.EmpresaID, syncsvc.SSEEvent{
@@ -249,19 +251,37 @@ func (w *Worker) execute(ctx context.Context, job *syncsvc.SyncJob, creds *Empre
 	} else {
 		w.finalizarJob(ctx, job.ID, creds.GrupoID, job.EmpresaID, "concluido", "", now)
 
-		// Refresh assíncrono da materialized view gerencial após sync bem-sucedido
+		// Refresh assíncrono das views gerenciais após sync bem-sucedido.
+		// Incremental: apenas ano_corrente (dataset pequeno, rápido).
+		// Full: ano_corrente + historico (dataset grande — timeout estendido para historico).
 		if w.pool != nil {
 			schema := creds.Schema
+			isFull := job.Tipo == "full"
 			go func() {
-				refreshCtx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
-				defer cancel()
 				safe := pgx.Identifier{schema}.Sanitize()
-				if _, err := w.pool.Exec(refreshCtx, fmt.Sprintf(
-					"REFRESH MATERIALIZED VIEW %s.matvw_gerencial_resultado", safe,
+
+				// Sempre atualiza view do ano corrente
+				acCtx, acCancel := context.WithTimeout(context.Background(), 30*time.Minute)
+				defer acCancel()
+				if _, err := w.pool.Exec(acCtx, fmt.Sprintf(
+					"REFRESH MATERIALIZED VIEW %s.matvw_gerencial_ano_corrente", safe,
 				)); err != nil {
-					w.log.Warn().Err(err).Str("schema", schema).Msg("worker: refresh matvw_gerencial_resultado falhou")
+					w.log.Warn().Err(err).Str("schema", schema).Msg("worker: refresh matvw_gerencial_ano_corrente falhou")
 				} else {
-					w.log.Info().Str("schema", schema).Msg("worker: matvw_gerencial_resultado atualizada")
+					w.log.Info().Str("schema", schema).Msg("worker: matvw_gerencial_ano_corrente atualizada")
+				}
+
+				// Apenas em sync full: atualiza histórico (pode demorar)
+				if isFull {
+					histCtx, histCancel := context.WithTimeout(context.Background(), 2*time.Hour)
+					defer histCancel()
+					if _, err := w.pool.Exec(histCtx, fmt.Sprintf(
+						"REFRESH MATERIALIZED VIEW %s.matvw_gerencial_historico", safe,
+					)); err != nil {
+						w.log.Warn().Err(err).Str("schema", schema).Msg("worker: refresh matvw_gerencial_historico falhou")
+					} else {
+						w.log.Info().Str("schema", schema).Msg("worker: matvw_gerencial_historico atualizada")
+					}
 				}
 			}()
 		}

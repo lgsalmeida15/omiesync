@@ -13,6 +13,7 @@ Este documento registra a equivalência entre a estrutura de dados da versão an
 | v2 | Migração para colunas tipadas + `raw` |
 | v3 | Adicionada coluna `nome_empresa` (cross-tenant join com `_etl.empresas`) |
 | v4 | **Removido filtro de ano corrente** — view passa a cobrir histórico completo + previsões futuras. Filtro de período fica na camada de consumo (API/dashboard). Adicionado índice em `(ano)` isolado. Timeout de refresh aumentado para 30 min. |
+| v5 | **Split em duas views**: `matvw_gerencial_ano_corrente` (ano >= atual, refresh a cada sync) e `matvw_gerencial_historico` (anos anteriores, refresh apenas em full sync). `matvw_gerencial_resultado` removida. Schema versioning via `_etl.schema_versions` — DDL só roda quando necessário, eliminando lock contention. |
 
 ---
 
