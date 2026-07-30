@@ -129,10 +129,22 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = data.data
   }
 
+  // Chamado no startup do App para restaurar o estado do usuário a partir do token salvo.
+  async function init() {
+    if (!accessToken.value) return
+    if (user.value) return
+    try {
+      await fetchMe()
+      await refreshMeusGrupos()
+    } catch {
+      clearTokens()
+    }
+  }
+
   return {
     accessToken, refreshToken, user, preAuthToken, pendingGrupos, meusGrupos,
     isAuthenticated, needsGroupSelect, isAdminGlobal, isAdminGrupo, isViewer, isAdmin,
     login, selectGrupo, trocaGrupo, fetchGrupos, refreshMeusGrupos,
-    logout, refresh, fetchMe, clearTokens, setTokens
+    logout, refresh, fetchMe, init, clearTokens, setTokens
   }
 })
