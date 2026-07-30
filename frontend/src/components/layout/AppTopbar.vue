@@ -86,6 +86,7 @@ const pageSubtitle = computed(() => {
   height: var(--topbar-h);
   display: flex; align-items: center; gap: 14px;
   transition: background 0.3s;
+  overflow: visible;
 }
 
 .hamburger {

@@ -290,12 +290,11 @@ function buildChartRecDesp() {
           callbacks: { label: ctx => ` ${ctx.dataset.label}: ${fmtK(ctx.parsed.y)}` },
         },
         datalabels: {
-          display: (ctx) => ctx.parsed.y !== 0,
+          display: (ctx) => (ctx.parsed?.y ?? 0) !== 0,
           font: { family: 'var(--mono)', size: 9, weight: 'bold' },
           formatter: (v: number) => fmtK(v),
-          // Barras: label acima; Linha: label acima do ponto
-          anchor: (ctx) => ctx.dataset.type === 'line' ? 'end' : 'end',
-          align:  (ctx) => ctx.dataset.type === 'line' ? 'top' : 'top',
+          anchor: 'end',
+          align:  'top',
           color:  (ctx) => {
             if (ctx.dataset.label === 'Receita')   return '#22c55e'
             if (ctx.dataset.label === 'Despesa')   return '#ef4444'
@@ -360,14 +359,14 @@ function buildChartAcum() {
           callbacks: { label: ctx => ` ${ctx.dataset.label}: ${fmtK(ctx.parsed.y)}` },
         },
         datalabels: {
-          display: (ctx) => ctx.parsed.y !== 0,
+          display: (ctx) => (ctx.parsed?.y ?? 0) !== 0,
           font: { family: 'var(--mono)', size: 9, weight: 'bold' },
           formatter: (v: number) => fmtK(v),
           anchor: 'end',
-          align:  (ctx) => ctx.dataset.label === 'Acumulado' ? 'top' : (ctx.parsed.y >= 0 ? 'top' : 'bottom'),
+          align:  (ctx) => ctx.dataset.label === 'Acumulado' ? 'top' : ((ctx.parsed?.y ?? 0) >= 0 ? 'top' : 'bottom'),
           color: (ctx) => {
             if (ctx.dataset.label === 'Acumulado') return '#00e5ff'
-            return ctx.parsed.y >= 0 ? '#22c55e' : '#ef4444'
+            return (ctx.parsed?.y ?? 0) >= 0 ? '#22c55e' : '#ef4444'
           },
           offset: 2,
         },
@@ -464,18 +463,21 @@ function toggleDropdown(key: string) {
   dropdown.value = dropdown.value === key ? null : key
 }
 
+function closeDropdown() { dropdown.value = null }
+
 onMounted(async () => {
   if (!auth.user) {
     try { await auth.fetchMe() } catch { /* guard já trata */ }
   }
   carregar()
-  document.addEventListener('click', () => { dropdown.value = null })
+  document.addEventListener('click', closeDropdown)
 })
 
 onBeforeUnmount(() => {
   chartRecDesp?.destroy()
   chartAcum?.destroy()
   clearTimeout(debounceTimer)
+  document.removeEventListener('click', closeDropdown)
 })
 </script>
 
