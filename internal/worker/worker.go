@@ -253,7 +253,7 @@ func (w *Worker) execute(ctx context.Context, job *syncsvc.SyncJob, creds *Empre
 		if w.pool != nil {
 			schema := creds.Schema
 			go func() {
-				refreshCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+				refreshCtx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 				defer cancel()
 				safe := pgx.Identifier{schema}.Sanitize()
 				if _, err := w.pool.Exec(refreshCtx, fmt.Sprintf(

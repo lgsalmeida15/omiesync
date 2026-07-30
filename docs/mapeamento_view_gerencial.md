@@ -5,6 +5,17 @@ Este documento registra a equivalência entre a estrutura de dados da versão an
 
 ---
 
+## Histórico de versões da `matvw_gerencial_resultado`
+
+| Versão | Mudança principal |
+|---|---|
+| v1 | Estrutura inicial (JSONB monolítico) |
+| v2 | Migração para colunas tipadas + `raw` |
+| v3 | Adicionada coluna `nome_empresa` (cross-tenant join com `_etl.empresas`) |
+| v4 | **Removido filtro de ano corrente** — view passa a cobrir histórico completo + previsões futuras. Filtro de período fica na camada de consumo (API/dashboard). Adicionado índice em `(ano)` isolado. Timeout de refresh aumentado para 30 min. |
+
+---
+
 ## Tabelas de Origem
 
 | Tabela Antiga          | Tabela Nova              | Observação                                      |

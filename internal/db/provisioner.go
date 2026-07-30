@@ -227,7 +227,26 @@ BEGIN
 END
 $$`, "'"+schemaName+"'", "'"+schemaName+"'", safe),
 
-		// Materialized view gerencial — resultado financeiro do ano corrente
+		// Auto-upgrade v4: recria a view se ainda tiver filtro de ano corrente (CURRENT_DATE).
+		// A v4 remove esse filtro para expor histórico completo + previsões futuras do extrato.
+		fmt.Sprintf(`DO $$
+DECLARE
+    vdef TEXT;
+BEGIN
+    SELECT pg_get_viewdef(pc.oid) INTO vdef
+    FROM pg_class pc
+    JOIN pg_namespace pn ON pn.oid = pc.relnamespace
+    WHERE pn.nspname = %s AND pc.relname = 'matvw_gerencial_resultado'
+      AND pc.relkind = 'm';
+
+    IF vdef IS NOT NULL AND vdef LIKE '%%CURRENT_DATE%%' THEN
+        DROP MATERIALIZED VIEW %s.matvw_gerencial_resultado CASCADE;
+    END IF;
+END
+$$`, "'"+schemaName+"'", safe),
+
+		// Materialized view gerencial — resultado financeiro completo (todos os anos).
+		// Inclui histórico passado, ano corrente e previsões futuras via extrato.
 		// WITH NO DATA: populada posteriormente via REFRESH MATERIALIZED VIEW.
 		// REFRESH sem CONCURRENTLY (sem necessidade de UNIQUE index em colunas reais).
 		fmt.Sprintf(`CREATE MATERIALIZED VIEW IF NOT EXISTS %s.matvw_gerencial_resultado AS
@@ -254,8 +273,7 @@ movimentos_unificados AS (
     JOIN %s.contas_correntes cc
         ON cc.codigo_conta_corrente = e.codigo_conta_corrente
        AND cc.empresa_id = e.empresa_id
-    WHERE EXTRACT(YEAR FROM e.data_lancamento) = EXTRACT(YEAR FROM CURRENT_DATE)
-      AND cc.raw ->> 'cFluxoCaixa' = 'S'
+    WHERE cc.raw ->> 'cFluxoCaixa' = 'S'
       AND e.raw ->> 'cSituacao'    = 'Previsto'
 
     UNION ALL
@@ -281,8 +299,6 @@ movimentos_unificados AS (
     FROM %s.movimentos_financeiros mf
     WHERE mf.raw -> 'detalhes' ->> 'cGrupo' IN ('CONTA_CORRENTE_REC','CONTA_CORRENTE_PAG')
       AND NULLIF(mf.raw -> 'detalhes' ->> 'dDtPagamento','') IS NOT NULL
-      AND EXTRACT(YEAR FROM TO_DATE(NULLIF(mf.raw -> 'detalhes' ->> 'dDtPagamento',''), 'DD/MM/YYYY'))
-          = EXTRACT(YEAR FROM CURRENT_DATE)
 ),
 -- Expande categorias de contas_pagar e contas_receber (array raw -> 'categorias')
 cp_categorias AS (
@@ -442,6 +458,7 @@ WITH NO DATA`,
 		),
 
 		// Índices na materialized view (REFRESH sem CONCURRENTLY — não requer UNIQUE)
+		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_mvw_ano ON %s.matvw_gerencial_resultado (ano)", schemaName, safe),
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_mvw_ano_mes ON %s.matvw_gerencial_resultado (ano, mes)", schemaName, safe),
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_mvw_receita ON %s.matvw_gerencial_resultado (receita_despesa)", schemaName, safe),
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_mvw_categoria ON %s.matvw_gerencial_resultado (cod_categoria_final)", schemaName, safe),
