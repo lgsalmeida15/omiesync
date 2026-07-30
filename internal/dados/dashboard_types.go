@@ -33,6 +33,7 @@ type FiltrosDisponiveis struct {
 	ContasCorrentes []ContaCorrenteItem `json:"contas_correntes"`
 	Departamentos   []string            `json:"departamentos"`
 	Categorias      []string            `json:"categorias"`
+	Clientes        []string            `json:"clientes"`
 	Empresas        []EmpresaItem       `json:"empresas"`
 }
 

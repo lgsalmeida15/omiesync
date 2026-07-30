@@ -36,6 +36,7 @@ export interface FiltrosDisponiveis {
   contas_correntes: ContaCorrenteItem[]
   departamentos: string[]
   categorias: string[]
+  clientes: string[]
   empresas: EmpresaItem[]
 }
 

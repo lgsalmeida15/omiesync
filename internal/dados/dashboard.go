@@ -272,6 +272,29 @@ func queryFiltrosDisponiveis(ctx context.Context, pool *pgxpool.Pool, safe, view
 		f.Categorias = []string{}
 	}
 
+	// Clientes distintos da view (para autocomplete)
+	rowsCli, err := pool.Query(ctx, fmt.Sprintf(`
+		SELECT DISTINCT cliente_final
+		FROM %s.%s
+		WHERE cliente_final IS NOT NULL AND cliente_final != ''
+		ORDER BY cliente_final
+		LIMIT 300
+	`, safe, view))
+	if err != nil {
+		return f, fmt.Errorf("filtros clientes: %w", err)
+	}
+	defer rowsCli.Close()
+	for rowsCli.Next() {
+		var c string
+		if err := rowsCli.Scan(&c); err != nil {
+			return f, err
+		}
+		f.Clientes = append(f.Clientes, c)
+	}
+	if f.Clientes == nil {
+		f.Clientes = []string{}
+	}
+
 	// Empresas ativas do grupo
 	rowsEmp, err := pool.Query(ctx, `
 		SELECT id::text, nome

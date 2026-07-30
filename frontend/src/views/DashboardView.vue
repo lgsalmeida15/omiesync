@@ -16,15 +16,9 @@
         <div class="fi" v-if="filtrosDisponiveis.contas_correntes.length">
           <span class="fi-label">CONTAS</span>
           <div class="fi-multi">
-            <button class="fi-select fi-trigger" @click.stop="toggleDropdown('contas')">
+            <button class="fi-select fi-trigger" @click.stop="toggleDropdown('contas', $event)">
               {{ filtros.contas_correntes.length ? `${filtros.contas_correntes.length} sel.` : 'Todas' }}<span class="chv">▾</span>
             </button>
-            <div class="fi-dropdown" v-if="dropdown === 'contas'" @click.stop>
-              <label v-for="cc in filtrosDisponiveis.contas_correntes" :key="cc.codigo" class="chk-item">
-                <input type="checkbox" :value="cc.codigo" v-model="filtros.contas_correntes" @change="carregar" />
-                {{ cc.descricao }}
-              </label>
-            </div>
           </div>
         </div>
 
@@ -32,15 +26,9 @@
         <div class="fi" v-if="filtrosDisponiveis.departamentos.length">
           <span class="fi-label">DEPARTAMENTO</span>
           <div class="fi-multi">
-            <button class="fi-select fi-trigger" @click.stop="toggleDropdown('dept')">
+            <button class="fi-select fi-trigger" @click.stop="toggleDropdown('dept', $event)">
               {{ filtros.departamentos.length ? `${filtros.departamentos.length} sel.` : 'Todos' }}<span class="chv">▾</span>
             </button>
-            <div class="fi-dropdown fi-dropdown--wide" v-if="dropdown === 'dept'" @click.stop>
-              <label v-for="d in filtrosDisponiveis.departamentos" :key="d" class="chk-item">
-                <input type="checkbox" :value="d" v-model="filtros.departamentos" @change="carregar" />
-                {{ d }}
-              </label>
-            </div>
           </div>
         </div>
 
@@ -48,42 +36,81 @@
         <div class="fi" v-if="filtrosDisponiveis.categorias.length">
           <span class="fi-label">CATEGORIA</span>
           <div class="fi-multi">
-            <button class="fi-select fi-trigger" @click.stop="toggleDropdown('cat')">
+            <button class="fi-select fi-trigger" @click.stop="toggleDropdown('cat', $event)">
               {{ filtros.categorias.length ? `${filtros.categorias.length} sel.` : 'Todas' }}<span class="chv">▾</span>
             </button>
-            <div class="fi-dropdown fi-dropdown--wide" v-if="dropdown === 'cat'" @click.stop>
-              <label v-for="c in filtrosDisponiveis.categorias" :key="c" class="chk-item">
-                <input type="checkbox" :value="c" v-model="filtros.categorias" @change="carregar" />
-                {{ c }}
-              </label>
-            </div>
           </div>
         </div>
 
-        <!-- Cliente/Fornecedor -->
+        <!-- Cliente/Fornecedor com autocomplete -->
         <div class="fi fi--grow">
           <span class="fi-label">CLIENTE / FORNECEDOR</span>
-          <input class="fi-input" v-model="filtros.cliente" placeholder="Buscar..." @input="debouncedCarregar" />
+          <input
+            class="fi-input"
+            v-model="filtros.cliente"
+            placeholder="Buscar..."
+            @input="onClienteInput"
+            @focus="onClienteFocus($event)"
+            @blur="onClienteBlur"
+            autocomplete="off"
+          />
         </div>
 
         <!-- Empresas -->
         <div class="fi" v-if="filtrosDisponiveis.empresas.length > 1">
           <span class="fi-label">EMPRESAS</span>
           <div class="fi-multi">
-            <button class="fi-select fi-trigger" @click.stop="toggleDropdown('emp')">
+            <button class="fi-select fi-trigger" @click.stop="toggleDropdown('emp', $event)">
               {{ filtros.empresas.length ? `${filtros.empresas.length} sel.` : 'Todas' }}<span class="chv">▾</span>
             </button>
-            <div class="fi-dropdown fi-dropdown--wide fi-dropdown--right" v-if="dropdown === 'emp'" @click.stop>
-              <label v-for="e in filtrosDisponiveis.empresas" :key="e.id" class="chk-item">
-                <input type="checkbox" :value="e.id" v-model="filtros.empresas" @change="carregar" />
-                {{ e.nome }}
-              </label>
-            </div>
           </div>
         </div>
 
         <!-- Limpar -->
         <button class="fi-clear" @click="limparFiltros" title="Limpar filtros">✕</button>
+      </div>
+    </Teleport>
+
+    <!-- Dropdowns fixos — renderizados no body via Teleport para escapar de overflow:hidden -->
+    <Teleport to="body">
+      <!-- Contas correntes -->
+      <div v-if="dropdown === 'contas'" class="fd-fixed" :style="fdStyle" @click.stop>
+        <label v-for="cc in filtrosDisponiveis.contas_correntes" :key="cc.codigo" class="chk-item">
+          <input type="checkbox" :value="cc.codigo" v-model="filtros.contas_correntes" @change="carregar" />
+          {{ cc.descricao }}
+        </label>
+      </div>
+      <!-- Departamentos -->
+      <div v-if="dropdown === 'dept'" class="fd-fixed" :style="fdStyle" @click.stop>
+        <label v-for="d in filtrosDisponiveis.departamentos" :key="d" class="chk-item">
+          <input type="checkbox" :value="d" v-model="filtros.departamentos" @change="carregar" />
+          {{ d }}
+        </label>
+      </div>
+      <!-- Categorias -->
+      <div v-if="dropdown === 'cat'" class="fd-fixed" :style="fdStyle" @click.stop>
+        <label v-for="c in filtrosDisponiveis.categorias" :key="c" class="chk-item">
+          <input type="checkbox" :value="c" v-model="filtros.categorias" @change="carregar" />
+          {{ c }}
+        </label>
+      </div>
+      <!-- Empresas -->
+      <div v-if="dropdown === 'emp'" class="fd-fixed" :style="fdStyle" @click.stop>
+        <label v-for="e in filtrosDisponiveis.empresas" :key="e.id" class="chk-item">
+          <input type="checkbox" :value="e.id" v-model="filtros.empresas" @change="carregar" />
+          {{ e.nome }}
+        </label>
+      </div>
+      <!-- Autocomplete cliente -->
+      <div v-if="dropdown === 'cli' && clienteSugestoes.length" class="fd-fixed" :style="fdStyle" @click.stop>
+        <div
+          v-for="s in clienteSugestoes"
+          :key="s"
+          class="chk-item chk-item--click"
+          @mousedown.prevent="selecionarCliente(s)"
+        >
+          {{ s }}
+        </div>
       </div>
     </Teleport>
 
@@ -213,7 +240,24 @@ const filtrosDisponiveis = reactive<FiltrosDisponiveis>({
   contas_correntes: [],
   departamentos:    [],
   categorias:       [],
+  clientes:         [],
   empresas:         [],
+})
+
+// Posição do dropdown fixo (calculada via getBoundingClientRect)
+const fdPos = reactive({ top: 0, left: 0, right: 0, useRight: false })
+const fdStyle = computed(() => fdPos.useRight
+  ? { top: `${fdPos.top}px`, right: `${fdPos.right}px` }
+  : { top: `${fdPos.top}px`, left: `${fdPos.left}px` }
+)
+
+// Autocomplete cliente
+const clienteSugestoes = computed(() => {
+  const q = filtros.cliente.trim().toLowerCase()
+  if (!q || q.length < 2) return []
+  return filtrosDisponiveis.clientes
+    .filter(c => c.toLowerCase().includes(q))
+    .slice(0, 20)
 })
 
 // ── Gráficos ───────────────────────────────────────────────────────────────
@@ -459,11 +503,49 @@ function limparFiltros() {
   carregar()
 }
 
-function toggleDropdown(key: string) {
-  dropdown.value = dropdown.value === key ? null : key
+function toggleDropdown(key: string, event: MouseEvent) {
+  if (dropdown.value === key) { dropdown.value = null; return }
+  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  const spaceRight = window.innerWidth - rect.right
+  fdPos.top      = rect.bottom + 4
+  fdPos.left     = rect.left
+  fdPos.right    = spaceRight < 270 ? window.innerWidth - rect.right : 0
+  fdPos.useRight = spaceRight < 270
+  dropdown.value = key
 }
 
 function closeDropdown() { dropdown.value = null }
+
+function onClienteInput() {
+  debouncedCarregar()
+  // Mostra autocomplete se tiver 2+ chars
+  if (filtros.cliente.trim().length >= 2) {
+    dropdown.value = 'cli'
+  } else {
+    dropdown.value = null
+  }
+}
+
+function onClienteFocus(event: FocusEvent) {
+  if (filtros.cliente.trim().length >= 2) {
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+    fdPos.top      = rect.bottom + 4
+    fdPos.left     = rect.left
+    fdPos.useRight = false
+    dropdown.value = 'cli'
+  }
+}
+
+function onClienteBlur() {
+  // Delay para permitir o mousedown na sugestão disparar antes do blur fechar
+  setTimeout(() => { if (dropdown.value === 'cli') dropdown.value = null }, 150)
+}
+
+function selecionarCliente(nome: string) {
+  filtros.cliente = nome
+  dropdown.value  = null
+  carregar()
+}
 
 onMounted(async () => {
   if (!auth.user) {
@@ -490,7 +572,7 @@ onBeforeUnmount(() => {
   align-items: flex-end;
   gap: 8px;
   flex-wrap: nowrap;
-  overflow: hidden;
+  overflow: hidden;   /* clip horizontal — dropdowns usam position:fixed e escapam disso */
   padding: 0 8px;
   flex: 1;
 }
@@ -538,22 +620,20 @@ onBeforeUnmount(() => {
 }
 .chv { font-size: 9px; color: var(--text3); margin-left: 4px; }
 
-.fi-dropdown {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  min-width: 200px;
-  max-height: 220px;
+/* Dropdown fixo — Teleportado para body, escapa de qualquer overflow:hidden */
+.fd-fixed {
+  position: fixed;
+  min-width: 220px;
+  max-width: 320px;
+  max-height: 260px;
   overflow-y: auto;
   background: var(--card);
   border: 1px solid var(--border2);
   border-radius: 8px;
-  box-shadow: var(--shadow);
-  z-index: 200;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  z-index: 9999;
   padding: 4px 0;
 }
-.fi-dropdown--wide { min-width: 260px; }
-.fi-dropdown--right { left: auto; right: 0; }
 
 .chk-item {
   display: flex;
@@ -567,6 +647,8 @@ onBeforeUnmount(() => {
 }
 .chk-item:hover { background: var(--bg3); }
 .chk-item input { accent-color: var(--accent); cursor: pointer; flex-shrink: 0; }
+.chk-item--click { user-select: none; }
+.chk-item--click:hover { background: var(--bg3); color: var(--accent); }
 
 .fi-clear {
   padding: 4px 8px;
