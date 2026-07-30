@@ -88,7 +88,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from "vue"
+import { ref, onMounted, watch, computed } from "vue"
 import { useAuthStore } from "@/stores/auth"
 import api from "@/api/client"
 
@@ -98,6 +98,14 @@ const auth = useAuthStore()
 // admin_global nao tem grupo_id proprio — usa seletor
 const grupos = ref<{id:string;nome:string}[]>([])
 const grupoId = ref(auth.user?.grupo_id ?? "")
+
+// Garante que grupoId se atualiza quando auth.user chega depois do mount (pós-login)
+watch(() => auth.user?.grupo_id, (gid) => {
+  if (gid && !auth.isAdminGlobal && !grupoId.value) {
+    grupoId.value = gid
+    load()
+  }
+})
 async function loadGrupos() {
   if(auth.isAdminGlobal.value) {
     try { const r=await api.get("/admin/grupos?page=1&per_page=100"); grupos.value=r.data.data??[] }

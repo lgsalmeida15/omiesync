@@ -432,6 +432,11 @@ function buildChartAcum() {
   })
 }
 
+// Retenta carregar se auth.user chegar depois do mount (race condition pós-login)
+watch(() => auth.user, (user) => {
+  if (user && !dados.value && !carregando.value) carregar()
+})
+
 // Reconstrói após dados atualizados (flush:post garante DOM pronto)
 watch(dados, () => {
   setTimeout(() => {
@@ -460,7 +465,6 @@ async function carregar() {
 
   carregando.value = true
   erro.value = ''
-  dropdown.value = null
 
   try {
     const res = await fetchDashboard(grupoID, {

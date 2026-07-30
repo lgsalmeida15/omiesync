@@ -6,8 +6,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useUiStore }  from '@/stores/ui'
+import { ref, onMounted, watch, nextTick } from 'vue'
+import { useUiStore }   from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
 
 const ui   = useUiStore()
@@ -18,6 +18,16 @@ onMounted(async () => {
   document.documentElement.setAttribute('data-theme', ui.theme)
   await auth.init()
   ready.value = true
+})
+
+// Quando o usuário faz login (isAuthenticated muda para true), cicla o ready
+// para garantir que todos os componentes montem com auth.user já disponível.
+watch(() => auth.isAuthenticated, async (isAuth, wasAuth) => {
+  if (isAuth && !wasAuth && ready.value) {
+    ready.value = false
+    await nextTick()
+    ready.value = true
+  }
 })
 </script>
 
