@@ -1,41 +1,795 @@
-﻿<template>
-  <div style="padding:24px">
-    <div class="section-title">BEM-VINDO</div>
-    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:16px">
-      <p style="font-size:16px;font-weight:700;color:var(--text)">{{ auth.user?.nome }}</p>
-      <p style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-top:4px;text-transform:uppercase">{{ roleLabel }}</p>
+<template>
+  <div class="dash-root">
+
+    <!-- Barra de filtros -->
+    <div class="filter-bar">
+      <div class="filter-bar-inner">
+
+        <!-- Ano -->
+        <div class="filter-item">
+          <label class="filter-label">ANO</label>
+          <select class="filter-select" v-model="filtros.ano" @change="carregar">
+            <option v-for="a in anosDisponiveis" :key="a" :value="a">{{ a }}</option>
+          </select>
+        </div>
+
+        <!-- Contas correntes -->
+        <div class="filter-item" v-if="filtrosDisponiveis.contas_correntes.length">
+          <label class="filter-label">CONTAS</label>
+          <div class="multi-select-wrap">
+            <button class="filter-select multi-trigger" @click.stop="toggleDropdown('contas')">
+              {{ filtros.contas_correntes.length ? `${filtros.contas_correntes.length} selecionada(s)` : 'Todas' }}
+              <span class="chevron">▾</span>
+            </button>
+            <div class="multi-dropdown" v-if="dropdown === 'contas'" @click.stop>
+              <label v-for="cc in filtrosDisponiveis.contas_correntes" :key="cc.codigo" class="chk-item">
+                <input type="checkbox" :value="cc.codigo" v-model="filtros.contas_correntes" @change="carregar" />
+                {{ cc.descricao }}
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Departamentos -->
+        <div class="filter-item" v-if="filtrosDisponiveis.departamentos.length">
+          <label class="filter-label">DEPARTAMENTO</label>
+          <div class="multi-select-wrap">
+            <button class="filter-select multi-trigger" @click.stop="toggleDropdown('dept')">
+              {{ filtros.departamentos.length ? `${filtros.departamentos.length} selecionado(s)` : 'Todos' }}
+              <span class="chevron">▾</span>
+            </button>
+            <div class="multi-dropdown" v-if="dropdown === 'dept'" @click.stop>
+              <label v-for="d in filtrosDisponiveis.departamentos" :key="d" class="chk-item">
+                <input type="checkbox" :value="d" v-model="filtros.departamentos" @change="carregar" />
+                {{ d }}
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Categorias -->
+        <div class="filter-item" v-if="filtrosDisponiveis.categorias.length">
+          <label class="filter-label">CATEGORIA</label>
+          <div class="multi-select-wrap">
+            <button class="filter-select multi-trigger" @click.stop="toggleDropdown('cat')">
+              {{ filtros.categorias.length ? `${filtros.categorias.length} selecionada(s)` : 'Todas' }}
+              <span class="chevron">▾</span>
+            </button>
+            <div class="multi-dropdown cat-dropdown" v-if="dropdown === 'cat'" @click.stop>
+              <label v-for="c in filtrosDisponiveis.categorias" :key="c" class="chk-item">
+                <input type="checkbox" :value="c" v-model="filtros.categorias" @change="carregar" />
+                {{ c }}
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Cliente/Fornecedor -->
+        <div class="filter-item filter-item--grow">
+          <label class="filter-label">CLIENTE / FORNECEDOR</label>
+          <input
+            class="filter-input"
+            v-model="filtros.cliente"
+            placeholder="Buscar..."
+            @input="debouncedCarregar"
+          />
+        </div>
+
+        <!-- Empresas -->
+        <div class="filter-item" v-if="filtrosDisponiveis.empresas.length > 1">
+          <label class="filter-label">EMPRESAS</label>
+          <div class="multi-select-wrap">
+            <button class="filter-select multi-trigger" @click.stop="toggleDropdown('emp')">
+              {{ filtros.empresas.length ? `${filtros.empresas.length} selecionada(s)` : 'Todas' }}
+              <span class="chevron">▾</span>
+            </button>
+            <div class="multi-dropdown" v-if="dropdown === 'emp'" @click.stop>
+              <label v-for="e in filtrosDisponiveis.empresas" :key="e.id" class="chk-item">
+                <input type="checkbox" :value="e.id" v-model="filtros.empresas" @change="carregar" />
+                {{ e.nome }}
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Limpar filtros -->
+        <button class="btn-clear" @click="limparFiltros" title="Limpar filtros">✕</button>
+
+      </div>
     </div>
-    <div class="section-title" style="margin-top:8px">ACESSO RAPIDO</div>
-    <div style="display:flex;flex-wrap:wrap;gap:10px">
-      <RouterLink v-if="auth.isAdminGlobal" to="/grupos" class="quick-link">Grupos</RouterLink>
-      <RouterLink v-if="auth.isAdmin" to="/empresas" class="quick-link">Empresas</RouterLink>
-      <RouterLink v-if="auth.isAdmin" to="/usuarios" class="quick-link">Usuarios</RouterLink>
-      <RouterLink v-if="auth.isAdmin" to="/sync" class="quick-link">Sync</RouterLink>
-      <RouterLink to="/perfil" class="quick-link">Perfil</RouterLink>
+
+    <!-- Loading / erro -->
+    <div v-if="carregando" class="state-msg">
+      <AppSpinner /> Carregando dashboard...
     </div>
-    <div style="margin-top:24px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px">
-      <p style="font-weight:700;font-size:13px;color:var(--text)">Dashboard financeiro — Fase 2</p>
-      <p style="font-family:var(--mono);font-size:11px;color:var(--text3);margin-top:6px">
-        Configure uma empresa e inicie o sync para visualizar os dados financeiros.
-      </p>
+    <div v-else-if="erro" class="state-msg state-msg--erro">{{ erro }}</div>
+
+    <!-- Conteúdo -->
+    <div v-else-if="dados" class="dash-content">
+
+      <!-- Cards KPI -->
+      <div class="section-title">INDICADORES</div>
+      <div class="cards-row">
+        <div class="kpi-card kpi-receita">
+          <div class="kpi-header">
+            <span class="kpi-label">RECEITA TOTAL</span>
+            <span class="kpi-icon kpi-icon--green">↑</span>
+          </div>
+          <div class="kpi-value kpi-value--green">{{ fmt(dados.cards.receita_total) }}</div>
+          <div class="kpi-sub">Ano {{ filtros.ano }}</div>
+        </div>
+        <div class="kpi-card kpi-despesa">
+          <div class="kpi-header">
+            <span class="kpi-label">DESPESA TOTAL</span>
+            <span class="kpi-icon kpi-icon--red">↓</span>
+          </div>
+          <div class="kpi-value kpi-value--red">{{ fmt(dados.cards.despesa_total) }}</div>
+          <div class="kpi-sub">Ano {{ filtros.ano }}</div>
+        </div>
+        <div class="kpi-card kpi-resultado">
+          <div class="kpi-header">
+            <span class="kpi-label">RESULTADO</span>
+            <span class="kpi-icon kpi-icon--accent">◈</span>
+          </div>
+          <div class="kpi-value" :class="dados.cards.resultado >= 0 ? 'kpi-value--green' : 'kpi-value--red'">
+            {{ fmt(dados.cards.resultado) }}
+          </div>
+          <div class="kpi-sub">Receita − Despesa + Saldo CC</div>
+        </div>
+        <div class="kpi-card kpi-saldo">
+          <div class="kpi-header">
+            <span class="kpi-label">SALDO CONTAS</span>
+            <span class="kpi-icon kpi-icon--yellow">⬡</span>
+          </div>
+          <div class="kpi-value kpi-value--yellow">{{ fmt(dados.cards.saldo_contas_correntes) }}</div>
+          <div class="kpi-sub">Saldo inicial cadastrado</div>
+        </div>
+      </div>
+
+      <!-- Gráficos -->
+      <div class="charts-row">
+
+        <!-- Receita vs Despesa — colunas + linha resultado -->
+        <div class="chart-card chart-card--large">
+          <div class="chart-header">
+            <div>
+              <div class="chart-title">Receita vs Despesa</div>
+              <div class="chart-sub">Evolução mensal — {{ filtros.ano }}</div>
+            </div>
+            <div class="chart-legend">
+              <span class="leg-dot" style="background:var(--green)"></span>Receita
+              <span class="leg-dot" style="background:var(--red)"></span>Despesa
+              <span class="leg-dot" style="background:var(--accent)"></span>Resultado
+            </div>
+          </div>
+          <div class="chart-wrap">
+            <canvas ref="canvasRecDesp"></canvas>
+          </div>
+        </div>
+
+        <!-- Resultado acumulado — cascata -->
+        <div class="chart-card chart-card--large">
+          <div class="chart-header">
+            <div>
+              <div class="chart-title">Resultado Acumulado</div>
+              <div class="chart-sub">Progressão mensal — {{ filtros.ano }}</div>
+            </div>
+            <div class="chart-legend">
+              <span class="leg-dot" style="background:var(--accent)"></span>Acumulado
+              <span class="leg-dot" style="background:var(--green)"></span>Positivo
+              <span class="leg-dot" style="background:var(--red)"></span>Negativo
+            </div>
+          </div>
+          <div class="chart-wrap">
+            <canvas ref="canvasAcum"></canvas>
+          </div>
+        </div>
+
+      </div>
     </div>
+
+    <!-- Estado vazio -->
+    <div v-else class="state-msg">Nenhum dado disponível para os filtros selecionados.</div>
+
   </div>
 </template>
+
 <script setup lang="ts">
-import { computed } from "vue"
-import { useAuthStore } from "@/stores/auth"
+import { ref, reactive, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { Chart, registerables } from 'chart.js'
+import { useAuthStore } from '@/stores/auth'
+import { fetchDashboard, type DashboardData, type FiltrosDisponiveis } from '@/api/dashboard'
+import AppSpinner from '@/components/ui/AppSpinner.vue'
+
+Chart.register(...registerables)
+
 const auth = useAuthStore()
-const roleLabel = computed(() => ({
-  admin_global: "Administrador Global",
-  admin_grupo: "Administrador de Grupo",
-  viewer: "Visualizador"
-}[auth.user?.role ?? "viewer"] ?? ""))
-</script>
-<style scoped>
-.quick-link {
-  display:inline-flex;align-items:center;padding:9px 16px;border-radius:8px;
-  border:1px solid var(--border2);background:var(--bg3);color:var(--text2);
-  text-decoration:none;font-size:13px;font-weight:600;transition:var(--trans);
+
+// ── Estado ─────────────────────────────────────────────────────────────────
+const dados     = ref<DashboardData | null>(null)
+const carregando = ref(false)
+const erro       = ref('')
+const dropdown   = ref<string | null>(null)
+
+const anoAtual = new Date().getFullYear()
+const anosDisponiveis = computed(() => {
+  const anos = []
+  for (let a = anoAtual; a >= anoAtual - 5; a--) anos.push(a)
+  return anos
+})
+
+const filtros = reactive({
+  ano:             anoAtual,
+  contas_correntes: [] as string[],
+  departamentos:    [] as string[],
+  categorias:       [] as string[],
+  empresas:         [] as string[],
+  cliente:          '',
+})
+
+const filtrosDisponiveis = reactive<FiltrosDisponiveis>({
+  contas_correntes: [],
+  departamentos:    [],
+  categorias:       [],
+  empresas:         [],
+})
+
+// ── Gráficos ───────────────────────────────────────────────────────────────
+const canvasRecDesp = ref<HTMLCanvasElement | null>(null)
+const canvasAcum    = ref<HTMLCanvasElement | null>(null)
+let chartRecDesp: Chart | null = null
+let chartAcum:    Chart | null = null
+
+const fmt = (v: number) =>
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(v)
+
+function fmtK(v: number) {
+  const abs = Math.abs(v)
+  const sign = v < 0 ? '-' : ''
+  if (abs >= 1_000_000) return `${sign}R$${(abs / 1_000_000).toFixed(1)}M`
+  if (abs >= 1_000)     return `${sign}R$${(abs / 1_000).toFixed(0)}K`
+  return fmt(v)
 }
-.quick-link:hover{border-color:var(--accent);color:var(--accent);background:rgba(0,229,255,0.06)}
+
+function chartColors() {
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light'
+  return {
+    grid:    dark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.06)',
+    tick:    dark ? '#4a6070' : '#8fa3b4',
+    bg:      dark ? '#080c12' : '#fff',
+    tooltip: dark ? 'rgba(13,21,32,0.97)' : 'rgba(255,255,255,0.97)',
+    tooltipBorder: dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)',
+    tooltipText:   dark ? '#e2eaf4' : '#0f1c2e',
+  }
+}
+
+function buildChartRecDesp() {
+  if (!canvasRecDesp.value || !dados.value) return
+  chartRecDesp?.destroy()
+
+  const c  = chartColors()
+  const ms = dados.value.grafico_mensal
+
+  chartRecDesp = new Chart(canvasRecDesp.value, {
+    type: 'bar',
+    data: {
+      labels: ms.map(m => m.mes_nome),
+      datasets: [
+        {
+          label: 'Receita',
+          type: 'bar',
+          data: ms.map(m => m.receita),
+          backgroundColor: 'rgba(34,197,94,0.25)',
+          borderColor: '#22c55e',
+          borderWidth: 1.5,
+          borderRadius: 4,
+          order: 2,
+        },
+        {
+          label: 'Despesa',
+          type: 'bar',
+          data: ms.map(m => m.despesa),
+          backgroundColor: 'rgba(239,68,68,0.2)',
+          borderColor: '#ef4444',
+          borderWidth: 1.5,
+          borderRadius: 4,
+          order: 2,
+        },
+        {
+          label: 'Resultado',
+          type: 'line',
+          data: ms.map(m => m.resultado_mes),
+          borderColor: '#00e5ff',
+          borderWidth: 2.5,
+          backgroundColor: 'rgba(0,229,255,0.06)',
+          fill: true,
+          tension: 0.4,
+          pointRadius: 4,
+          pointBackgroundColor: '#00e5ff',
+          pointBorderColor: c.bg,
+          pointBorderWidth: 2,
+          order: 1,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: c.tooltip,
+          borderColor: c.tooltipBorder,
+          borderWidth: 1,
+          titleColor: c.tick,
+          bodyColor: c.tooltipText,
+          padding: 12,
+          callbacks: { label: ctx => ` ${ctx.dataset.label}: ${fmtK(ctx.parsed.y)}` },
+        },
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { color: c.tick, font: { family: 'var(--mono)', size: 10 } },
+          border: { display: false },
+        },
+        y: {
+          grid: { color: c.grid },
+          ticks: { color: c.tick, font: { family: 'var(--mono)', size: 10 }, callback: v => fmtK(Number(v)) },
+          border: { display: false },
+        },
+      },
+    },
+  })
+}
+
+function buildChartAcum() {
+  if (!canvasAcum.value || !dados.value) return
+  chartAcum?.destroy()
+
+  const c   = chartColors()
+  const ac  = dados.value.grafico_resultado_acumulado
+
+  // Cores das barras de resultado_mes: verde se positivo, vermelho se negativo
+  const barColors = ac.map(m =>
+    m.resultado_mes >= 0 ? 'rgba(34,197,94,0.7)' : 'rgba(239,68,68,0.7)'
+  )
+  const barBorders = ac.map(m =>
+    m.resultado_mes >= 0 ? '#22c55e' : '#ef4444'
+  )
+
+  chartAcum = new Chart(canvasAcum.value, {
+    type: 'bar',
+    data: {
+      labels: ac.map(m => m.mes_nome),
+      datasets: [
+        {
+          label: 'Resultado mês',
+          type: 'bar',
+          data: ac.map(m => m.resultado_mes),
+          backgroundColor: barColors,
+          borderColor: barBorders,
+          borderWidth: 1.5,
+          borderRadius: 4,
+          order: 2,
+        },
+        {
+          label: 'Acumulado',
+          type: 'line',
+          data: ac.map(m => m.acumulado),
+          borderColor: '#00e5ff',
+          borderWidth: 2.5,
+          backgroundColor: 'rgba(0,229,255,0.06)',
+          fill: true,
+          tension: 0.4,
+          pointRadius: 4,
+          pointBackgroundColor: '#00e5ff',
+          pointBorderColor: c.bg,
+          pointBorderWidth: 2,
+          order: 1,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: c.tooltip,
+          borderColor: c.tooltipBorder,
+          borderWidth: 1,
+          titleColor: c.tick,
+          bodyColor: c.tooltipText,
+          padding: 12,
+          callbacks: { label: ctx => ` ${ctx.dataset.label}: ${fmtK(ctx.parsed.y)}` },
+        },
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { color: c.tick, font: { family: 'var(--mono)', size: 10 } },
+          border: { display: false },
+        },
+        y: {
+          grid: { color: c.grid },
+          ticks: { color: c.tick, font: { family: 'var(--mono)', size: 10 }, callback: v => fmtK(Number(v)) },
+          border: { display: false },
+        },
+      },
+    },
+  })
+}
+
+// ── Carregamento ───────────────────────────────────────────────────────────
+async function carregar() {
+  const grupoID = auth.user?.grupo_id
+  if (!grupoID) return
+
+  carregando.value = true
+  erro.value = ''
+  dropdown.value = null
+
+  try {
+    const res = await fetchDashboard(grupoID, {
+      ano:             filtros.ano,
+      empresas:        filtros.empresas.length        ? filtros.empresas        : undefined,
+      contas_correntes: filtros.contas_correntes.length ? filtros.contas_correntes : undefined,
+      departamentos:   filtros.departamentos.length   ? filtros.departamentos   : undefined,
+      categorias:      filtros.categorias.length      ? filtros.categorias      : undefined,
+      cliente:         filtros.cliente || undefined,
+    })
+
+    dados.value = res
+
+    // Popula filtros disponíveis apenas na primeira carga (sem filtros ativos)
+    const semFiltros =
+      !filtros.empresas.length &&
+      !filtros.contas_correntes.length &&
+      !filtros.departamentos.length &&
+      !filtros.categorias.length &&
+      !filtros.cliente
+
+    if (semFiltros) {
+      Object.assign(filtrosDisponiveis, res.filtros_disponiveis)
+    }
+
+    await nextTick()
+    buildChartRecDesp()
+    buildChartAcum()
+  } catch (e: unknown) {
+    const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+    erro.value = msg || 'Erro ao carregar dashboard'
+  } finally {
+    carregando.value = false
+  }
+}
+
+// Debounce para campo de busca
+let debounceTimer: ReturnType<typeof setTimeout>
+function debouncedCarregar() {
+  clearTimeout(debounceTimer)
+  debounceTimer = setTimeout(carregar, 400)
+}
+
+function limparFiltros() {
+  filtros.contas_correntes = []
+  filtros.departamentos    = []
+  filtros.categorias       = []
+  filtros.empresas         = []
+  filtros.cliente          = ''
+  filtros.ano              = anoAtual
+  carregar()
+}
+
+function toggleDropdown(key: string) {
+  dropdown.value = dropdown.value === key ? null : key
+}
+
+function fecharDropdowns() {
+  dropdown.value = null
+}
+
+// ── Ciclo de vida ──────────────────────────────────────────────────────────
+onMounted(() => {
+  carregar()
+  document.addEventListener('click', fecharDropdowns)
+})
+
+onBeforeUnmount(() => {
+  chartRecDesp?.destroy()
+  chartAcum?.destroy()
+  document.removeEventListener('click', fecharDropdowns)
+  clearTimeout(debounceTimer)
+})
+
+// Reconstrói gráficos quando o tema muda
+watch(
+  () => document.documentElement.getAttribute('data-theme'),
+  () => {
+    if (dados.value) {
+      nextTick(() => {
+        buildChartRecDesp()
+        buildChartAcum()
+      })
+    }
+  }
+)
+</script>
+
+<style scoped>
+/* ── Layout ────────────────────────────────────────────────────────────── */
+.dash-root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+/* ── Barra de filtros ──────────────────────────────────────────────────── */
+.filter-bar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: var(--topbar-bg);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 24px;
+}
+
+.filter-bar-inner {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.filter-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 130px;
+}
+.filter-item--grow { flex: 1; min-width: 180px; }
+
+.filter-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  color: var(--text3);
+  text-transform: uppercase;
+}
+
+.filter-select,
+.filter-input {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border2);
+  background: var(--bg3);
+  color: var(--text2);
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.2s;
+  appearance: none;
+}
+.filter-select:focus,
+.filter-input:focus { border-color: rgba(0,229,255,0.4); }
+.filter-input::placeholder { color: var(--text3); }
+
+/* Multi-select */
+.multi-select-wrap { position: relative; }
+
+.multi-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  text-align: left;
+  cursor: pointer;
+}
+
+.chevron { font-size: 10px; color: var(--text3); margin-left: 6px; }
+
+.multi-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 220px;
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--card);
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  z-index: 100;
+  padding: 6px 0;
+}
+.cat-dropdown { min-width: 280px; }
+
+.chk-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  font-size: 12px;
+  color: var(--text2);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.chk-item:hover { background: var(--bg3); }
+.chk-item input { accent-color: var(--accent); cursor: pointer; }
+
+.btn-clear {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border2);
+  background: var(--bg3);
+  color: var(--text3);
+  cursor: pointer;
+  font-size: 12px;
+  transition: var(--trans);
+  align-self: flex-end;
+}
+.btn-clear:hover { border-color: var(--red); color: var(--red); }
+
+/* ── Estados ───────────────────────────────────────────────────────────── */
+.state-msg {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: center;
+  padding: 60px 24px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text3);
+}
+.state-msg--erro { color: var(--red); }
+
+/* ── Conteúdo ──────────────────────────────────────────────────────────── */
+.dash-content {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text3);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.section-title::before {
+  content: '';
+  width: 18px;
+  height: 1.5px;
+  background: var(--accent);
+  opacity: 0.7;
+}
+
+/* ── Cards KPI ─────────────────────────────────────────────────────────── */
+.cards-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+@media (max-width: 1100px) { .cards-row { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px)  { .cards-row { grid-template-columns: 1fr; } }
+
+.kpi-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  position: relative;
+  overflow: hidden;
+  transition: var(--trans);
+}
+.kpi-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+}
+.kpi-receita::before  { background: var(--green); }
+.kpi-despesa::before  { background: var(--red); }
+.kpi-resultado::before { background: var(--accent); }
+.kpi-saldo::before    { background: var(--yellow); }
+
+.kpi-card:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+
+.kpi-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.kpi-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text3);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+.kpi-icon {
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px;
+}
+.kpi-icon--green  { background: rgba(34,197,94,0.1);  color: var(--green); }
+.kpi-icon--red    { background: rgba(239,68,68,0.1);   color: var(--red); }
+.kpi-icon--accent { background: rgba(0,229,255,0.1);   color: var(--accent); }
+.kpi-icon--yellow { background: rgba(245,158,11,0.1);  color: var(--yellow); }
+
+.kpi-value {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1;
+  margin-bottom: 6px;
+  letter-spacing: -0.5px;
+}
+.kpi-value--green  { color: var(--green); }
+.kpi-value--red    { color: var(--red); }
+.kpi-value--yellow { color: var(--yellow); }
+
+.kpi-sub {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text3);
+}
+
+/* ── Gráficos ──────────────────────────────────────────────────────────── */
+.charts-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+@media (max-width: 1100px) { .charts-row { grid-template-columns: 1fr; } }
+
+.chart-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 22px;
+}
+
+.chart-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.chart-title { font-size: 14px; font-weight: 700; }
+.chart-sub   { font-family: var(--mono); font-size: 10px; color: var(--text3); margin-top: 2px; }
+
+.chart-legend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text2);
+  flex-wrap: wrap;
+}
+.leg-dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  margin-right: 3px;
+}
+
+.chart-wrap {
+  position: relative;
+  height: 280px;
+}
 </style>
