@@ -1,17 +1,9 @@
 <template>
   <div class="dash-root">
 
-    <!-- Loading / erro -->
-    <div v-if="carregando && !dados" class="state-msg">
-      <AppSpinner /> Carregando dashboard...
-    </div>
-    <div v-else-if="erro" class="state-msg state-msg--erro">{{ erro }}</div>
-
-    <!-- Conteúdo -->
-    <template v-else-if="dados">
-
-      <!-- Faixa de filtros compacta -->
-      <div class="filter-strip" @click.stop>
+    <!-- Filtros teleportados para dentro da topbar -->
+    <Teleport to="#topbar-filters">
+      <div class="tf-inner" @click.stop>
         <!-- Ano -->
         <div class="fi">
           <span class="fi-label">ANO</span>
@@ -81,7 +73,7 @@
             <button class="fi-select fi-trigger" @click.stop="toggleDropdown('emp')">
               {{ filtros.empresas.length ? `${filtros.empresas.length} sel.` : 'Todas' }}<span class="chv">▾</span>
             </button>
-            <div class="fi-dropdown fi-dropdown--wide" v-if="dropdown === 'emp'" @click.stop>
+            <div class="fi-dropdown fi-dropdown--wide fi-dropdown--right" v-if="dropdown === 'emp'" @click.stop>
               <label v-for="e in filtrosDisponiveis.empresas" :key="e.id" class="chk-item">
                 <input type="checkbox" :value="e.id" v-model="filtros.empresas" @change="carregar" />
                 {{ e.nome }}
@@ -93,91 +85,91 @@
         <!-- Limpar -->
         <button class="fi-clear" @click="limparFiltros" title="Limpar filtros">✕</button>
       </div>
+    </Teleport>
 
-      <div class="dash-content">
+    <!-- Loading / erro -->
+    <div v-if="carregando && !dados" class="state-msg">
+      <AppSpinner /> Carregando dashboard...
+    </div>
+    <div v-else-if="erro" class="state-msg state-msg--erro">{{ erro }}</div>
 
-        <!-- Cards KPI -->
-        <div class="section-title">INDICADORES</div>
-        <div class="cards-row">
-          <div class="kpi-card kpi-receita">
-            <div class="kpi-header">
-              <span class="kpi-label">RECEITA TOTAL</span>
-              <span class="kpi-icon kpi-icon--green">↑</span>
-            </div>
-            <div class="kpi-value kpi-value--green">{{ fmt(dados.cards.receita_total) }}</div>
-            <div class="kpi-sub">Ano {{ filtros.ano }}</div>
+    <!-- Conteúdo -->
+    <div v-else-if="dados" class="dash-content">
+
+      <!-- Cards KPI -->
+      <div class="section-title">INDICADORES</div>
+      <div class="cards-row">
+        <div class="kpi-card kpi-receita">
+          <div class="kpi-header">
+            <span class="kpi-label">RECEITA TOTAL</span>
+            <span class="kpi-icon kpi-icon--green">↑</span>
           </div>
-          <div class="kpi-card kpi-despesa">
-            <div class="kpi-header">
-              <span class="kpi-label">DESPESA TOTAL</span>
-              <span class="kpi-icon kpi-icon--red">↓</span>
-            </div>
-            <div class="kpi-value kpi-value--red">{{ fmt(dados.cards.despesa_total) }}</div>
-            <div class="kpi-sub">Ano {{ filtros.ano }}</div>
-          </div>
-          <div class="kpi-card kpi-resultado">
-            <div class="kpi-header">
-              <span class="kpi-label">RESULTADO</span>
-              <span class="kpi-icon kpi-icon--accent">◈</span>
-            </div>
-            <div class="kpi-value" :class="dados.cards.resultado >= 0 ? 'kpi-value--green' : 'kpi-value--red'">
-              {{ fmt(dados.cards.resultado) }}
-            </div>
-            <div class="kpi-sub">Receita − Despesa + Saldo CC</div>
-          </div>
-          <div class="kpi-card kpi-saldo">
-            <div class="kpi-header">
-              <span class="kpi-label">SALDO CONTAS</span>
-              <span class="kpi-icon kpi-icon--yellow">⬡</span>
-            </div>
-            <div class="kpi-value kpi-value--yellow">{{ fmt(dados.cards.saldo_contas_correntes) }}</div>
-            <div class="kpi-sub">Saldo inicial cadastrado</div>
-          </div>
+          <div class="kpi-value kpi-value--green">{{ fmt(dados.cards.receita_total) }}</div>
+          <div class="kpi-sub">Ano {{ filtros.ano }}</div>
         </div>
-
-        <!-- Gráficos -->
-        <div class="charts-row">
-          <!-- Receita vs Despesa -->
-          <div class="chart-card">
-            <div class="chart-header">
-              <div>
-                <div class="chart-title">Receita vs Despesa</div>
-                <div class="chart-sub">Evolução mensal — {{ filtros.ano }}</div>
-              </div>
-              <div class="chart-legend">
-                <span class="leg-dot" style="background:var(--green)"></span>Receita
-                <span class="leg-dot" style="background:var(--red)"></span>Despesa
-                <span class="leg-dot" style="background:var(--accent)"></span>Resultado
-              </div>
-            </div>
-            <div class="chart-wrap">
-              <canvas ref="canvasRecDesp"></canvas>
-            </div>
+        <div class="kpi-card kpi-despesa">
+          <div class="kpi-header">
+            <span class="kpi-label">DESPESA TOTAL</span>
+            <span class="kpi-icon kpi-icon--red">↓</span>
           </div>
-
-          <!-- Resultado Acumulado -->
-          <div class="chart-card">
-            <div class="chart-header">
-              <div>
-                <div class="chart-title">Resultado Acumulado</div>
-                <div class="chart-sub">Progressão mensal — {{ filtros.ano }}</div>
-              </div>
-              <div class="chart-legend">
-                <span class="leg-dot" style="background:var(--accent)"></span>Acumulado
-                <span class="leg-dot" style="background:var(--green)"></span>Positivo
-                <span class="leg-dot" style="background:var(--red)"></span>Negativo
-              </div>
-            </div>
-            <div class="chart-wrap">
-              <canvas ref="canvasAcum"></canvas>
-            </div>
-          </div>
+          <div class="kpi-value kpi-value--red">{{ fmt(dados.cards.despesa_total) }}</div>
+          <div class="kpi-sub">Ano {{ filtros.ano }}</div>
         </div>
-
+        <div class="kpi-card kpi-resultado">
+          <div class="kpi-header">
+            <span class="kpi-label">RESULTADO</span>
+            <span class="kpi-icon kpi-icon--accent">◈</span>
+          </div>
+          <div class="kpi-value" :class="dados.cards.resultado >= 0 ? 'kpi-value--green' : 'kpi-value--red'">
+            {{ fmt(dados.cards.resultado) }}
+          </div>
+          <div class="kpi-sub">Receita − Despesa + Saldo CC</div>
+        </div>
+        <div class="kpi-card kpi-saldo">
+          <div class="kpi-header">
+            <span class="kpi-label">SALDO CONTAS</span>
+            <span class="kpi-icon kpi-icon--yellow">⬡</span>
+          </div>
+          <div class="kpi-value kpi-value--yellow">{{ fmt(dados.cards.saldo_contas_correntes) }}</div>
+          <div class="kpi-sub">Saldo inicial cadastrado</div>
+        </div>
       </div>
-    </template>
 
-    <!-- Estado vazio -->
+      <!-- Gráficos -->
+      <div class="charts-row">
+        <div class="chart-card">
+          <div class="chart-header">
+            <div>
+              <div class="chart-title">Receita vs Despesa</div>
+              <div class="chart-sub">Evolução mensal — {{ filtros.ano }}</div>
+            </div>
+            <div class="chart-legend">
+              <span class="leg-dot" style="background:var(--green)"></span>Receita
+              <span class="leg-dot" style="background:var(--red)"></span>Despesa
+              <span class="leg-dot" style="background:var(--accent)"></span>Resultado
+            </div>
+          </div>
+          <div class="chart-wrap"><canvas ref="canvasRecDesp"></canvas></div>
+        </div>
+
+        <div class="chart-card">
+          <div class="chart-header">
+            <div>
+              <div class="chart-title">Resultado Acumulado</div>
+              <div class="chart-sub">Progressão mensal — {{ filtros.ano }}</div>
+            </div>
+            <div class="chart-legend">
+              <span class="leg-dot" style="background:var(--accent)"></span>Acumulado
+              <span class="leg-dot" style="background:var(--green)"></span>Positivo
+              <span class="leg-dot" style="background:var(--red)"></span>Negativo
+            </div>
+          </div>
+          <div class="chart-wrap"><canvas ref="canvasAcum"></canvas></div>
+        </div>
+      </div>
+
+    </div>
+
     <div v-else class="state-msg">Nenhum dado disponível.</div>
 
   </div>
@@ -186,11 +178,12 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { Chart, registerables } from 'chart.js'
+import ChartDataLabels from 'chartjs-plugin-datalabels'
 import { useAuthStore } from '@/stores/auth'
 import { fetchDashboard, type DashboardData, type FiltrosDisponiveis } from '@/api/dashboard'
 import AppSpinner from '@/components/ui/AppSpinner.vue'
 
-Chart.register(...registerables)
+Chart.register(...registerables, ChartDataLabels)
 
 const auth = useAuthStore()
 
@@ -237,6 +230,7 @@ function fmtK(v: number) {
   const sign = v < 0 ? '-' : ''
   if (abs >= 1_000_000) return `${sign}R$${(abs / 1_000_000).toFixed(1)}M`
   if (abs >= 1_000)     return `${sign}R$${(abs / 1_000).toFixed(0)}K`
+  if (abs === 0)        return ''
   return fmt(v)
 }
 
@@ -245,6 +239,7 @@ function chartColors() {
   return {
     grid:          dark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.06)',
     tick:          dark ? '#4a6070' : '#8fa3b4',
+    label:         dark ? '#7a90a8' : '#4a6070',
     bg:            dark ? '#080c12' : '#fff',
     tooltip:       dark ? 'rgba(13,21,32,0.97)' : 'rgba(255,255,255,0.97)',
     tooltipBorder: dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)',
@@ -257,6 +252,7 @@ function buildChartRecDesp() {
   chartRecDesp?.destroy()
   const c  = chartColors()
   const ms = dados.value.grafico_mensal
+
   chartRecDesp = new Chart(canvasRecDesp.value, {
     type: 'bar',
     data: {
@@ -293,11 +289,35 @@ function buildChartRecDesp() {
           titleColor: c.tick, bodyColor: c.tooltipText, padding: 12,
           callbacks: { label: ctx => ` ${ctx.dataset.label}: ${fmtK(ctx.parsed.y)}` },
         },
+        datalabels: {
+          display: (ctx) => ctx.parsed.y !== 0,
+          font: { family: 'var(--mono)', size: 9, weight: 'bold' },
+          formatter: (v: number) => fmtK(v),
+          // Barras: label acima; Linha: label acima do ponto
+          anchor: (ctx) => ctx.dataset.type === 'line' ? 'end' : 'end',
+          align:  (ctx) => ctx.dataset.type === 'line' ? 'top' : 'top',
+          color:  (ctx) => {
+            if (ctx.dataset.label === 'Receita')   return '#22c55e'
+            if (ctx.dataset.label === 'Despesa')   return '#ef4444'
+            if (ctx.dataset.label === 'Resultado') return '#00e5ff'
+            return c.label
+          },
+          offset: 2,
+        },
       },
       scales: {
-        x: { grid: { display: false }, ticks: { color: c.tick, font: { family: 'var(--mono)', size: 10 } }, border: { display: false } },
-        y: { grid: { color: c.grid }, ticks: { color: c.tick, font: { family: 'var(--mono)', size: 10 }, callback: v => fmtK(Number(v)) }, border: { display: false } },
+        x: {
+          grid: { display: false },
+          ticks: { color: c.tick, font: { family: 'var(--mono)', size: 10 } },
+          border: { display: false },
+        },
+        y: {
+          grid: { color: c.grid },
+          ticks: { color: c.tick, font: { family: 'var(--mono)', size: 10 }, callback: v => fmtK(Number(v)) },
+          border: { display: false },
+        },
       },
+      layout: { padding: { top: 24 } },
     },
   })
 }
@@ -307,6 +327,7 @@ function buildChartAcum() {
   chartAcum?.destroy()
   const c  = chartColors()
   const ac = dados.value.grafico_resultado_acumulado
+
   chartAcum = new Chart(canvasAcum.value, {
     type: 'bar',
     data: {
@@ -338,18 +359,38 @@ function buildChartAcum() {
           titleColor: c.tick, bodyColor: c.tooltipText, padding: 12,
           callbacks: { label: ctx => ` ${ctx.dataset.label}: ${fmtK(ctx.parsed.y)}` },
         },
+        datalabels: {
+          display: (ctx) => ctx.parsed.y !== 0,
+          font: { family: 'var(--mono)', size: 9, weight: 'bold' },
+          formatter: (v: number) => fmtK(v),
+          anchor: 'end',
+          align:  (ctx) => ctx.dataset.label === 'Acumulado' ? 'top' : (ctx.parsed.y >= 0 ? 'top' : 'bottom'),
+          color: (ctx) => {
+            if (ctx.dataset.label === 'Acumulado') return '#00e5ff'
+            return ctx.parsed.y >= 0 ? '#22c55e' : '#ef4444'
+          },
+          offset: 2,
+        },
       },
       scales: {
-        x: { grid: { display: false }, ticks: { color: c.tick, font: { family: 'var(--mono)', size: 10 } }, border: { display: false } },
-        y: { grid: { color: c.grid }, ticks: { color: c.tick, font: { family: 'var(--mono)', size: 10 }, callback: v => fmtK(Number(v)) }, border: { display: false } },
+        x: {
+          grid: { display: false },
+          ticks: { color: c.tick, font: { family: 'var(--mono)', size: 10 } },
+          border: { display: false },
+        },
+        y: {
+          grid: { color: c.grid },
+          ticks: { color: c.tick, font: { family: 'var(--mono)', size: 10 }, callback: v => fmtK(Number(v)) },
+          border: { display: false },
+        },
       },
+      layout: { padding: { top: 24, bottom: 24 } },
     },
   })
 }
 
-// Reconstrói gráficos após o DOM atualizar com novos dados
+// Reconstrói após dados atualizados (flush:post garante DOM pronto)
 watch(dados, () => {
-  // flush: 'post' garante que o canvas já está no DOM com dimensões reais
   setTimeout(() => {
     buildChartRecDesp()
     buildChartAcum()
@@ -383,7 +424,6 @@ async function carregar() {
 
     dados.value = res
 
-    // Popula filtros disponíveis apenas quando não há filtros ativos
     const semFiltros =
       !filtros.empresas.length && !filtros.contas_correntes.length &&
       !filtros.departamentos.length && !filtros.categorias.length && !filtros.cliente
@@ -432,33 +472,34 @@ onBeforeUnmount(() => {
 <style scoped>
 .dash-root { display: flex; flex-direction: column; min-height: 100%; }
 
-/* ── Faixa de filtros ──────────────────────────────────────────────────── */
-.filter-strip {
+/* ── Filtros na topbar (via Teleport) ──────────────────────────────────── */
+.tf-inner {
   display: flex;
   align-items: flex-end;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding: 12px 0 16px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 20px;
+  gap: 8px;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  padding: 0 8px;
+  flex: 1;
 }
 
-.fi { display: flex; flex-direction: column; gap: 3px; }
-.fi--grow { flex: 1; min-width: 160px; }
+.fi { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
+.fi--grow { flex: 1; min-width: 120px; }
 
 .fi-label {
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: 8px;
   letter-spacing: 1.5px;
   color: var(--text3);
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .fi-select,
 .fi-input {
   font-family: var(--mono);
-  font-size: 11px;
-  padding: 5px 9px;
+  font-size: 10px;
+  padding: 4px 8px;
   border-radius: 6px;
   border: 1px solid var(--border2);
   background: var(--bg3);
@@ -467,7 +508,8 @@ onBeforeUnmount(() => {
   cursor: pointer;
   transition: border-color 0.2s;
   appearance: none;
-  height: 30px;
+  height: 28px;
+  white-space: nowrap;
 }
 .fi-select:focus, .fi-input:focus { border-color: rgba(0,229,255,0.4); }
 .fi-input::placeholder { color: var(--text3); }
@@ -478,11 +520,11 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-width: 100px;
+  min-width: 80px;
   cursor: pointer;
   text-align: left;
 }
-.chv { font-size: 10px; color: var(--text3); margin-left: 6px; }
+.chv { font-size: 9px; color: var(--text3); margin-left: 4px; }
 
 .fi-dropdown {
   position: absolute;
@@ -495,10 +537,11 @@ onBeforeUnmount(() => {
   border: 1px solid var(--border2);
   border-radius: 8px;
   box-shadow: var(--shadow);
-  z-index: 100;
+  z-index: 200;
   padding: 4px 0;
 }
 .fi-dropdown--wide { min-width: 260px; }
+.fi-dropdown--right { left: auto; right: 0; }
 
 .chk-item {
   display: flex;
@@ -514,15 +557,16 @@ onBeforeUnmount(() => {
 .chk-item input { accent-color: var(--accent); cursor: pointer; flex-shrink: 0; }
 
 .fi-clear {
-  padding: 5px 9px;
-  height: 30px;
+  padding: 4px 8px;
+  height: 28px;
   border-radius: 6px;
   border: 1px solid var(--border2);
   background: var(--bg3);
   color: var(--text3);
   cursor: pointer;
-  font-size: 11px;
+  font-size: 10px;
   align-self: flex-end;
+  flex-shrink: 0;
   transition: var(--trans);
 }
 .fi-clear:hover { border-color: var(--red); color: var(--red); }
@@ -566,10 +610,10 @@ onBeforeUnmount(() => {
 .kpi-card::before {
   content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
 }
-.kpi-receita::before  { background: var(--green); }
-.kpi-despesa::before  { background: var(--red); }
+.kpi-receita::before   { background: var(--green); }
+.kpi-despesa::before   { background: var(--red); }
 .kpi-resultado::before { background: var(--accent); }
-.kpi-saldo::before    { background: var(--yellow); }
+.kpi-saldo::before     { background: var(--yellow); }
 .kpi-card:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
 
 .kpi-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 12px; }
@@ -612,5 +656,5 @@ onBeforeUnmount(() => {
 }
 .leg-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 3px; }
 
-.chart-wrap { position: relative; height: 280px; }
+.chart-wrap { position: relative; height: 300px; }
 </style>

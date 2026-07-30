@@ -11,6 +11,9 @@
       <span v-if="pageSubtitle">{{ pageSubtitle }}</span>
     </div>
 
+    <!-- Slot para filtros injetados via Teleport (ex: Dashboard) -->
+    <div id="topbar-filters" class="topbar-filters-slot"></div>
+
     <!-- Direita -->
     <div class="topbar-right">
       <!-- Live indicator -->
@@ -98,10 +101,17 @@ const pageSubtitle = computed(() => {
 @media (max-width: 768px) { .hamburger { display: flex; } }
 
 .topbar-title {
-  font-size: 16px; font-weight: 700; flex: 1; min-width: 0;
+  font-size: 16px; font-weight: 700; flex-shrink: 0;
   color: var(--text);
 }
 .topbar-title span { color: var(--accent); margin-left: 6px; }
+
+.topbar-filters-slot {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
 
 .topbar-right { display: flex; align-items: center; gap: 10px; }
 
