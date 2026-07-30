@@ -31,7 +31,10 @@ WORKDIR /app
 COPY --from=builder /app/omie-sync-api .
 COPY --from=builder /go/bin/migrate /usr/local/bin/migrate
 COPY --from=builder /app/db/migrations ./db/migrations
+COPY --from=builder /app/entrypoint.sh .
+
+RUN chmod +x entrypoint.sh
 
 EXPOSE 8080
 
-CMD ["./omie-sync-api"]
+CMD ["./entrypoint.sh"]
