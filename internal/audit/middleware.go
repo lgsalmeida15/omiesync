@@ -37,15 +37,23 @@ type responseRecorder struct {
 	http.ResponseWriter
 	status int
 	buf    bytes.Buffer
+	// stream marca respostas SSE, cujo corpo não deve ser acumulado: a conexão
+	// dura minutos ou horas e o buffer cresceria sem limite.
+	stream bool
 }
 
 func (rr *responseRecorder) WriteHeader(code int) {
 	rr.status = code
+	if strings.HasPrefix(rr.Header().Get("Content-Type"), "text/event-stream") {
+		rr.stream = true
+	}
 	rr.ResponseWriter.WriteHeader(code)
 }
 
 func (rr *responseRecorder) Write(b []byte) (int, error) {
-	rr.buf.Write(b)
+	if !rr.stream {
+		rr.buf.Write(b)
+	}
 	return rr.ResponseWriter.Write(b)
 }
 
@@ -55,6 +63,13 @@ func (rr *responseRecorder) Flush() {
 	if f, ok := rr.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}
+}
+
+// Unwrap expõe o ResponseWriter original ao http.ResponseController (Go 1.20+).
+// Sem isso, SetWriteDeadline no handler SSE retorna ErrNotSupported e o
+// WriteTimeout global continua derrubando o stream.
+func (rr *responseRecorder) Unwrap() http.ResponseWriter {
+	return rr.ResponseWriter
 }
 
 // Middleware retorna um handler que grava audit_logs de forma assíncrona.

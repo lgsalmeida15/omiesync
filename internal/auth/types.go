@@ -21,6 +21,10 @@ type RefreshToken struct {
 	ExpiresAt time.Time
 	Revoked   bool
 	CreatedAt time.Time
+	// GrupoID é o grupo ativo quando a sessão foi criada. Sem ele o /auth/refresh
+	// não teria como saber qual grupo o usuário multi-grupo selecionou — o refresh
+	// token é opaco e não carrega claims.
+	GrupoID string
 }
 
 type GrupoInfo struct {

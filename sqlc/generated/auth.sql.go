@@ -53,7 +53,7 @@ func (q *Queries) GetGruposByUsuarioID(ctx context.Context, usuarioID pgtype.UUI
 }
 
 const getRefreshToken = `-- name: GetRefreshToken :one
-SELECT id, usuario_id, token, expires_at, revoked, created_at
+SELECT id, usuario_id, token, expires_at, revoked, created_at, grupo_id
 FROM _etl.refresh_tokens
 WHERE token = $1
   AND revoked = false
@@ -70,6 +70,7 @@ func (q *Queries) GetRefreshToken(ctx context.Context, token string) (EtlRefresh
 		&i.ExpiresAt,
 		&i.Revoked,
 		&i.CreatedAt,
+		&i.GrupoID,
 	)
 	return i, err
 }
@@ -147,19 +148,25 @@ func (q *Queries) GetUsuarioByID(ctx context.Context, id pgtype.UUID) (GetUsuari
 }
 
 const insertRefreshToken = `-- name: InsertRefreshToken :one
-INSERT INTO _etl.refresh_tokens (usuario_id, token, expires_at)
-VALUES ($1, $2, $3)
-RETURNING id, usuario_id, token, expires_at, revoked, created_at
+INSERT INTO _etl.refresh_tokens (usuario_id, token, expires_at, grupo_id)
+VALUES ($1, $2, $3, $4)
+RETURNING id, usuario_id, token, expires_at, revoked, created_at, grupo_id
 `
 
 type InsertRefreshTokenParams struct {
 	UsuarioID pgtype.UUID        `json:"usuario_id"`
 	Token     string             `json:"token"`
 	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	GrupoID   pgtype.UUID        `json:"grupo_id"`
 }
 
 func (q *Queries) InsertRefreshToken(ctx context.Context, arg InsertRefreshTokenParams) (EtlRefreshToken, error) {
-	row := q.db.QueryRow(ctx, insertRefreshToken, arg.UsuarioID, arg.Token, arg.ExpiresAt)
+	row := q.db.QueryRow(ctx, insertRefreshToken,
+		arg.UsuarioID,
+		arg.Token,
+		arg.ExpiresAt,
+		arg.GrupoID,
+	)
 	var i EtlRefreshToken
 	err := row.Scan(
 		&i.ID,
@@ -168,6 +175,7 @@ func (q *Queries) InsertRefreshToken(ctx context.Context, arg InsertRefreshToken
 		&i.ExpiresAt,
 		&i.Revoked,
 		&i.CreatedAt,
+		&i.GrupoID,
 	)
 	return i, err
 }

@@ -34,7 +34,7 @@ func (m *mockRepo) GetUsuarioByID(_ context.Context, _ string) (*Usuario, error)
 	return m.usuario, nil
 }
 
-func (m *mockRepo) InsertRefreshToken(_ context.Context, _, token string, exp time.Time) (*RefreshToken, error) {
+func (m *mockRepo) InsertRefreshToken(_ context.Context, _, token string, exp time.Time, _ string) (*RefreshToken, error) {
 	if m.insertErr != nil {
 		return nil, m.insertErr
 	}

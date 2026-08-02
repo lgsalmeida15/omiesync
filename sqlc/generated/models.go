@@ -101,6 +101,13 @@ type EtlRefreshToken struct {
 	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 	Revoked   bool               `json:"revoked"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	GrupoID   pgtype.UUID        `json:"grupo_id"`
+}
+
+type EtlSchemaVersion struct {
+	SchemaName string             `json:"schema_name"`
+	Version    int32              `json:"version"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
 }
 
 type EtlSyncControl struct {
@@ -184,6 +191,7 @@ type EtlUsuarioGrupo struct {
 	UsuarioID pgtype.UUID        `json:"usuario_id"`
 	GrupoID   pgtype.UUID        `json:"grupo_id"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	Role      string             `json:"role"`
 }
 
 type EtlWebhook struct {

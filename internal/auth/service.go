@@ -134,7 +134,10 @@ func (s *service) issueTokens(ctx context.Context, userID, grupoID, email, role 
 		return nil, fmt.Errorf("auth.service.issueTokens gerar refresh token: %w", err)
 	}
 
-	if _, err := s.repo.InsertRefreshToken(ctx, userID, refreshToken, time.Now().Add(refreshTokenDuration)); err != nil {
+	// O grupo ativo viaja com o refresh token: /auth/refresh recebe só o token
+	// opaco, sem as claims do access token expirado, e sem isso não teria como
+	// saber qual grupo o usuário multi-grupo havia selecionado.
+	if _, err := s.repo.InsertRefreshToken(ctx, userID, refreshToken, time.Now().Add(refreshTokenDuration), grupoID); err != nil {
 		return nil, fmt.Errorf("auth.service.issueTokens salvar refresh token: %w", err)
 	}
 
@@ -180,8 +183,14 @@ func (s *service) Refresh(ctx context.Context, refreshToken string) (*LoginRespo
 		return nil, apperror.Unauthorized("usuário inativo")
 	}
 
-	// Refresh preserva o grupoID e role do contexto atual via junction table
-	grupoIDForRefresh := usuario.GrupoID
+	// O grupo vem do refresh token, não de usuarios.grupo_id. Usar o valor do
+	// cadastro devolvia o usuário multi-grupo ao grupo padrão a cada renovação
+	// silenciosa — a ~15 min do login a tela trocava de grupo sozinha.
+	// Fallback para o cadastro cobre tokens emitidos antes da migration 000029.
+	grupoIDForRefresh := rt.GrupoID
+	if grupoIDForRefresh == "" {
+		grupoIDForRefresh = usuario.GrupoID
+	}
 	roleForRefresh, _ := s.repo.GetRoleNoGrupo(ctx, usuario.ID, grupoIDForRefresh)
 	if roleForRefresh == "" {
 		roleForRefresh = usuario.Role
@@ -196,7 +205,8 @@ func (s *service) Refresh(ctx context.Context, refreshToken string) (*LoginRespo
 		return nil, fmt.Errorf("auth.service.Refresh gerar novo refresh token: %w", err)
 	}
 
-	if _, err := s.repo.InsertRefreshToken(ctx, usuario.ID, newRefreshToken, time.Now().Add(refreshTokenDuration)); err != nil {
+	// Propaga o grupo para o token rotacionado, senão a próxima renovação o perderia.
+	if _, err := s.repo.InsertRefreshToken(ctx, usuario.ID, newRefreshToken, time.Now().Add(refreshTokenDuration), grupoIDForRefresh); err != nil {
 		return nil, fmt.Errorf("auth.service.Refresh salvar novo refresh token: %w", err)
 	}
 

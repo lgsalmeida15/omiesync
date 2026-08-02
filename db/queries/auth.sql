@@ -11,12 +11,12 @@ WHERE id = $1
   AND deleted_at IS NULL;
 
 -- name: InsertRefreshToken :one
-INSERT INTO _etl.refresh_tokens (usuario_id, token, expires_at)
-VALUES ($1, $2, $3)
+INSERT INTO _etl.refresh_tokens (usuario_id, token, expires_at, grupo_id)
+VALUES ($1, $2, $3, $4)
 RETURNING *;
 
 -- name: GetRefreshToken :one
-SELECT id, usuario_id, token, expires_at, revoked, created_at
+SELECT id, usuario_id, token, expires_at, revoked, created_at, grupo_id
 FROM _etl.refresh_tokens
 WHERE token = $1
   AND revoked = false

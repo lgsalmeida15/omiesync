@@ -221,6 +221,14 @@ func (h *Handler) Stream(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Accel-Buffering", "no") // desativa buffer do nginx
 	w.WriteHeader(http.StatusOK)
 
+	// Remove o WriteTimeout global (15s) apenas nesta conexão. Como o heartbeat
+	// também é de 15s, o deadline vencia junto com ele e o stream caía o tempo
+	// todo — no browser aparecia como ERR_HTTP2_PROTOCOL_ERROR. As demais rotas
+	// mantêm o timeout do servidor.
+	// Se falhar (ResponseWriter sem Unwrap na cadeia de middlewares), o stream ainda
+	// funciona — apenas volta a cair a cada 15s, como antes desta correção.
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Time{})
+
 	ch, cancel := h.hub.Subscribe(empresaID)
 	defer cancel()
 
