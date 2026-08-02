@@ -9,9 +9,19 @@ import (
 )
 
 // CurrentSchemaVersion é incrementado sempre que ProvisionSchema ganhar novas
-// tabelas, views ou índices. O worker só re-provisiona quando a versão gravada
-// em _etl.schema_versions for menor que este valor.
-const CurrentSchemaVersion = 5
+// tabelas, views, índices ou blocos de auto-upgrade. O worker só re-provisiona
+// quando a versão gravada em _etl.schema_versions for menor que este valor
+// (NeedsProvisioning + worker.go:129).
+//
+// ESQUECER DE INCREMENTAR É SILENCIOSO: o bloco de auto-upgrade novo simplesmente
+// nunca executa, e o schema fica com a estrutura antiga sem nenhum erro. Foi o que
+// aconteceu com os blocos v6 e v7, ambos entregues com a constante ainda em 5.
+//
+// Histórico:
+//	v5 — remove a matvw_gerencial_resultado unificada
+//	v6 — movimentos_financeiros: carga completa, renomeia colunas, recria as matvw
+//	v7 — extrato/contas_correntes: coluna fluxo_caixa, recria as matvw
+const CurrentSchemaVersion = 7
 
 // Provisioner cria e inicializa schemas de tenant.
 type Provisioner struct {
