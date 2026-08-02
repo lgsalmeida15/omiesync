@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
 
@@ -51,14 +52,22 @@ type OmieMovimentoDepartamento struct {
 }
 
 // OmieMovimentoDetalhes — campos do bloco "detalhes" na resposta /financas/mf/.
+//
+// Atenção: nCodTitulo NÃO identifica o movimento. Uma baixa em lote liquida N títulos
+// com um único nCodMovCC, e lançamentos avulsos (tarifa, transferência) chegam com
+// nCodTitulo = 0. Nenhum dos dois serve como chave — por isso a tabela é recarregada
+// por completo a cada sync.
 type OmieMovimentoDetalhes struct {
-	CodigoLancamento    int64   `json:"nCodTitulo"`
+	CodigoTitulo        int64   `json:"nCodTitulo"`
 	CodigoTitRepet      int64   `json:"nCodTitRepet"`
+	CodigoMovCC         int64   `json:"nCodMovCC"`
+	CodigoMovCCRepet    int64   `json:"nCodMovCCRepet"`
 	DataRegistro        string  `json:"dDtRegistro"`
 	DataEmissao         string  `json:"dDtEmissao"`
 	DataVencimento      string  `json:"dDtVenc"`
 	DataPagamento       string  `json:"dDtPagamento"`
 	ValorTitulo         float64 `json:"nValorTitulo"`
+	ValorMovCC          float64 `json:"nValorMovCC"`
 	Status              string  `json:"cStatus"`
 	Grupo               string  `json:"cGrupo"`
 	CodigoContaCorrente int64   `json:"nCodCC"`
@@ -99,37 +108,36 @@ func NewMovimentosFinanceirosExecutor(pool *pgxpool.Pool, log zerolog.Logger) *M
 
 func (e *MovimentosFinanceirosExecutor) Nome() string { return "movimentos_financeiros" }
 
-// buildMFParams monta os parâmetros de data para o endpoint /financas/mf/.
-// Full → período amplo (01/01/2000 até hoje) para capturar todos os movimentos.
-// Incremental → apenas registros incluídos ou alterados hoje.
-func buildMFParams(pagina, pageSize int, opts worker.SyncOptions) mfPaginacaoParams {
-	p := mfPaginacaoParams{
+// buildMFParams monta os parâmetros do endpoint /financas/mf/.
+//
+// Incremental e full são idênticos: sem filtro de data, a API devolve todos os
+// movimentos de conta corrente pela paginação natural. Os campos dDtIncDe/dDtIncAte/
+// dDtAltDe/dDtAltAte têm omitempty e simplesmente não são serializados.
+//
+// A janela incremental de D-2 foi removida: como nCodTitulo não identifica o movimento,
+// não havia como mesclar um recorte parcial sem perder registros. Cada sync recarrega
+// tudo. A estratégia de incremental será redefinida a partir da análise do dado completo.
+func buildMFParams(pagina, pageSize int, _ worker.SyncOptions) mfPaginacaoParams {
+	return mfPaginacaoParams{
 		NPagina:             pagina,
 		NRegPorPagina:       pageSize,
 		ExibirDepartamentos: "S",
 		TpLancamento:        "CC",
 	}
-	if !opts.Full {
-		// Incremental: janela de D-2 até hoje — captura lançamentos com até 2 dias de atraso
-		hoje := time.Now().Format("02/01/2006")
-		doisDiasAtras := time.Now().AddDate(0, 0, -2).Format("02/01/2006")
-		p.DtIncDe = doisDiasAtras
-		p.DtIncAte = hoje
-		p.DtAltDe = doisDiasAtras
-		p.DtAltAte = hoje
-	}
-	// Full: sem filtro de data — retorna todos os CC via paginação natural da API
-	return p
 }
 
 func (e *MovimentosFinanceirosExecutor) Execute(ctx context.Context, client *omie.Client, schema string, opts worker.SyncOptions, jobID string, rep progress.Reporter, cfg *omie_config.EndpointConfig) error {
 	_ = rep.Start(ctx, jobID, "movimentos_financeiros")
 	pagina := 1
 	total := 0
+	totalEsperado := 0
+
+	var acumulados []OmieMovimento
+	var acumuladosRaw []json.RawMessage
 
 	pageSize := cfg.PageSize
 	if pageSize <= 0 {
-		pageSize = 50
+		pageSize = 500
 	}
 
 	for {
@@ -195,11 +203,12 @@ func (e *MovimentosFinanceirosExecutor) Execute(ctx context.Context, client *omi
 			break
 		}
 
-		if len(movimentos) > 0 {
-			if err := upsertMovimentos(ctx, e.pool, schema, opts.EmpresaID, movimentos, movimentosRaw); err != nil {
-				_ = rep.Fail(ctx, jobID, "movimentos_financeiros", err, client.LastMaskedPayload, string(client.LastResponseMeta))
-				return fmt.Errorf("etl.movimentos_financeiros upsert página %d: %w", pagina, err)
-			}
+		// Acumula em memória: a gravação só acontece depois que todas as páginas
+		// chegaram, para que o DELETE + INSERT caibam numa única transação curta.
+		acumulados = append(acumulados, movimentos...)
+		acumuladosRaw = append(acumuladosRaw, movimentosRaw...)
+		if nTotRegistros > 0 {
+			totalEsperado = nTotRegistros
 		}
 
 		total += len(movimentos)
@@ -212,100 +221,129 @@ func (e *MovimentosFinanceirosExecutor) Execute(ctx context.Context, client *omi
 		pagina++
 	}
 
-	_ = rep.Done(ctx, jobID, "movimentos_financeiros", total)
+	// Troca atômica: os leitores enxergam o dado anterior até o COMMIT, e uma falha
+	// em qualquer ponto faz rollback sem destruir o que já existia.
+	gravados, err := replaceMovimentos(ctx, e.pool, schema, opts.EmpresaID, acumulados, acumuladosRaw)
+	if err != nil {
+		_ = rep.Fail(ctx, jobID, "movimentos_financeiros", err, client.LastMaskedPayload, string(client.LastResponseMeta))
+		return fmt.Errorf("etl.movimentos_financeiros gravação: %w", err)
+	}
+
+	// Reconciliação: sem chave de negócio, divergência silenciosa é o risco principal.
+	if totalEsperado > 0 && gravados != totalEsperado {
+		e.log.Warn().
+			Str("job_id", jobID).
+			Int("nTotRegistros_omie", totalEsperado).
+			Int("gravados", gravados).
+			Int("diferenca", totalEsperado-gravados).
+			Msg("movimentos_financeiros: divergência entre o total informado pelo Omie e o gravado")
+	}
+
+	_ = rep.Done(ctx, jobID, "movimentos_financeiros", gravados)
 	return nil
 }
 
-func (e *MovimentosFinanceirosExecutor) ExecutePage(ctx context.Context, client *omie.Client, schema string, opts worker.SyncOptions, pagina int, cfg *omie_config.EndpointConfig) (int, error) {
-	pageSize := cfg.PageSize
-	if pageSize <= 0 {
-		pageSize = 50
-	}
-
-	params := buildMFParams(pagina, pageSize, opts)
-
-	var resp map[string]json.RawMessage
-	var fetchErr error
-	for attempt := 0; attempt < mfMaxRetries; attempt++ {
-		if attempt > 0 {
-			wait := time.Duration(attempt*10) * time.Second
-			select {
-			case <-ctx.Done():
-				return 0, ctx.Err()
-			case <-time.After(wait):
-			}
-		}
-		fetchErr = client.CallPublic(ctx, cfg.EndpointPath, cfg.Action, params, &resp)
-		if fetchErr == nil || !isMFRetryable(fetchErr) {
-			break
-		}
-	}
-	if fetchErr != nil {
-		return 0, fetchErr
-	}
-
-	dataRaw, ok := resp[cfg.ArrayField]
-	if !ok {
-		return 0, fmt.Errorf("campo %s não encontrado", cfg.ArrayField)
-	}
-
-	var movimentos []OmieMovimento
-	if err := json.Unmarshal(dataRaw, &movimentos); err != nil {
-		return 0, fmt.Errorf("erro ao decodificar movimentos: %w", err)
-	}
-
-	var movimentosRaw []json.RawMessage
-	_ = json.Unmarshal(dataRaw, &movimentosRaw)
-
-	if len(movimentos) > 0 {
-		if err := upsertMovimentos(ctx, e.pool, schema, opts.EmpresaID, movimentos, movimentosRaw); err != nil {
-			return 0, err
-		}
-	}
-
-	return len(movimentos), nil
+// ExecutePage existe apenas para satisfazer worker.Executor. Este executor NÃO suporta
+// sub-jobs por página: a gravação é uma troca completa por empresa (DELETE + COPY numa
+// transação), então cada página escrita isoladamente apagaria as anteriores.
+//
+// Falha explícita em vez de silenciosa — se um dia o PageWorker for ligado, o erro
+// aparece no job em vez de a tabela ficar só com a última página.
+func (e *MovimentosFinanceirosExecutor) ExecutePage(_ context.Context, _ *omie.Client, _ string, _ worker.SyncOptions, _ int, _ *omie_config.EndpointConfig) (int, error) {
+	return 0, fmt.Errorf("etl.movimentos_financeiros: executor não suporta sub-jobs por página; usar Execute (carga completa transacional)")
 }
 
-func upsertMovimentos(ctx context.Context, pool *pgxpool.Pool, schema string, empresaID string, items []OmieMovimento, raws []json.RawMessage) error {
+// replaceMovimentos troca todo o conjunto de movimentos da empresa por `items`, dentro
+// de uma única transação. Retorna quantas linhas foram gravadas.
+//
+// A tabela não tem chave de negócio (ver comentário em OmieMovimentoDetalhes), então a
+// corretude depende inteiramente desta transação: sem ela, um sync repetido duplicaria
+// tudo. DELETE e COPY precisam permanecer no mesmo BEGIN.
+//
+// O escopo é SEMPRE por empresa_id — o schema é do grupo e abriga várias empresas.
+// Um TRUNCATE aqui apagaria os dados das demais.
+func replaceMovimentos(
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	schema string,
+	empresaID string,
+	items []OmieMovimento,
+	raws []json.RawMessage,
+) (int, error) {
+	// Guarda: resposta vazia não apaga o que já existe. Uma falha transitória do Omie
+	// que devolva zero registros zeraria a empresa inteira.
+	if len(items) == 0 {
+		return 0, nil
+	}
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("replaceMovimentos begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }() // no-op após o commit
+
+	if _, err := tx.Exec(ctx,
+		fmt.Sprintf("DELETE FROM %s.movimentos_financeiros WHERE empresa_id = $1", schema),
+		empresaID,
+	); err != nil {
+		return 0, fmt.Errorf("replaceMovimentos delete: %w", err)
+	}
+
+	rows := make([][]any, 0, len(items))
 	for i, it := range items {
 		d := it.Detalhes
-		r := it.Resumo
-		if d.CodigoLancamento == 0 {
-			continue
-		}
+
 		raw := toJSON(it)
 		if i < len(raws) {
 			raw = raws[i]
 		}
-		_, err := pool.Exec(ctx, fmt.Sprintf(`
-			INSERT INTO %s.movimentos_financeiros
-				(empresa_id, codigo_lancamento, data_lancamento, valor, tipo,
-				 codigo_conta_corrente, codigo_categoria, historico, raw, synced_at)
-			VALUES ($1, $2, NULLIF($3,'')::date, $4, $5, $6, $7, $8, $9, NOW())
-			ON CONFLICT (empresa_id, codigo_lancamento) DO UPDATE SET
-				data_lancamento       = EXCLUDED.data_lancamento,
-				valor                 = EXCLUDED.valor,
-				tipo                  = EXCLUDED.tipo,
-				codigo_conta_corrente = EXCLUDED.codigo_conta_corrente,
-				codigo_categoria      = EXCLUDED.codigo_categoria,
-				historico             = EXCLUDED.historico,
-				raw                   = EXCLUDED.raw,
-				synced_at             = NOW()
-		`, schema),
+
+		// nCodTitulo = 0 significa lançamento avulso (tarifa, transferência): sem título.
+		// Antes esses registros eram descartados em silêncio.
+		var codigoTitulo *int64
+		if d.CodigoTitulo != 0 {
+			v := d.CodigoTitulo
+			codigoTitulo = &v
+		}
+
+		// Lançamento avulso não traz nValorTitulo — o valor vem em nValorMovCC.
+		valor := d.ValorTitulo
+		if valor == 0 {
+			valor = d.ValorMovCC
+		}
+
+		rows = append(rows, []any{
 			empresaID,
-			d.CodigoLancamento,
+			codigoTitulo,
+			d.NumeroTitulo,   // cNumTitulo
+			d.CodigoMovCC,    // nCodMovCC
+			d.CodigoMovCCRepet,
+			d.CodigoTitRepet,
 			parseOmieDate(d.DataRegistro), // dDtRegistro — data de criação do lançamento
-			d.ValorTitulo,          // nValorTitulo — valor nominal (sempre preenchido)
-			d.Grupo+" "+d.Natureza, // ex: "CONTA_A_RECEBER R"
+			valor,
+			d.Grupo + " " + d.Natureza, // ex: "CONTA_A_RECEBER R"
 			d.CodigoContaCorrente,
 			d.CodigoCategoria,
-			d.NumeroTitulo,
 			raw,
-		)
-		if err != nil {
-			return fmt.Errorf("upsertMovimentos [%d]: %w", d.CodigoLancamento, err)
-		}
-		_ = r // resumo fica no raw; ValorPago não é usado como coluna separada
+		})
 	}
-	return nil
+
+	copied, err := tx.CopyFrom(ctx,
+		pgx.Identifier{schema, "movimentos_financeiros"},
+		[]string{
+			"empresa_id", "codigo_titulo", "numero_titulo", "codigo_mov_cc",
+			"codigo_mov_cc_repet", "codigo_titrepet", "data_lancamento", "valor",
+			"tipo", "codigo_conta_corrente", "codigo_categoria", "raw",
+		},
+		pgx.CopyFromRows(rows),
+	)
+	if err != nil {
+		return 0, fmt.Errorf("replaceMovimentos copy: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("replaceMovimentos commit: %w", err)
+	}
+
+	return int(copied), nil
 }

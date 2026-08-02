@@ -48,7 +48,7 @@ func (h *Handler) Routes() http.Handler {
 		"SELECT id, codigo_lancamento, data_vencimento, valor_documento, valor_recebido, status_titulo, codigo_cliente, observacao, synced_at FROM %s.contas_receber ORDER BY data_vencimento DESC"))
 
 	r.Get("/{empresaID}/movimentos", h.queryHandler("movimentos_financeiros",
-		"SELECT id, codigo_lancamento, data_lancamento, valor, tipo, codigo_conta_corrente, historico, synced_at FROM %s.movimentos_financeiros ORDER BY data_lancamento DESC"))
+		"SELECT id, codigo_titulo, numero_titulo, codigo_mov_cc, data_lancamento, valor, tipo, codigo_conta_corrente, codigo_categoria, synced_at FROM %s.movimentos_financeiros ORDER BY data_lancamento DESC"))
 
 	r.Get("/{empresaID}/extrato", h.queryHandler("extrato",
 		"SELECT id, codigo_lancamento, data_lancamento, valor, tipo_lancamento, codigo_conta_corrente, descricao, synced_at FROM %s.extrato ORDER BY data_lancamento DESC"))

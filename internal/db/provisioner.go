@@ -153,19 +153,24 @@ func (p *Provisioner) ProvisionSchema(ctx context.Context, schemaName string) er
 		)`, safe),
 
 		// Movimentos Financeiros
+		// Sem chave de negócio: cada sync apaga e regrava os dados da empresa numa
+		// transação. nCodTitulo não é único por movimento (baixa em lote liquida N
+		// títulos num só nCodMovCC) e movimentos sem título chegam com nCodTitulo = 0.
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s.movimentos_financeiros (
 			id                    BIGSERIAL   PRIMARY KEY,
 			empresa_id            UUID        NOT NULL,
-			codigo_lancamento     BIGINT      NOT NULL,
+			codigo_titulo         BIGINT,
+			numero_titulo         TEXT,
+			codigo_mov_cc         BIGINT,
+			codigo_mov_cc_repet   BIGINT,
+			codigo_titrepet       BIGINT,
 			data_lancamento       DATE,
 			valor                 NUMERIC(15,2),
 			tipo                  TEXT,
 			codigo_conta_corrente BIGINT,
 			codigo_categoria      TEXT,
-			historico             TEXT,
 			raw                   JSONB,
-			synced_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-			UNIQUE(empresa_id, codigo_lancamento)
+			synced_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		)`, safe),
 
 		// Extrato — sem UNIQUE pois Omie nao retorna ID por movimento; isolado por empresa_id
@@ -226,7 +231,9 @@ func (p *Provisioner) ProvisionSchema(ctx context.Context, schemaName string) er
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_extrato_raw ON %s.extrato USING GIN (raw)", schemaName, safe),
 
 		// Índices para as views gerenciais — movimentos_financeiros
-		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_mf_lancamento ON %s.movimentos_financeiros (empresa_id, codigo_lancamento)", schemaName, safe),
+		// codigo_titulo não é único, mas é a chave do join com contas_pagar/contas_receber.
+		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_mf_titulo ON %s.movimentos_financeiros (empresa_id, codigo_titulo)", schemaName, safe),
+		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_mf_mov_cc ON %s.movimentos_financeiros (empresa_id, codigo_mov_cc)", schemaName, safe),
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_mf_raw ON %s.movimentos_financeiros USING GIN (raw)", schemaName, safe),
 
 		// Índices para as views gerenciais — contas_pagar / contas_receber
@@ -247,6 +254,50 @@ BEGIN
           AND pc.relkind = 'm'
     ) THEN
         DROP MATERIALIZED VIEW %s.matvw_gerencial_resultado CASCADE;
+    END IF;
+END
+$$`, "'"+schemaName+"'", safe),
+
+		// Auto-upgrade v6: movimentos_financeiros passa de upsert por título para carga
+		// completa. Espelha a migration 000027 para schemas provisionados por binário
+		// antigo. Idempotente.
+		fmt.Sprintf(`DO $$
+BEGIN
+    ALTER TABLE %[2]s.movimentos_financeiros DROP CONSTRAINT IF EXISTS movimentos_financeiros_empresa_id_codigo_lancamento_key;
+    ALTER TABLE %[2]s.movimentos_financeiros DROP CONSTRAINT IF EXISTS movimentos_financeiros_empresa_codigo_key;
+    ALTER TABLE %[2]s.movimentos_financeiros DROP CONSTRAINT IF EXISTS movimentos_financeiros_codigo_lancamento_key;
+
+    IF EXISTS (SELECT 1 FROM information_schema.columns
+               WHERE table_schema = %[1]s AND table_name = 'movimentos_financeiros'
+                 AND column_name = 'codigo_lancamento') THEN
+        ALTER TABLE %[2]s.movimentos_financeiros RENAME COLUMN codigo_lancamento TO codigo_titulo;
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM information_schema.columns
+               WHERE table_schema = %[1]s AND table_name = 'movimentos_financeiros'
+                 AND column_name = 'historico') THEN
+        ALTER TABLE %[2]s.movimentos_financeiros RENAME COLUMN historico TO numero_titulo;
+    END IF;
+
+    ALTER TABLE %[2]s.movimentos_financeiros ALTER COLUMN codigo_titulo DROP NOT NULL;
+    ALTER TABLE %[2]s.movimentos_financeiros ADD COLUMN IF NOT EXISTS codigo_mov_cc       BIGINT;
+    ALTER TABLE %[2]s.movimentos_financeiros ADD COLUMN IF NOT EXISTS codigo_mov_cc_repet BIGINT;
+    ALTER TABLE %[2]s.movimentos_financeiros ADD COLUMN IF NOT EXISTS codigo_titrepet     BIGINT;
+    UPDATE %[2]s.movimentos_financeiros SET codigo_titulo = NULL WHERE codigo_titulo = 0;
+
+    -- As matvw são criadas com IF NOT EXISTS, então uma view já existente manteria a
+    -- definição antiga. Dropa apenas se a definição atual for a antiga — detectada pela
+    -- ausência do DISTINCT ON introduzido nesta versão. Idempotente: nas execuções
+    -- seguintes a condição é falsa e as views são preservadas com seus dados.
+    IF EXISTS (SELECT 1 FROM pg_matviews
+               WHERE schemaname = %[1]s AND matviewname = 'matvw_gerencial_ano_corrente'
+                 AND definition NOT LIKE '%%DISTINCT ON%%') THEN
+        DROP MATERIALIZED VIEW %[2]s.matvw_gerencial_ano_corrente CASCADE;
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_matviews
+               WHERE schemaname = %[1]s AND matviewname = 'matvw_gerencial_historico'
+                 AND definition NOT LIKE '%%DISTINCT ON%%') THEN
+        DROP MATERIALIZED VIEW %[2]s.matvw_gerencial_historico CASCADE;
     END IF;
 END
 $$`, "'"+schemaName+"'", safe),
@@ -274,7 +325,8 @@ movimentos_unificados AS (
         ABS(e.valor)                           AS valor_titulo_mov_ext,
         EXTRACT(YEAR  FROM e.data_lancamento)::INT AS ano,
         EXTRACT(MONTH FROM e.data_lancamento)::INT AS mes,
-        'ext'::TEXT                            AS mov_ou_extrato
+        'ext'::TEXT                            AS mov_ou_extrato,
+        NULL::TEXT                             AS departamento_mov
     FROM %s.extrato e
     JOIN %s.contas_correntes cc
         ON cc.codigo_conta_corrente = e.codigo_conta_corrente
@@ -285,29 +337,47 @@ movimentos_unificados AS (
 
     UNION ALL
 
-    -- Movimentos realizados do ano corrente em diante
-    SELECT
+    -- Movimentos realizados do ano corrente em diante.
+    -- DISTINCT ON mantém o grão de título (uma baixa em lote traz N títulos por
+    -- movimento, e o modelo gerencial raciocina por título). Movimentos sem título
+    -- usam o próprio id como chave, senão todos colapsariam numa linha só — no
+    -- Postgres, NULL agrupa com NULL no DISTINCT ON.
+    -- Os parênteses são obrigatórios: sem eles o ORDER BY final ligaria ao UNION
+    -- inteiro e o DISTINCT ON seria rejeitado.
+    (SELECT DISTINCT ON (mf.empresa_id, COALESCE(mf.codigo_titulo::TEXT, 'mov:' || mf.id::TEXT))
         mf.empresa_id,
         mf.codigo_conta_corrente::TEXT                            AS codigo_conta_corrente,
         mf.raw -> 'detalhes' ->> 'nCodCliente'                   AS codigo_cliente,
-        mf.codigo_lancamento::TEXT                                AS codigo_titulo,
+        mf.codigo_titulo::TEXT                                    AS codigo_titulo,
         mf.raw -> 'detalhes' ->> 'cGrupo'                        AS grupo,
         mf.raw -> 'detalhes' ->> 'dDtPagamento'                  AS data_pagamento,
         mf.raw -> 'detalhes' ->> 'dDtPrevisao'                   AS data_previsao,
         mf.codigo_categoria                                       AS codigo_categoria,
         mf.raw -> 'detalhes' ->> 'cStatus'                       AS status_mov,
+        -- nValLiquido e nValPago cobrem o título; nValorMovCC cobre o lançamento
+        -- avulso (tarifa, transferência), que não traz os dois primeiros.
         COALESCE(
-            NULLIF(mf.raw -> 'resumo' ->> 'nValLiquido', '')::NUMERIC,
-            NULLIF(mf.raw -> 'resumo' ->> 'nValPago',    '')::NUMERIC
+            NULLIF(mf.raw -> 'resumo'   ->> 'nValLiquido',  '')::NUMERIC,
+            NULLIF(mf.raw -> 'resumo'   ->> 'nValPago',     '')::NUMERIC,
+            NULLIF(mf.raw -> 'detalhes' ->> 'nValorMovCC',  '')::NUMERIC
         )                                                         AS valor_titulo_mov_ext,
         EXTRACT(YEAR  FROM TO_DATE(NULLIF(mf.raw -> 'detalhes' ->> 'dDtPagamento',''), 'DD/MM/YYYY'))::INT AS ano,
         EXTRACT(MONTH FROM TO_DATE(NULLIF(mf.raw -> 'detalhes' ->> 'dDtPagamento',''), 'DD/MM/YYYY'))::INT AS mes,
-        'mov'::TEXT                                               AS mov_ou_extrato
+        'mov'::TEXT                                               AS mov_ou_extrato,
+        -- Departamento do próprio movimento: usado quando não há título, já que
+        -- nesse caso não existe linha em cp_distribuicao para casar.
+        (SELECT dep ->> 'cCodDepartamento'
+           FROM jsonb_array_elements(
+                    CASE WHEN jsonb_typeof(mf.raw -> 'departamentos') = 'array'
+                         THEN mf.raw -> 'departamentos'
+                         ELSE '[]'::JSONB END) AS dep
+          LIMIT 1)                                                AS departamento_mov
     FROM %s.movimentos_financeiros mf
     WHERE mf.raw -> 'detalhes' ->> 'cGrupo' IN ('CONTA_CORRENTE_REC','CONTA_CORRENTE_PAG')
       AND NULLIF(mf.raw -> 'detalhes' ->> 'dDtPagamento','') IS NOT NULL
       AND EXTRACT(YEAR FROM TO_DATE(NULLIF(mf.raw -> 'detalhes' ->> 'dDtPagamento',''), 'DD/MM/YYYY'))
           >= EXTRACT(YEAR FROM CURRENT_DATE)
+    ORDER BY mf.empresa_id, COALESCE(mf.codigo_titulo::TEXT, 'mov:' || mf.id::TEXT), mf.id DESC)
 ),
 cp_categorias AS (
     SELECT
@@ -357,7 +427,7 @@ movimentos_processados AS (
         c.codigo_categoria                             AS categoria_join,
         c.percentual_categoria,
         c.origem,
-        d.codigo_departamento                          AS codigo_departamento_join,
+        COALESCE(d.codigo_departamento, m.departamento_mov) AS codigo_departamento_join,
         d.percentual_distribuicao                      AS percentual_distribuicao_join,
         d.valor_distribuido                            AS valor_distribuido_join,
         cc.raw ->> 'cFluxoCaixa'                      AS conta_considerada,
@@ -381,8 +451,10 @@ movimentos_processados AS (
             ELSE 0
         END                                            AS movimento_considerado,
         cat_final.descricao                            AS descricao_categoria_final,
+        -- Título usa a distribuição de contas_pagar/receber; lançamento avulso usa o
+        -- array departamentos do próprio movimento.
         CASE
-            WHEN d.codigo_departamento IS NULL THEN 'Sem departamento'
+            WHEN COALESCE(d.codigo_departamento, m.departamento_mov) IS NULL THEN 'Sem departamento'
             ELSE dept.descricao
         END                                            AS departamento_final,
         COALESCE(cli.nome_fantasia, 'Cliente não informado') AS cliente_final,
@@ -409,7 +481,7 @@ movimentos_processados AS (
            ON COALESCE(c.codigo_categoria, m.codigo_categoria) = cat_final.codigo
           AND cat_final.empresa_id = m.empresa_id
     LEFT JOIN %s.departamentos dept
-           ON d.codigo_departamento = dept.codigo
+           ON COALESCE(d.codigo_departamento, m.departamento_mov) = dept.codigo
           AND dept.empresa_id = m.empresa_id
     LEFT JOIN %s.clientes cli
            ON cli.codigo_cliente_omie::TEXT = m.codigo_cliente
@@ -470,7 +542,8 @@ movimentos_unificados AS (
         ABS(e.valor)                           AS valor_titulo_mov_ext,
         EXTRACT(YEAR  FROM e.data_lancamento)::INT AS ano,
         EXTRACT(MONTH FROM e.data_lancamento)::INT AS mes,
-        'ext'::TEXT                            AS mov_ou_extrato
+        'ext'::TEXT                            AS mov_ou_extrato,
+        NULL::TEXT                             AS departamento_mov
     FROM %s.extrato e
     JOIN %s.contas_correntes cc
         ON cc.codigo_conta_corrente = e.codigo_conta_corrente
@@ -481,29 +554,38 @@ movimentos_unificados AS (
 
     UNION ALL
 
-    -- Movimentos realizados de anos anteriores
-    SELECT
+    -- Movimentos realizados de anos anteriores.
+    -- Ver comentário equivalente em matvw_gerencial_ano_corrente sobre o DISTINCT ON.
+    SELECT DISTINCT ON (mf.empresa_id, COALESCE(mf.codigo_titulo::TEXT, 'mov:' || mf.id::TEXT))
         mf.empresa_id,
         mf.codigo_conta_corrente::TEXT                            AS codigo_conta_corrente,
         mf.raw -> 'detalhes' ->> 'nCodCliente'                   AS codigo_cliente,
-        mf.codigo_lancamento::TEXT                                AS codigo_titulo,
+        mf.codigo_titulo::TEXT                                    AS codigo_titulo,
         mf.raw -> 'detalhes' ->> 'cGrupo'                        AS grupo,
         mf.raw -> 'detalhes' ->> 'dDtPagamento'                  AS data_pagamento,
         mf.raw -> 'detalhes' ->> 'dDtPrevisao'                   AS data_previsao,
         mf.codigo_categoria                                       AS codigo_categoria,
         mf.raw -> 'detalhes' ->> 'cStatus'                       AS status_mov,
         COALESCE(
-            NULLIF(mf.raw -> 'resumo' ->> 'nValLiquido', '')::NUMERIC,
-            NULLIF(mf.raw -> 'resumo' ->> 'nValPago',    '')::NUMERIC
+            NULLIF(mf.raw -> 'resumo'   ->> 'nValLiquido',  '')::NUMERIC,
+            NULLIF(mf.raw -> 'resumo'   ->> 'nValPago',     '')::NUMERIC,
+            NULLIF(mf.raw -> 'detalhes' ->> 'nValorMovCC',  '')::NUMERIC
         )                                                         AS valor_titulo_mov_ext,
         EXTRACT(YEAR  FROM TO_DATE(NULLIF(mf.raw -> 'detalhes' ->> 'dDtPagamento',''), 'DD/MM/YYYY'))::INT AS ano,
         EXTRACT(MONTH FROM TO_DATE(NULLIF(mf.raw -> 'detalhes' ->> 'dDtPagamento',''), 'DD/MM/YYYY'))::INT AS mes,
-        'mov'::TEXT                                               AS mov_ou_extrato
+        'mov'::TEXT                                               AS mov_ou_extrato,
+        (SELECT dep ->> 'cCodDepartamento'
+           FROM jsonb_array_elements(
+                    CASE WHEN jsonb_typeof(mf.raw -> 'departamentos') = 'array'
+                         THEN mf.raw -> 'departamentos'
+                         ELSE '[]'::JSONB END) AS dep
+          LIMIT 1)                                                AS departamento_mov
     FROM %s.movimentos_financeiros mf
     WHERE mf.raw -> 'detalhes' ->> 'cGrupo' IN ('CONTA_CORRENTE_REC','CONTA_CORRENTE_PAG')
       AND NULLIF(mf.raw -> 'detalhes' ->> 'dDtPagamento','') IS NOT NULL
       AND EXTRACT(YEAR FROM TO_DATE(NULLIF(mf.raw -> 'detalhes' ->> 'dDtPagamento',''), 'DD/MM/YYYY'))
           < EXTRACT(YEAR FROM CURRENT_DATE)
+    ORDER BY mf.empresa_id, COALESCE(mf.codigo_titulo::TEXT, 'mov:' || mf.id::TEXT), mf.id DESC)
 ),
 cp_categorias AS (
     SELECT
@@ -553,7 +635,7 @@ movimentos_processados AS (
         c.codigo_categoria                             AS categoria_join,
         c.percentual_categoria,
         c.origem,
-        d.codigo_departamento                          AS codigo_departamento_join,
+        COALESCE(d.codigo_departamento, m.departamento_mov) AS codigo_departamento_join,
         d.percentual_distribuicao                      AS percentual_distribuicao_join,
         d.valor_distribuido                            AS valor_distribuido_join,
         cc.raw ->> 'cFluxoCaixa'                      AS conta_considerada,
@@ -577,8 +659,10 @@ movimentos_processados AS (
             ELSE 0
         END                                            AS movimento_considerado,
         cat_final.descricao                            AS descricao_categoria_final,
+        -- Título usa a distribuição de contas_pagar/receber; lançamento avulso usa o
+        -- array departamentos do próprio movimento.
         CASE
-            WHEN d.codigo_departamento IS NULL THEN 'Sem departamento'
+            WHEN COALESCE(d.codigo_departamento, m.departamento_mov) IS NULL THEN 'Sem departamento'
             ELSE dept.descricao
         END                                            AS departamento_final,
         COALESCE(cli.nome_fantasia, 'Cliente não informado') AS cliente_final,
@@ -605,7 +689,7 @@ movimentos_processados AS (
            ON COALESCE(c.codigo_categoria, m.codigo_categoria) = cat_final.codigo
           AND cat_final.empresa_id = m.empresa_id
     LEFT JOIN %s.departamentos dept
-           ON d.codigo_departamento = dept.codigo
+           ON COALESCE(d.codigo_departamento, m.departamento_mov) = dept.codigo
           AND dept.empresa_id = m.empresa_id
     LEFT JOIN %s.clientes cli
            ON cli.codigo_cliente_omie::TEXT = m.codigo_cliente
