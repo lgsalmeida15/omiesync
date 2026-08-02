@@ -207,6 +207,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { Chart, registerables } from 'chart.js'
 import ChartDataLabels from 'chartjs-plugin-datalabels'
 import { useAuthStore } from '@/stores/auth'
@@ -215,7 +216,9 @@ import AppSpinner from '@/components/ui/AppSpinner.vue'
 
 Chart.register(...registerables, ChartDataLabels)
 
-const auth = useAuthStore()
+const auth   = useAuthStore()
+const router = useRouter()
+const route  = useRoute()
 
 // ── Estado ─────────────────────────────────────────────────────────────────
 const dados      = ref<DashboardData | null>(null)
@@ -464,8 +467,20 @@ async function carregar() {
       return
     }
   }
-  // admin_global pode não ter grupo_id no token — usa o primeiro grupo disponível
-  const grupoID = auth.user?.grupo_id || auth.meusGrupos[0]?.id
+  // Só admin_global cai no primeiro grupo da lista — ele não tem grupo próprio e a
+  // escolha é arbitrária por natureza. Para quem tem vários grupos, adivinhar seria
+  // exibir dados de um cliente que a pessoa não selecionou: manda escolher.
+  let grupoID = auth.user?.grupo_id
+  if (!grupoID) {
+    if (auth.isAdminGlobal) {
+      grupoID = auth.meusGrupos[0]?.id
+    } else if (auth.meusGrupos.length > 1) {
+      router.push({ name: 'SelectGrupo', query: { redirect: route.fullPath } })
+      return
+    } else {
+      grupoID = auth.meusGrupos[0]?.id
+    }
+  }
   if (!grupoID) {
     erro.value = 'Nenhum grupo associado. Faça login novamente.'
     return

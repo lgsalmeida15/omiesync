@@ -11,6 +11,13 @@
       <span v-if="pageSubtitle">{{ pageSubtitle }}</span>
     </div>
 
+    <!-- Grupo ativo. Sem isto, uma troca indevida de grupo passa despercebida —
+         nada mais na tela indica de qual cliente são os dados exibidos. -->
+    <div v-if="grupoAtivo" class="grupo-chip" :title="`Grupo ativo: ${grupoAtivo}`">
+      <span class="grupo-dot" />
+      <span class="grupo-nome">{{ grupoAtivo }}</span>
+    </div>
+
     <!-- Slot para filtros injetados via Teleport (ex: Dashboard) -->
     <div id="topbar-filters" class="topbar-filters-slot"></div>
 
@@ -74,6 +81,14 @@ const pageSubtitle = computed(() => {
   if (route.name === 'Sync') return 'Motor ETL'
   return null
 })
+
+// Nome do grupo cujo contexto está ativo no token. Resolvido a partir do
+// grupo_id das claims cruzado com a lista de grupos do usuário.
+const grupoAtivo = computed(() => {
+  const gid = auth.user?.grupo_id
+  if (!gid) return null
+  return auth.meusGrupos.find(g => g.id === gid)?.nome ?? null
+})
 </script>
 
 <style scoped>
@@ -106,6 +121,27 @@ const pageSubtitle = computed(() => {
   color: var(--text);
 }
 .topbar-title span { color: var(--accent); margin-left: 6px; }
+
+.grupo-chip {
+  display: flex; align-items: center; gap: 6px;
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border: 1px solid var(--border2);
+  border-radius: 20px;
+  background: var(--bg3);
+  max-width: 200px;
+}
+.grupo-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent); flex-shrink: 0;
+}
+.grupo-nome {
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: 0.5px; color: var(--text2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+@media (max-width: 900px) { .grupo-chip { max-width: 120px; } }
 
 .topbar-filters-slot {
   flex: 1;
