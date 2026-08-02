@@ -2,6 +2,7 @@ package dados
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -185,6 +186,13 @@ func (h *Handler) dashboardHandler(w http.ResponseWriter, r *http.Request) {
 
 	data, err := QueryDashboard(r.Context(), h.pool, params)
 	if err != nil {
+		// View recriada e ainda sem REFRESH não é falha do servidor — é estado
+		// transitório após um re-provisionamento. Devolve mensagem acionável em vez
+		// de "erro ao consultar dashboard".
+		if errors.Is(err, ErrViewNaoPopulada) {
+			response.FromAppError(w, apperror.Unprocessable(ErrViewNaoPopulada.Error()))
+			return
+		}
 		response.Error(w, http.StatusInternalServerError, "erro ao consultar dashboard", err)
 		return
 	}

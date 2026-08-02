@@ -126,9 +126,17 @@ func (w *Worker) execute(ctx context.Context, job *syncsvc.SyncJob, creds *Empre
 
 	// Provisiona schema apenas quando a versão está desatualizada — evita DDL lock contention
 	provisioner := db.NewProvisioner(w.pool)
+	reprovisionado := false
 	if provisioner.NeedsProvisioning(ctx, creds.Schema) {
 		if err := provisioner.ProvisionSchema(ctx, creds.Schema); err != nil {
 			w.log.Warn().Err(err).Str("schema", creds.Schema).Msg("worker: re-provision schema falhou (continuando)")
+		} else {
+			// Os auto-upgrades podem dropar e recriar as views gerenciais WITH NO DATA.
+			// Sem forçar o refresh da histórica aqui, ela ficaria vazia até o próximo
+			// sync full — e consultar matvw não populada é erro (SQLSTATE 55000), não
+			// resultado vazio. Foi o que quebrou o dashboard em anos anteriores.
+			reprovisionado = true
+			w.log.Info().Str("schema", creds.Schema).Msg("worker: schema re-provisionado, views serão repopuladas")
 		}
 	}
 
@@ -256,7 +264,9 @@ func (w *Worker) execute(ctx context.Context, job *syncsvc.SyncJob, creds *Empre
 		// Full: ano_corrente + historico (dataset grande — timeout estendido para historico).
 		if w.pool != nil {
 			schema := creds.Schema
-			isFull := job.Tipo == "full"
+			// Re-provisionamento entra aqui: se as views foram recriadas WITH NO DATA,
+			// a histórica precisa ser repopulada mesmo num sync incremental.
+			isFull := job.Tipo == "full" || reprovisionado
 			go func() {
 				safe := pgx.Identifier{schema}.Sanitize()
 

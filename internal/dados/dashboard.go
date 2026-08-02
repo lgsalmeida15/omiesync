@@ -2,13 +2,27 @@ package dados
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// ErrViewNaoPopulada indica que a view materializada existe mas nunca recebeu
+// REFRESH. Acontece logo após um re-provisionamento, que recria as views WITH NO
+// DATA — a histórica só é repopulada no sync seguinte. O Postgres trata leitura
+// nessa situação como erro (SQLSTATE 55000), não como resultado vazio.
+var ErrViewNaoPopulada = errors.New("dados ainda não disponíveis: aguarde a conclusão do próximo sync")
+
+// isViewNaoPopulada identifica o SQLSTATE 55000 (object_not_in_prerequisite_state).
+func isViewNaoPopulada(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "55000"
+}
 
 type DashboardParams struct {
 	GrupoID         string
@@ -53,6 +67,9 @@ func QueryDashboard(ctx context.Context, pool *pgxpool.Pool, p DashboardParams) 
 
 	mensal, err := queryGraficoMensal(ctx, pool, safe, view, p)
 	if err != nil {
+		if isViewNaoPopulada(err) {
+			return nil, ErrViewNaoPopulada
+		}
 		return nil, fmt.Errorf("dados.QueryDashboard grafico_mensal: %w", err)
 	}
 
@@ -63,6 +80,9 @@ func QueryDashboard(ctx context.Context, pool *pgxpool.Pool, p DashboardParams) 
 
 	filtros, err := queryFiltrosDisponiveis(ctx, pool, safe, view, p.GrupoID)
 	if err != nil {
+		if isViewNaoPopulada(err) {
+			return nil, ErrViewNaoPopulada
+		}
 		return nil, fmt.Errorf("dados.QueryDashboard filtros: %w", err)
 	}
 
