@@ -54,6 +54,13 @@ func TestIntegration_ReplaceMovimentos(t *testing.T) {
 			DataRegistro: "02/01/2026", Grupo: "CONTA_CORRENTE_PAG", Natureza: "P",
 		}}
 	}
+	// Sem dDtRegistro: o COPY é binário e não aceita "" numa coluna DATE — precisa
+	// de NULL de verdade. Foi o que quebrou o primeiro sync full em produção.
+	movSemData := func(titulo, movCC int64) OmieMovimento {
+		m := mov(titulo, movCC, 1, 0)
+		m.Detalhes.DataRegistro = ""
+		return m
+	}
 	raws := func(n int) []json.RawMessage {
 		out := make([]json.RawMessage, n)
 		for i := range out {
@@ -72,15 +79,31 @@ func TestIntegration_ReplaceMovimentos(t *testing.T) {
 		return n
 	}
 
-	itens := []OmieMovimento{mov(1, 100, 10, 0), mov(2, 100, 20, 0), mov(0, 300, 0, 5.5)}
+	itens := []OmieMovimento{
+		mov(1, 100, 10, 0),
+		mov(2, 100, 20, 0),
+		mov(0, 300, 0, 5.5),
+		movSemData(3, 400),
+	}
 
 	// 1º sync
 	n, err := replaceMovimentos(ctx, pool, schema, empresaA, itens, raws(len(itens)))
 	if err != nil {
 		t.Fatalf("1º sync: %v", err)
 	}
-	if n != 3 || conta(empresaA) != 3 {
-		t.Fatalf("1º sync: gravados=%d tabela=%d, esperado 3/3", n, conta(empresaA))
+	if n != 4 || conta(empresaA) != 4 {
+		t.Fatalf("1º sync: gravados=%d tabela=%d, esperado 4/4", n, conta(empresaA))
+	}
+
+	// A data ausente tem que virar NULL, não erro de encoding nem data zerada.
+	var comDataNula int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM `+schema+
+		`.movimentos_financeiros WHERE empresa_id = $1 AND data_lancamento IS NULL`,
+		empresaA).Scan(&comDataNula); err != nil {
+		t.Fatalf("consulta data nula: %v", err)
+	}
+	if comDataNula != 1 {
+		t.Errorf("esperado 1 registro com data_lancamento NULL, veio %d", comDataNula)
 	}
 
 	// Dados de outra empresa no mesmo schema — o schema é do grupo e abriga várias.
@@ -92,8 +115,8 @@ func TestIntegration_ReplaceMovimentos(t *testing.T) {
 	if _, err := replaceMovimentos(ctx, pool, schema, empresaA, itens, raws(len(itens))); err != nil {
 		t.Fatalf("2º sync: %v", err)
 	}
-	if got := conta(empresaA); got != 3 {
-		t.Errorf("2º sync duplicou: empresa A tem %d linhas, esperado 3", got)
+	if got := conta(empresaA); got != 4 {
+		t.Errorf("2º sync duplicou: empresa A tem %d linhas, esperado 4", got)
 	}
 	if got := conta(empresaB); got != 2 {
 		t.Errorf("sync da empresa A afetou a empresa B: %d linhas, esperado 2", got)
@@ -103,8 +126,8 @@ func TestIntegration_ReplaceMovimentos(t *testing.T) {
 	if _, err := replaceMovimentos(ctx, pool, schema, empresaA, nil, nil); err != nil {
 		t.Fatalf("sync vazio: %v", err)
 	}
-	if got := conta(empresaA); got != 3 {
-		t.Errorf("resposta vazia apagou dados: %d linhas, esperado 3", got)
+	if got := conta(empresaA); got != 4 {
+		t.Errorf("resposta vazia apagou dados: %d linhas, esperado 4", got)
 	}
 
 	// nCodTitulo = 0 vira NULL; valor cai para nValorMovCC quando nValorTitulo é 0.

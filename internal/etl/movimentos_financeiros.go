@@ -319,7 +319,8 @@ func replaceMovimentos(
 			d.CodigoMovCC,    // nCodMovCC
 			d.CodigoMovCCRepet,
 			d.CodigoTitRepet,
-			parseOmieDate(d.DataRegistro), // dDtRegistro — data de criação do lançamento
+			// Ponteiro, não string: o COPY binário não aceita "" numa coluna DATE.
+			parseOmieDatePtr(d.DataRegistro), // dDtRegistro — data de criação do lançamento
 			valor,
 			d.Grupo + " " + d.Natureza, // ex: "CONTA_A_RECEBER R"
 			d.CodigoContaCorrente,

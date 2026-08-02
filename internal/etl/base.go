@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
@@ -166,11 +167,25 @@ func toJSON(v any) []byte {
 
 // parseOmieDate converte "DD/MM/YYYY" (formato Omie) para "YYYY-MM-DD" (ISO).
 // Retorna "" para strings vazias. PostgreSQL aceita ISO com ::date independente do datestyle.
+//
+// Só serve para INSERT com NULLIF($n,'')::date. Para CopyFrom use parseOmieDatePtr:
+// o COPY binário não passa por cast de texto e falha ao encodar "" numa coluna DATE.
 func parseOmieDate(s string) string {
 	if len(s) != 10 || s[2] != '/' || s[5] != '/' {
 		return ""
 	}
 	return s[6:10] + "-" + s[3:5] + "-" + s[0:2]
+}
+
+// parseOmieDatePtr converte "DD/MM/YYYY" para *time.Time, devolvendo nil quando a data
+// está ausente ou malformada. Versão para CopyFrom, que encoda em binário e precisa de
+// um NULL de verdade em vez de string vazia.
+func parseOmieDatePtr(s string) *time.Time {
+	t, err := time.Parse("02/01/2006", s)
+	if err != nil {
+		return nil
+	}
+	return &t
 }
 
 // extractArray extrai o array de dados de uma resposta genérica do Omie usando o nome do campo da config.
