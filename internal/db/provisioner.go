@@ -555,8 +555,9 @@ movimentos_unificados AS (
     UNION ALL
 
     -- Movimentos realizados de anos anteriores.
-    -- Ver comentário equivalente em matvw_gerencial_ano_corrente sobre o DISTINCT ON.
-    SELECT DISTINCT ON (mf.empresa_id, COALESCE(mf.codigo_titulo::TEXT, 'mov:' || mf.id::TEXT))
+    -- Ver comentário equivalente em matvw_gerencial_ano_corrente sobre o DISTINCT ON
+    -- e sobre a obrigatoriedade dos parênteses neste arm.
+    (SELECT DISTINCT ON (mf.empresa_id, COALESCE(mf.codigo_titulo::TEXT, 'mov:' || mf.id::TEXT))
         mf.empresa_id,
         mf.codigo_conta_corrente::TEXT                            AS codigo_conta_corrente,
         mf.raw -> 'detalhes' ->> 'nCodCliente'                   AS codigo_cliente,
@@ -729,9 +730,15 @@ WITH NO DATA`,
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_hist_empresa ON %s.matvw_gerencial_historico (empresa_id)", schemaName, safe),
 	}
 
-	for _, stmt := range stmts {
+	for i, stmt := range stmts {
 		if _, err := p.pool.Exec(ctx, stmt); err != nil {
-			return fmt.Errorf("db.Provisioner.ProvisionSchema [%s]: %w", schemaName, err)
+			// Inclui um trecho do statement: sem isso, um erro de sintaxe numa das
+			// views gerenciais não diz qual das dezenas de statements falhou.
+			trecho := stmt
+			if len(trecho) > 200 {
+				trecho = trecho[:200] + "..."
+			}
+			return fmt.Errorf("db.Provisioner.ProvisionSchema [%s] statement %d (%s): %w", schemaName, i, trecho, err)
 		}
 	}
 
