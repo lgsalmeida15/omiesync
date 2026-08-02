@@ -185,13 +185,16 @@ func querySaldoContasCorrentes(ctx context.Context, pool *pgxpool.Pool, safe str
 		args = append(args, p.ContasCorrentes)
 	}
 
+	// cc.fluxo_caixa, não cc.raw ->> 'cFluxoCaixa': o campo não existe no cadastro de
+	// /geral/contacorrente/ — vem da resposta do ListarExtrato e é propagado pelo
+	// executor de extrato. Enquanto lia do raw, este saldo era sempre zero.
 	sql := fmt.Sprintf(`
 		SELECT COALESCE(SUM(cc.saldo_inicial), 0)
 		FROM %s.contas_correntes cc
 		JOIN _etl.empresas e ON e.id = cc.empresa_id
 		WHERE e.grupo_id = $1
 		  AND e.deleted_at IS NULL
-		  AND cc.raw ->> 'cFluxoCaixa' = 'S'
+		  AND cc.fluxo_caixa = 'S'
 		  %s%s
 	`, safe, empresaFilter, ccFilter)
 
@@ -210,7 +213,7 @@ func queryFiltrosDisponiveis(ctx context.Context, pool *pgxpool.Pool, safe, view
 		JOIN _etl.empresas e ON e.id = cc.empresa_id
 		WHERE e.grupo_id = $1
 		  AND e.deleted_at IS NULL
-		  AND cc.raw ->> 'cFluxoCaixa' = 'S'
+		  AND cc.fluxo_caixa = 'S'
 		ORDER BY cc.descricao
 	`, safe), grupoID)
 	if err != nil {

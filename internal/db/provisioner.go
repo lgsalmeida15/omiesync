@@ -109,6 +109,9 @@ func (p *Provisioner) ProvisionSchema(ctx context.Context, schemaName string) er
 			descricao             TEXT        NOT NULL,
 			tipo                  TEXT,
 			saldo_inicial         NUMERIC(15,2),
+			-- Alimentada pelo executor de extrato: o cadastro de /geral/contacorrente/
+			-- não traz cFluxoCaixa, só a resposta do ListarExtrato.
+			fluxo_caixa           TEXT,
 			raw                   JSONB,
 			synced_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 			UNIQUE(empresa_id, codigo_conta_corrente)
@@ -183,6 +186,9 @@ func (p *Provisioner) ProvisionSchema(ctx context.Context, schemaName string) er
 			tipo_lancamento       TEXT,
 			codigo_conta_corrente BIGINT,
 			descricao             TEXT,
+			-- cFluxoCaixa vem do envelope da resposta do ListarExtrato, não do
+			-- cadastro da conta corrente. É a única fonte do campo.
+			fluxo_caixa           TEXT,
 			raw                   JSONB,
 			synced_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		)`, safe),
@@ -302,6 +308,30 @@ BEGIN
 END
 $$`, "'"+schemaName+"'", safe),
 
+		// Auto-upgrade v7: persiste o cFluxoCaixa, antes descartado. Espelha a migration
+		// 000028 para schemas provisionados por binário antigo. Idempotente.
+		fmt.Sprintf(`DO $$
+BEGIN
+    ALTER TABLE %[2]s.extrato          ADD COLUMN IF NOT EXISTS fluxo_caixa TEXT;
+    ALTER TABLE %[2]s.contas_correntes ADD COLUMN IF NOT EXISTS fluxo_caixa TEXT;
+
+    -- Recria as views que ainda filtram cFluxoCaixa em contas_correntes.raw, onde o
+    -- campo nunca existiu. O marcador é a nova referência a e.fluxo_caixa.
+    IF EXISTS (SELECT 1 FROM pg_matviews
+               WHERE schemaname = %[1]s AND matviewname = 'matvw_gerencial_ano_corrente'
+                 AND definition NOT LIKE '%%fluxo_caixa%%') THEN
+        DROP MATERIALIZED VIEW %[2]s.matvw_gerencial_ano_corrente CASCADE;
+    END IF;
+    -- A histórica perde o ramo ext (extrato só guarda futuro); o marcador é a
+    -- ausência da tabela extrato na definição.
+    IF EXISTS (SELECT 1 FROM pg_matviews
+               WHERE schemaname = %[1]s AND matviewname = 'matvw_gerencial_historico'
+                 AND definition LIKE '%%.extrato %%') THEN
+        DROP MATERIALIZED VIEW %[2]s.matvw_gerencial_historico CASCADE;
+    END IF;
+END
+$$`, "'"+schemaName+"'", safe),
+
 		// ── View: ano corrente + previsões futuras ────────────────────────────────
 		// Filtro: ano >= ano atual (captura previsões de extrato para anos futuros).
 		// REFRESH: após todo sync (incremental e full) — dataset pequeno, rápido.
@@ -322,17 +352,25 @@ movimentos_unificados AS (
         NULL::TEXT                             AS data_previsao,
         e.raw ->> 'cCodCategoria'              AS codigo_categoria,
         NULL::TEXT                             AS status_mov,
-        ABS(e.valor)                           AS valor_titulo_mov_ext,
+        -- COM SINAL: negativo = saída, positivo = entrada. O ABS() anterior apagava
+        -- essa informação e classificava toda provisão como receita.
+        e.valor                                AS valor_titulo_mov_ext,
         EXTRACT(YEAR  FROM e.data_lancamento)::INT AS ano,
         EXTRACT(MONTH FROM e.data_lancamento)::INT AS mes,
         'ext'::TEXT                            AS mov_ou_extrato,
-        NULL::TEXT                             AS departamento_mov
+        NULL::TEXT                             AS departamento_mov,
+        e.raw ->> 'cDesCategoria'              AS descricao_categoria_ext,
+        e.raw ->> 'cRazCliente'                AS cliente_ext
     FROM %s.extrato e
-    JOIN %s.contas_correntes cc
+    -- LEFT: a conta corrente só enriquece. O filtro de fluxo de caixa vem da própria
+    -- linha do extrato, porque cFluxoCaixa é campo da resposta do ListarExtrato e não
+    -- existe no cadastro de /geral/contacorrente/.
+    LEFT JOIN %s.contas_correntes cc
         ON cc.codigo_conta_corrente = e.codigo_conta_corrente
        AND cc.empresa_id = e.empresa_id
-    WHERE cc.raw ->> 'cFluxoCaixa' = 'S'
+    WHERE e.fluxo_caixa            = 'S'
       AND e.raw ->> 'cSituacao'    = 'Previsto'
+      AND e.data_lancamento IS NOT NULL
       AND EXTRACT(YEAR FROM e.data_lancamento) >= EXTRACT(YEAR FROM CURRENT_DATE)
 
     UNION ALL
@@ -371,7 +409,9 @@ movimentos_unificados AS (
                     CASE WHEN jsonb_typeof(mf.raw -> 'departamentos') = 'array'
                          THEN mf.raw -> 'departamentos'
                          ELSE '[]'::JSONB END) AS dep
-          LIMIT 1)                                                AS departamento_mov
+          LIMIT 1)                                                AS departamento_mov,
+        NULL::TEXT                                                AS descricao_categoria_ext,
+        NULL::TEXT                                                AS cliente_ext
     FROM %s.movimentos_financeiros mf
     WHERE mf.raw -> 'detalhes' ->> 'cGrupo' IN ('CONTA_CORRENTE_REC','CONTA_CORRENTE_PAG')
       AND NULLIF(mf.raw -> 'detalhes' ->> 'dDtPagamento','') IS NOT NULL
@@ -430,7 +470,7 @@ movimentos_processados AS (
         COALESCE(d.codigo_departamento, m.departamento_mov) AS codigo_departamento_join,
         d.percentual_distribuicao                      AS percentual_distribuicao_join,
         d.valor_distribuido                            AS valor_distribuido_join,
-        cc.raw ->> 'cFluxoCaixa'                      AS conta_considerada,
+        cc.fluxo_caixa                                 AS conta_considerada,
         LEFT(COALESCE(c.codigo_categoria, m.codigo_categoria), 4) AS cod_categoria_final_superior,
         cat_sup.descricao                              AS descricao_categoria_superior,
         COALESCE(c.codigo_categoria, m.codigo_categoria) AS cod_categoria_final,
@@ -443,21 +483,38 @@ movimentos_processados AS (
             WHEN c.origem IS NULL AND m.mov_ou_extrato = 'ext' AND m.valor_titulo_mov_ext > 0        THEN 'receita'
             WHEN c.origem IS NULL AND m.mov_ou_extrato = 'ext' AND m.valor_titulo_mov_ext < 0        THEN 'despesa'
         END                                            AS receita_despesa,
-        m.valor_titulo_mov_ext * COALESCE(c.percentual_categoria, 100) / 100.0 AS valor_final,
+        -- ABS só no ext, cujo valor agora carrega sinal. O dashboard soma receita e
+        -- despesa como grandezas positivas e separa pelo ajuste_receita_despesa.
+        -- No mov o valor já é positivo, então o ramo fica idêntico ao anterior.
+        CASE WHEN m.mov_ou_extrato = 'ext' THEN ABS(m.valor_titulo_mov_ext)
+             ELSE m.valor_titulo_mov_ext END
+            * COALESCE(c.percentual_categoria, 100) / 100.0 AS valor_final,
         CASE
             WHEN m.mov_ou_extrato = 'ext'                                                   THEN 1
             WHEN m.mov_ou_extrato = 'mov'
              AND m.grupo IN ('CONTA_CORRENTE_PAG','CONTA_CORRENTE_REC')                     THEN 1
             ELSE 0
         END                                            AS movimento_considerado,
-        cat_final.descricao                            AS descricao_categoria_final,
+        -- Fronteira temporal: passado vem do realizado (mov), futuro vem do previsto
+        -- (ext). Sem isso, um pagamento agendado com data futura no mov somaria em
+        -- duplicidade com a provisão correspondente do extrato.
+        CASE
+            WHEN m.mov_ou_extrato = 'mov'
+             AND TO_DATE(NULLIF(m.data_pagamento,''), 'DD/MM/YYYY') <  CURRENT_DATE THEN 1
+            WHEN m.mov_ou_extrato = 'ext'
+             AND TO_DATE(NULLIF(m.data_pagamento,''), 'DD/MM/YYYY') >= CURRENT_DATE THEN 1
+            ELSE 0
+        END                                            AS considerar_mov_ext,
+        -- O extrato traz cDesCategoria e cRazCliente prontos; servem de fallback
+        -- quando a categoria ou o cliente ainda não foram sincronizados.
+        COALESCE(cat_final.descricao, m.descricao_categoria_ext) AS descricao_categoria_final,
         -- Título usa a distribuição de contas_pagar/receber; lançamento avulso usa o
         -- array departamentos do próprio movimento.
         CASE
             WHEN COALESCE(d.codigo_departamento, m.departamento_mov) IS NULL THEN 'Sem departamento'
             ELSE dept.descricao
         END                                            AS departamento_final,
-        COALESCE(cli.nome_fantasia, 'Cliente não informado') AS cliente_final,
+        COALESCE(cli.nome_fantasia, m.cliente_ext, 'Cliente não informado') AS cliente_final,
         emp.nome                                       AS nome_empresa,
         CASE
             WHEN c.origem = 'contas_a_receber'                                              THEN 1
@@ -496,11 +553,12 @@ SELECT
     categoria_join, percentual_categoria, origem, codigo_departamento_join,
     percentual_distribuicao_join, valor_distribuido_join, conta_considerada,
     cod_categoria_final_superior, cod_categoria_final, percentual_cat_final,
-    receita_despesa, ajuste_receita_despesa, valor_final, movimento_considerado,
+    receita_despesa, ajuste_receita_despesa, valor_final,
+    movimento_considerado, considerar_mov_ext,
     descricao_categoria_superior, descricao_categoria_final,
     departamento_final, cliente_final
 FROM movimentos_processados
-WHERE movimento_considerado = 1
+WHERE movimento_considerado = 1 AND considerar_mov_ext = 1
 WITH NO DATA`,
 			safe,           // matvw_gerencial_ano_corrente
 			safe,           // categorias_processadas: categorias
@@ -528,32 +586,11 @@ WITH categorias_processadas AS (
     SELECT empresa_id, codigo, descricao FROM %s.categorias
 ),
 movimentos_unificados AS (
-    -- Extrato: registros de anos anteriores com fluxo de caixa
-    SELECT
-        e.empresa_id,
-        e.codigo_conta_corrente::TEXT          AS codigo_conta_corrente,
-        e.raw ->> 'nCodCliente'                AS codigo_cliente,
-        e.raw ->> 'nCodLancamento'             AS codigo_titulo,
-        NULL::TEXT                             AS grupo,
-        TO_CHAR(e.data_lancamento, 'DD/MM/YYYY') AS data_pagamento,
-        NULL::TEXT                             AS data_previsao,
-        e.raw ->> 'cCodCategoria'              AS codigo_categoria,
-        NULL::TEXT                             AS status_mov,
-        ABS(e.valor)                           AS valor_titulo_mov_ext,
-        EXTRACT(YEAR  FROM e.data_lancamento)::INT AS ano,
-        EXTRACT(MONTH FROM e.data_lancamento)::INT AS mes,
-        'ext'::TEXT                            AS mov_ou_extrato,
-        NULL::TEXT                             AS departamento_mov
-    FROM %s.extrato e
-    JOIN %s.contas_correntes cc
-        ON cc.codigo_conta_corrente = e.codigo_conta_corrente
-       AND cc.empresa_id = e.empresa_id
-    WHERE cc.raw ->> 'cFluxoCaixa' = 'S'
-      AND e.raw ->> 'cSituacao'    = 'Previsto'
-      AND EXTRACT(YEAR FROM e.data_lancamento) < EXTRACT(YEAR FROM CURRENT_DATE)
-
-    UNION ALL
-
+    -- Sem ramo de extrato: o executor sincroniza de time.Now() até +1 ano e apaga a
+    -- conta antes de gravar (extrato.go:88-89, 96), logo nenhuma linha de extrato pode
+    -- ter data passada. Um ramo filtrando ano < ano atual seria sempre vazio e só
+    -- custaria tempo de REFRESH.
+    --
     -- Movimentos realizados de anos anteriores.
     -- Ver comentário equivalente em matvw_gerencial_ano_corrente sobre o DISTINCT ON
     -- e sobre a obrigatoriedade dos parênteses neste arm.
@@ -580,7 +617,9 @@ movimentos_unificados AS (
                     CASE WHEN jsonb_typeof(mf.raw -> 'departamentos') = 'array'
                          THEN mf.raw -> 'departamentos'
                          ELSE '[]'::JSONB END) AS dep
-          LIMIT 1)                                                AS departamento_mov
+          LIMIT 1)                                                AS departamento_mov,
+        NULL::TEXT                                                AS descricao_categoria_ext,
+        NULL::TEXT                                                AS cliente_ext
     FROM %s.movimentos_financeiros mf
     WHERE mf.raw -> 'detalhes' ->> 'cGrupo' IN ('CONTA_CORRENTE_REC','CONTA_CORRENTE_PAG')
       AND NULLIF(mf.raw -> 'detalhes' ->> 'dDtPagamento','') IS NOT NULL
@@ -639,7 +678,7 @@ movimentos_processados AS (
         COALESCE(d.codigo_departamento, m.departamento_mov) AS codigo_departamento_join,
         d.percentual_distribuicao                      AS percentual_distribuicao_join,
         d.valor_distribuido                            AS valor_distribuido_join,
-        cc.raw ->> 'cFluxoCaixa'                      AS conta_considerada,
+        cc.fluxo_caixa                                 AS conta_considerada,
         LEFT(COALESCE(c.codigo_categoria, m.codigo_categoria), 4) AS cod_categoria_final_superior,
         cat_sup.descricao                              AS descricao_categoria_superior,
         COALESCE(c.codigo_categoria, m.codigo_categoria) AS cod_categoria_final,
@@ -652,21 +691,38 @@ movimentos_processados AS (
             WHEN c.origem IS NULL AND m.mov_ou_extrato = 'ext' AND m.valor_titulo_mov_ext > 0        THEN 'receita'
             WHEN c.origem IS NULL AND m.mov_ou_extrato = 'ext' AND m.valor_titulo_mov_ext < 0        THEN 'despesa'
         END                                            AS receita_despesa,
-        m.valor_titulo_mov_ext * COALESCE(c.percentual_categoria, 100) / 100.0 AS valor_final,
+        -- ABS só no ext, cujo valor agora carrega sinal. O dashboard soma receita e
+        -- despesa como grandezas positivas e separa pelo ajuste_receita_despesa.
+        -- No mov o valor já é positivo, então o ramo fica idêntico ao anterior.
+        CASE WHEN m.mov_ou_extrato = 'ext' THEN ABS(m.valor_titulo_mov_ext)
+             ELSE m.valor_titulo_mov_ext END
+            * COALESCE(c.percentual_categoria, 100) / 100.0 AS valor_final,
         CASE
             WHEN m.mov_ou_extrato = 'ext'                                                   THEN 1
             WHEN m.mov_ou_extrato = 'mov'
              AND m.grupo IN ('CONTA_CORRENTE_PAG','CONTA_CORRENTE_REC')                     THEN 1
             ELSE 0
         END                                            AS movimento_considerado,
-        cat_final.descricao                            AS descricao_categoria_final,
+        -- Fronteira temporal: passado vem do realizado (mov), futuro vem do previsto
+        -- (ext). Sem isso, um pagamento agendado com data futura no mov somaria em
+        -- duplicidade com a provisão correspondente do extrato.
+        CASE
+            WHEN m.mov_ou_extrato = 'mov'
+             AND TO_DATE(NULLIF(m.data_pagamento,''), 'DD/MM/YYYY') <  CURRENT_DATE THEN 1
+            WHEN m.mov_ou_extrato = 'ext'
+             AND TO_DATE(NULLIF(m.data_pagamento,''), 'DD/MM/YYYY') >= CURRENT_DATE THEN 1
+            ELSE 0
+        END                                            AS considerar_mov_ext,
+        -- O extrato traz cDesCategoria e cRazCliente prontos; servem de fallback
+        -- quando a categoria ou o cliente ainda não foram sincronizados.
+        COALESCE(cat_final.descricao, m.descricao_categoria_ext) AS descricao_categoria_final,
         -- Título usa a distribuição de contas_pagar/receber; lançamento avulso usa o
         -- array departamentos do próprio movimento.
         CASE
             WHEN COALESCE(d.codigo_departamento, m.departamento_mov) IS NULL THEN 'Sem departamento'
             ELSE dept.descricao
         END                                            AS departamento_final,
-        COALESCE(cli.nome_fantasia, 'Cliente não informado') AS cliente_final,
+        COALESCE(cli.nome_fantasia, m.cliente_ext, 'Cliente não informado') AS cliente_final,
         emp.nome                                       AS nome_empresa,
         CASE
             WHEN c.origem = 'contas_a_receber'                                              THEN 1
@@ -705,16 +761,16 @@ SELECT
     categoria_join, percentual_categoria, origem, codigo_departamento_join,
     percentual_distribuicao_join, valor_distribuido_join, conta_considerada,
     cod_categoria_final_superior, cod_categoria_final, percentual_cat_final,
-    receita_despesa, ajuste_receita_despesa, valor_final, movimento_considerado,
+    receita_despesa, ajuste_receita_despesa, valor_final,
+    movimento_considerado, considerar_mov_ext,
     descricao_categoria_superior, descricao_categoria_final,
     departamento_final, cliente_final
 FROM movimentos_processados
-WHERE movimento_considerado = 1
+WHERE movimento_considerado = 1 AND considerar_mov_ext = 1
 WITH NO DATA`,
 			safe,           // matvw_gerencial_historico
 			safe,           // categorias_processadas: categorias
-			safe, safe,     // extrato, contas_correntes
-			safe,           // movimentos_financeiros
+			safe,           // movimentos_financeiros (sem ramo ext: extrato só tem futuro)
 			safe, safe,     // cp_categorias: contas_pagar, contas_receber
 			safe, safe,     // cp_distribuicao: contas_pagar, contas_receber
 			safe,           // movimentos_processados: contas_correntes

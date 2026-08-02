@@ -191,6 +191,27 @@ func (e *ExtratoExecutor) fetchAdaptive(
 		return 0, nil
 	}
 
+	// cFluxoCaixa é irmão de listaMovimentos no envelope da resposta — indica se a
+	// conta entra no fluxo de caixa. Esta resposta é a ÚNICA fonte do campo: o
+	// cadastro de /geral/contacorrente/ não o traz. Antes era descartado junto com
+	// o resto do envelope, e a matvw o procurava em contas_correntes, onde não existe.
+	var fluxoCaixa *string
+	if v, ok := resp["cFluxoCaixa"]; ok {
+		var s string
+		if json.Unmarshal(v, &s) == nil && s != "" {
+			fluxoCaixa = &s
+		}
+	}
+	if fluxoCaixa != nil {
+		if _, err := e.pool.Exec(ctx,
+			fmt.Sprintf("UPDATE %s.contas_correntes SET fluxo_caixa = $1 WHERE empresa_id = $2 AND codigo_conta_corrente = $3", schema),
+			*fluxoCaixa, empresaID, nCodCC,
+		); err != nil {
+			e.log.Warn().Err(err).Int64("conta", nCodCC).
+				Msg("extrato: falha ao propagar cFluxoCaixa para contas_correntes")
+		}
+	}
+
 	// Extrai dados
 	dataRaw, ok := resp[cfg.ArrayField]
 	if !ok {
@@ -219,10 +240,10 @@ func (e *ExtratoExecutor) fetchAdaptive(
 		}
 		if _, dbErr := e.pool.Exec(ctx, fmt.Sprintf(`
 			INSERT INTO %s.extrato
-				(empresa_id, data_lancamento, valor, tipo_lancamento, codigo_conta_corrente, descricao, raw, synced_at)
-			VALUES ($1, TO_DATE(NULLIF($2,''), 'DD/MM/YYYY'), $3, 'PROVISAO', $4, $5, $6, NOW())
+				(empresa_id, data_lancamento, valor, tipo_lancamento, codigo_conta_corrente, descricao, fluxo_caixa, raw, synced_at)
+			VALUES ($1, TO_DATE(NULLIF($2,''), 'DD/MM/YYYY'), $3, 'PROVISAO', $4, $5, $6, $7, NOW())
 		`, schema),
-			empresaID, mv.DataLancamento, mv.ValorDocumento, nCodCC, mv.Descricao, raw,
+			empresaID, mv.DataLancamento, mv.ValorDocumento, nCodCC, mv.Descricao, fluxoCaixa, raw,
 		); dbErr != nil {
 			return 0, fmt.Errorf("extrato insert [conta=%d de=%s]: %w", nCodCC, params.DataInicial, dbErr)
 		}
