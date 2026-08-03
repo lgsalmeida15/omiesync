@@ -164,30 +164,67 @@ func (w *Worker) agendarRefresh(schema string, full bool) {
 }
 
 func (w *Worker) executarRefresh(schema string, full bool) {
-	safe := pgx.Identifier{schema}.Sanitize()
+	w.refreshView(schema, "matvw_gerencial_ano_corrente", 30*time.Minute)
+	if full {
+		w.refreshView(schema, "matvw_gerencial_historico", 2*time.Hour)
+	}
+}
 
-	acCtx, acCancel := context.WithTimeout(context.Background(), 30*time.Minute)
-	defer acCancel()
-	if _, err := w.pool.Exec(acCtx, fmt.Sprintf(
-		"REFRESH MATERIALIZED VIEW %s.matvw_gerencial_ano_corrente", safe,
-	)); err != nil {
-		w.log.Warn().Err(err).Str("schema", schema).Msg("worker: refresh matvw_gerencial_ano_corrente falhou")
-	} else {
-		w.log.Info().Str("schema", schema).Msg("worker: matvw_gerencial_ano_corrente atualizada")
+// refreshView atualiza uma view materializada preferindo CONCURRENTLY, que não toma
+// lock exclusivo — os leitores continuam enxergando o conteúdo anterior enquanto a
+// nova versão é construída.
+//
+// Sem isso o dashboard ficava indisponível durante todo o refresh. Com 5 empresas
+// sincronizando de hora em hora e jobs de até 26 minutos, a colisão era rotina.
+//
+// CONCURRENTLY exige que a view já esteja populada e tenha índice único (mv_id). Na
+// primeira carga, ou logo após um re-provisionamento que recria WITH NO DATA, é
+// preciso um refresh normal — e é justamente ele que produz o "dados ainda não
+// disponíveis" até concluir.
+func (w *Worker) refreshView(schema, view string, timeout time.Duration) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	safe := pgx.Identifier{schema}.Sanitize()
+	alvo := fmt.Sprintf("%s.%s", safe, pgx.Identifier{view}.Sanitize())
+
+	var populada bool
+	if err := w.pool.QueryRow(ctx, `
+		SELECT c.relispopulated
+		FROM pg_class c
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE n.nspname = $1 AND c.relname = $2
+	`, schema, view).Scan(&populada); err != nil {
+		w.log.Warn().Err(err).Str("schema", schema).Str("view", view).
+			Msg("worker: não foi possível verificar se a view está populada; usando refresh bloqueante")
+		populada = false
 	}
 
-	if !full {
+	modo := "CONCURRENTLY "
+	if !populada {
+		modo = ""
+	}
+
+	inicio := time.Now()
+	_, err := w.pool.Exec(ctx, fmt.Sprintf("REFRESH MATERIALIZED VIEW %s%s", modo, alvo))
+
+	// CONCURRENTLY pode ser recusado se o índice único ainda não existir (schema de
+	// versão anterior). Cai para o modo bloqueante em vez de deixar a view desatualizada.
+	if err != nil && populada {
+		w.log.Warn().Err(err).Str("schema", schema).Str("view", view).
+			Msg("worker: refresh concorrente falhou; tentando modo bloqueante")
+		_, err = w.pool.Exec(ctx, fmt.Sprintf("REFRESH MATERIALIZED VIEW %s", alvo))
+	}
+
+	if err != nil {
+		w.log.Warn().Err(err).Str("schema", schema).Str("view", view).Msg("worker: refresh falhou")
 		return
 	}
-	histCtx, histCancel := context.WithTimeout(context.Background(), 2*time.Hour)
-	defer histCancel()
-	if _, err := w.pool.Exec(histCtx, fmt.Sprintf(
-		"REFRESH MATERIALIZED VIEW %s.matvw_gerencial_historico", safe,
-	)); err != nil {
-		w.log.Warn().Err(err).Str("schema", schema).Msg("worker: refresh matvw_gerencial_historico falhou")
-	} else {
-		w.log.Info().Str("schema", schema).Msg("worker: matvw_gerencial_historico atualizada")
-	}
+	w.log.Info().
+		Str("schema", schema).Str("view", view).
+		Bool("concorrente", populada).
+		Dur("duracao", time.Since(inicio)).
+		Msg("worker: view gerencial atualizada")
 }
 
 // ProcessJob executa um job específico pelo ID.

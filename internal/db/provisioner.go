@@ -22,7 +22,8 @@ import (
 //	v6 — movimentos_financeiros: carga completa, renomeia colunas, recria as matvw
 //	v7 — extrato/contas_correntes: coluna fluxo_caixa, recria as matvw
 //	v8 — matvw no grão de movimento: remove o DISTINCT ON que descartava baixas parciais
-const CurrentSchemaVersion = 8
+//	v9 — mv_id + índice único nas matvw, para permitir REFRESH ... CONCURRENTLY
+const CurrentSchemaVersion = 9
 
 // Provisioner cria e inicializa schemas de tenant.
 type Provisioner struct {
@@ -361,6 +362,23 @@ BEGIN
 END
 $$`, "'"+schemaName+"'", safe),
 
+		// Auto-upgrade v9: recria as views que ainda não têm mv_id, coluna exigida pelo
+		// índice único do REFRESH ... CONCURRENTLY.
+		fmt.Sprintf(`DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_matviews
+               WHERE schemaname = %[1]s AND matviewname = 'matvw_gerencial_ano_corrente'
+                 AND definition NOT LIKE '%%mv_id%%') THEN
+        DROP MATERIALIZED VIEW %[2]s.matvw_gerencial_ano_corrente CASCADE;
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_matviews
+               WHERE schemaname = %[1]s AND matviewname = 'matvw_gerencial_historico'
+                 AND definition NOT LIKE '%%mv_id%%') THEN
+        DROP MATERIALIZED VIEW %[2]s.matvw_gerencial_historico CASCADE;
+    END IF;
+END
+$$`, "'"+schemaName+"'", safe),
+
 		// ── View: ano corrente + previsões futuras ────────────────────────────────
 		// Filtro: ano >= ano atual (captura previsões de extrato para anos futuros).
 		// REFRESH: após todo sync (incremental e full) — dataset pequeno, rápido.
@@ -593,6 +611,10 @@ movimentos_processados AS (
            ON emp.id = m.empresa_id
 )
 SELECT
+    -- Identificador sintético exigido pelo REFRESH ... CONCURRENTLY, que precisa de
+    -- um índice único para diferenciar as linhas. A view não tem chave natural no
+    -- grão de movimento: uma baixa pode gerar N linhas via rateio de categoria.
+    ROW_NUMBER() OVER ()                           AS mv_id,
     empresa_id, nome_empresa, codigo_conta_corrente, codigo_cliente,
     codigo_titulo, grupo, data_pagamento, data_previsao, codigo_categoria,
     status_mov, valor_titulo_mov_ext, ano, mes, mov_ou_extrato,
@@ -618,6 +640,8 @@ WITH NO DATA`,
 		),
 
 		// Índices: ano_corrente (dataset pequeno — mes é o filtro mais comum)
+		// Índice ÚNICO: pré-requisito do REFRESH ... CONCURRENTLY, que sem ele é rejeitado.
+		fmt.Sprintf("CREATE UNIQUE INDEX IF NOT EXISTS idx_%s_ac_mvid ON %s.matvw_gerencial_ano_corrente (mv_id)", schemaName, safe),
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_ac_mes ON %s.matvw_gerencial_ano_corrente (mes)", schemaName, safe),
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_ac_receita ON %s.matvw_gerencial_ano_corrente (receita_despesa)", schemaName, safe),
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_ac_categoria ON %s.matvw_gerencial_ano_corrente (cod_categoria_final)", schemaName, safe),
@@ -814,6 +838,10 @@ movimentos_processados AS (
            ON emp.id = m.empresa_id
 )
 SELECT
+    -- Identificador sintético exigido pelo REFRESH ... CONCURRENTLY, que precisa de
+    -- um índice único para diferenciar as linhas. A view não tem chave natural no
+    -- grão de movimento: uma baixa pode gerar N linhas via rateio de categoria.
+    ROW_NUMBER() OVER ()                           AS mv_id,
     empresa_id, nome_empresa, codigo_conta_corrente, codigo_cliente,
     codigo_titulo, grupo, data_pagamento, data_previsao, codigo_categoria,
     status_mov, valor_titulo_mov_ext, ano, mes, mov_ou_extrato,
@@ -838,6 +866,8 @@ WITH NO DATA`,
 		),
 
 		// Índices: historico (dataset grande — ano é filtro primário)
+		// Índice ÚNICO: pré-requisito do REFRESH ... CONCURRENTLY.
+		fmt.Sprintf("CREATE UNIQUE INDEX IF NOT EXISTS idx_%s_hist_mvid ON %s.matvw_gerencial_historico (mv_id)", schemaName, safe),
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_hist_ano ON %s.matvw_gerencial_historico (ano)", schemaName, safe),
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_hist_ano_mes ON %s.matvw_gerencial_historico (ano, mes)", schemaName, safe),
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_hist_receita ON %s.matvw_gerencial_historico (receita_despesa)", schemaName, safe),
