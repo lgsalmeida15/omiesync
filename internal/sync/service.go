@@ -29,6 +29,11 @@ type Service interface {
 	GetJobProgress(ctx context.Context, jobID string) ([]*SyncJobProgress, error)
 
 	StartupRecovery(ctx context.Context) error
+
+	// Manutenção operacional (admin_global)
+	ListarConsultasAtivas(ctx context.Context) ([]ConsultaAtiva, error)
+	CancelarConsulta(ctx context.Context, pid int32) (bool, error)
+	RefreshViewsGrupo(ctx context.Context, grupoID string) ([]RefreshViewResultado, error)
 	GetAdminOverview(ctx context.Context) (map[string]int64, error)
 	GetJobsAtivos(ctx context.Context) ([]JobAtivoRow, error)
 	CancelarJob(ctx context.Context, jobID string) error

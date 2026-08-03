@@ -1,4 +1,4 @@
-﻿package server
+package server
 
 import (
 	"context"
@@ -225,11 +225,11 @@ func (r *nullGruposRepo) GetBySlug(_ context.Context, _ string) (*grupos.Grupo, 
 func (r *nullGruposRepo) List(_ context.Context, _, _ int32) ([]*grupos.Grupo, error) {
 	return nil, nil
 }
-func (r *nullGruposRepo) Count(_ context.Context) (int64, error)          { return 0, nil }
+func (r *nullGruposRepo) Count(_ context.Context) (int64, error) { return 0, nil }
 func (r *nullGruposRepo) Update(_ context.Context, _, _ string) (*grupos.Grupo, error) {
 	return nil, nil
 }
-func (r *nullGruposRepo) SoftDelete(_ context.Context, _ string) error           { return nil }
+func (r *nullGruposRepo) SoftDelete(_ context.Context, _ string) error { return nil }
 func (r *nullGruposRepo) CountEmpresasAtivas(_ context.Context, _ string) (int64, error) {
 	return 0, nil
 }
@@ -249,7 +249,7 @@ func (r *nullEmpresasRepo) Count(_ context.Context, _ string) (int64, error) { r
 func (r *nullEmpresasRepo) Update(_ context.Context, _, _, _, _, _ string) (*empresas.Empresa, error) {
 	return nil, nil
 }
-func (r *nullEmpresasRepo) MarkDeletando(_ context.Context, _ string) error        { return nil }
+func (r *nullEmpresasRepo) MarkDeletando(_ context.Context, _ string) error { return nil }
 func (r *nullEmpresasRepo) InsertDeletionQueue(_ context.Context, _ string, _ time.Time) error {
 	return nil
 }
@@ -281,7 +281,7 @@ func (r *nullSyncRepo) GetControl(_ context.Context, _ string) (*syncsvc.SyncCon
 func (r *nullSyncRepo) UpsertControl(_ context.Context, _ string, _ bool, _, _ int, _, _ *time.Time) (*syncsvc.SyncControl, error) {
 	return nil, nil
 }
-func (r *nullSyncRepo) UpdateControlAfterRun(_ context.Context, _, _ string) error { return nil }
+func (r *nullSyncRepo) UpdateControlAfterRun(_ context.Context, _, _ string) error     { return nil }
 func (r *nullSyncRepo) AdvanceScheduleOnDispatch(_ context.Context, _, _ string) error { return nil }
 func (r *nullSyncRepo) GetJobProgress(_ context.Context, _ string) ([]*syncsvc.SyncJobProgress, error) {
 	return nil, nil
@@ -298,22 +298,36 @@ func (r *nullSyncRepo) GetEnabledExecutors(_ context.Context, _ string) (map[str
 func (r *nullSyncRepo) GetJobAtivo(_ context.Context, _ string) (*syncsvc.JobAtivoResult, error) {
 	return nil, nil
 }
-func (r *nullSyncRepo) MarkStaleJobs(_ context.Context) (int64, error) { return 0, nil }
+func (r *nullSyncRepo) MarkStaleJobs(_ context.Context) (int64, error)       { return 0, nil }
 func (r *nullSyncRepo) UpdateJobHeartbeat(_ context.Context, _ string) error { return nil }
-func (r *nullSyncRepo) GetJobsOverview(_ context.Context) ([]syncsvc.JobStatusCount, error) { return nil, nil }
-func (r *nullSyncRepo) GetJobsAtivos(_ context.Context) ([]syncsvc.JobAtivoRow, error) { return nil, nil }
-func (r *nullSyncRepo) CancelarJob(_ context.Context, _ string) error { return nil }
+func (r *nullSyncRepo) GetJobsOverview(_ context.Context) ([]syncsvc.JobStatusCount, error) {
+	return nil, nil
+}
+func (r *nullSyncRepo) GetJobsAtivos(_ context.Context) ([]syncsvc.JobAtivoRow, error) {
+	return nil, nil
+}
+func (r *nullSyncRepo) CancelarJob(_ context.Context, _ string) error                { return nil }
 func (r *nullSyncRepo) InsertJobPage(_ context.Context, _, _ string, _, _ int) error { return nil }
-func (r *nullSyncRepo) GetPendingPages(_ context.Context, _ string, _ int) ([]syncsvc.JobPage, error) { return nil, nil }
+func (r *nullSyncRepo) GetPendingPages(_ context.Context, _ string, _ int) ([]syncsvc.JobPage, error) {
+	return nil, nil
+}
 func (r *nullSyncRepo) CountPendingPages(_ context.Context, _ string) (int64, error) { return 0, nil }
-func (r *nullSyncRepo) ClaimPageForProcessing(_ context.Context, _ string) (*syncsvc.JobPage, error) { return nil, nil }
+func (r *nullSyncRepo) ClaimPageForProcessing(_ context.Context, _ string) (*syncsvc.JobPage, error) {
+	return nil, nil
+}
 func (r *nullSyncRepo) MarkPageConcluido(_ context.Context, _ string, _ int) error { return nil }
-func (r *nullSyncRepo) MarkPageErro(_ context.Context, _ string, _ string, _ time.Time) error { return nil }
-func (r *nullSyncRepo) MarkPageCancelado(_ context.Context, _ string) error { return nil }
+func (r *nullSyncRepo) MarkPageErro(_ context.Context, _ string, _ string, _ time.Time) error {
+	return nil
+}
+func (r *nullSyncRepo) MarkPageCancelado(_ context.Context, _ string) error         { return nil }
 func (r *nullSyncRepo) GetDLQPages(_ context.Context) ([]syncsvc.DLQPageRow, error) { return nil, nil }
-func (r *nullSyncRepo) RetryDLQPage(_ context.Context, _ string) error { return nil }
-func (r *nullSyncRepo) GetPagesByJob(_ context.Context, _ string) ([]syncsvc.PageRow, error) { return nil, nil }
-func (r *nullSyncRepo) GetLatestJobIDByEmpresa(_ context.Context, _ string) (string, error) { return "", nil }
+func (r *nullSyncRepo) RetryDLQPage(_ context.Context, _ string) error              { return nil }
+func (r *nullSyncRepo) GetPagesByJob(_ context.Context, _ string) ([]syncsvc.PageRow, error) {
+	return nil, nil
+}
+func (r *nullSyncRepo) GetLatestJobIDByEmpresa(_ context.Context, _ string) (string, error) {
+	return "", nil
+}
 
 type nullDispatcher struct{}
 
@@ -372,4 +386,10 @@ func (r *nullOmieConfigRepo) Update(_ context.Context, _ string, _ omie_config.U
 	return nil, nil
 }
 
-
+// Manutenção operacional — não exercitada por estes testes.
+func (n *nullSyncRepo) ConsultasAtivas(context.Context) ([]syncsvc.ConsultaAtiva, error) {
+	return nil, nil
+}
+func (n *nullSyncRepo) CancelarConsulta(context.Context, int32) (bool, error)     { return false, nil }
+func (n *nullSyncRepo) SchemaDoGrupo(context.Context, string) (string, error)     { return "", nil }
+func (n *nullSyncRepo) RefreshView(context.Context, string, string) (bool, error) { return false, nil }

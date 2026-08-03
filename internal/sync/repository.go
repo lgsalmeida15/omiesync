@@ -19,6 +19,12 @@ type Repository interface {
 	CountJobs(ctx context.Context, empresaID string) (int64, error)
 	UpdateJobStatus(ctx context.Context, id, status, erro string, iniciadoAt, concluidoAt *time.Time) (*SyncJob, error)
 	GetControl(ctx context.Context, empresaID string) (*SyncControl, error)
+
+	// Manutenção operacional (admin_global)
+	ConsultasAtivas(ctx context.Context) ([]ConsultaAtiva, error)
+	CancelarConsulta(ctx context.Context, pid int32) (bool, error)
+	SchemaDoGrupo(ctx context.Context, grupoID string) (string, error)
+	RefreshView(ctx context.Context, schema, view string) (bool, error)
 	UpsertControl(ctx context.Context, empresaID string, ativo bool, intervaloIncrementalMin, intervaloFullDias int, proximoSyncAt, proximoFullSyncAt *time.Time) (*SyncControl, error)
 	UpdateControlAfterRun(ctx context.Context, empresaID, tipo string) error
 	AdvanceScheduleOnDispatch(ctx context.Context, empresaID, tipo string) error

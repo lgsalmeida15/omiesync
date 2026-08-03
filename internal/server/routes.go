@@ -110,6 +110,14 @@ func NewRouter(deps Dependencies) http.Handler {
 		r.Post("/admin/sync/pages/{pageID}/retry", deps.SyncHandler.AdminRetryPage)
 		r.Post("/admin/sync/jobs/{jobID}/cancelar", deps.SyncHandler.AdminCancelarJob)
 		r.Post("/admin/sync/startup-recovery", deps.SyncHandler.AdminStartupRecovery)
+
+		// Manutenção operacional de banco. São ações com alcance real — o REFRESH
+		// pode segurar a view por minutos e o cancelamento derruba consultas — por
+		// isso vivem em endpoints com alvo explícito, e não como SQL livre no
+		// SQL Explorer. O middleware de auditoria cobre todas.
+		r.Get("/admin/manutencao/consultas", deps.SyncHandler.AdminConsultasAtivas)
+		r.Post("/admin/manutencao/consultas/{pid}/cancelar", deps.SyncHandler.AdminCancelarConsulta)
+		r.Post("/admin/manutencao/grupos/{grupoID}/refresh-views", deps.SyncHandler.AdminRefreshViews)
 	})
 
 	// SQL Explorer

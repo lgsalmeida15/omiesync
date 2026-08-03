@@ -129,7 +129,82 @@ function formatErro(erro: string | null): string {
   return erro.replace(/^\[DLQ\]\s*/, '')
 }
 
+// ── Manutenção operacional ─────────────────────────────────────────────────
+interface ConsultaAtiva {
+  pid: number
+  estado: string
+  esperando_por: string | null
+  duracao_seg: number
+  query: string
+  aplicacao: string
+}
+
+interface RefreshResultado {
+  view: string
+  concorrente: boolean
+  duracao_seg: number
+  erro?: string
+}
+
+const consultas        = ref<ConsultaAtiva[]>([])
+const consultasLoading = ref(false)
+const cancelandoPid    = ref<number | null>(null)
+const grupos           = ref<{ id: string; nome: string }[]>([])
+const grupoRefresh     = ref('')
+const refreshLoading   = ref(false)
+const refreshResultado = ref<RefreshResultado[] | null>(null)
+
+async function fetchConsultas() {
+  consultasLoading.value = true
+  try {
+    const r = await api.get('/admin/manutencao/consultas')
+    consultas.value = r.data.data ?? []
+  } catch { consultas.value = [] }
+  finally { consultasLoading.value = false }
+}
+
+async function cancelarConsulta(c: ConsultaAtiva) {
+  if (!confirm(`Cancelar a consulta ${c.pid}?\n\nEla é interrompida imediatamente. Um REFRESH é transacional, então a view mantém o conteúdo anterior.`)) return
+  cancelandoPid.value = c.pid
+  try {
+    await api.post(`/admin/manutencao/consultas/${c.pid}/cancelar`)
+    await fetchConsultas()
+  } catch (e: any) {
+    alert(e?.response?.data?.message ?? 'Erro ao cancelar consulta')
+  } finally { cancelandoPid.value = null }
+}
+
+async function fetchGrupos() {
+  try {
+    const r = await api.get('/admin/grupos?page=1&per_page=100')
+    grupos.value = r.data.data ?? []
+    if (!grupoRefresh.value && grupos.value.length) grupoRefresh.value = grupos.value[0].id
+  } catch { /* sem grupos, o seletor fica vazio */ }
+}
+
+async function refreshViews() {
+  if (!grupoRefresh.value) return
+  const nome = grupos.value.find(g => g.id === grupoRefresh.value)?.nome ?? ''
+  if (!confirm(`Atualizar as views gerenciais de "${nome}"?\n\nSe já estiverem populadas, roda em modo concorrente e o dashboard segue disponível. Caso contrário, fica indisponível até concluir.`)) return
+  refreshLoading.value = true
+  refreshResultado.value = null
+  try {
+    const r = await api.post(`/admin/manutencao/grupos/${grupoRefresh.value}/refresh-views`)
+    refreshResultado.value = r.data.data ?? []
+  } catch (e: any) {
+    alert(e?.response?.data?.message ?? 'Erro ao atualizar views')
+  } finally { refreshLoading.value = false }
+}
+
+function fmtDuracao(seg: number): string {
+  if (seg < 60) return `${Math.round(seg)}s`
+  const m = Math.floor(seg / 60)
+  return m < 60 ? `${m}min ${Math.round(seg % 60)}s` : `${Math.floor(m / 60)}h ${m % 60}min`
+}
+
 onMounted(() => {
+  fetchConsultas()
+  fetchGrupos()
   fetchOverview()
   fetchJobsAtivos()
   fetchDLQ()
@@ -295,6 +370,89 @@ onUnmounted(() => {
                   class="text-blue-600 hover:text-blue-800 font-medium disabled:opacity-50"
                 >
                   {{ retryingPageId === page.id ? 'Agendando...' : 'Retry' }}
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Manutenção operacional de banco -->
+    <div class="bg-white rounded-lg shadow mt-6">
+      <div class="px-6 py-4 border-b flex items-center justify-between flex-wrap gap-3">
+        <h2 class="text-lg font-semibold">Manutenção de banco</h2>
+        <div class="flex items-center gap-2">
+          <select v-model="grupoRefresh" class="border rounded px-2 py-1 text-sm">
+            <option v-for="g in grupos" :key="g.id" :value="g.id">{{ g.nome }}</option>
+          </select>
+          <button
+            @click="refreshViews"
+            :disabled="refreshLoading || !grupoRefresh"
+            class="bg-blue-600 text-white px-3 py-1.5 rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+          >
+            {{ refreshLoading ? 'Atualizando...' : 'Atualizar views gerenciais' }}
+          </button>
+        </div>
+      </div>
+
+      <div v-if="refreshResultado" class="px-6 py-3 border-b bg-gray-50 text-sm space-y-1">
+        <div v-for="r in refreshResultado" :key="r.view" class="flex items-center gap-2">
+          <span class="font-mono text-xs">{{ r.view }}</span>
+          <span v-if="r.erro" class="text-red-600">falhou: {{ r.erro }}</span>
+          <template v-else>
+            <span class="text-gray-600">{{ fmtDuracao(r.duracao_seg) }}</span>
+            <span v-if="r.concorrente" class="text-green-700 text-xs">
+              concorrente — dashboard permaneceu disponível
+            </span>
+            <span v-else class="text-amber-700 text-xs">
+              bloqueante — a view ainda não estava populada
+            </span>
+          </template>
+        </div>
+      </div>
+
+      <div class="px-6 py-4">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-sm font-semibold text-gray-700">
+            Consultas em execução há mais de 5s
+          </h3>
+          <button @click="fetchConsultas" :disabled="consultasLoading"
+                  class="text-sm text-blue-600 hover:text-blue-800 disabled:opacity-50">
+            {{ consultasLoading ? 'Carregando...' : 'Atualizar lista' }}
+          </button>
+        </div>
+
+        <p v-if="!consultas.length" class="text-sm text-gray-500">
+          Nenhuma consulta longa em andamento.
+        </p>
+
+        <table v-else class="w-full text-sm">
+          <thead class="bg-gray-50 text-xs uppercase text-gray-500">
+            <tr>
+              <th class="px-3 py-2 text-left">PID</th>
+              <th class="px-3 py-2 text-left">Duração</th>
+              <th class="px-3 py-2 text-left">Estado</th>
+              <th class="px-3 py-2 text-left">Consulta</th>
+              <th class="px-3 py-2 text-right">Ação</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y">
+            <tr v-for="c in consultas" :key="c.pid">
+              <td class="px-3 py-2 font-mono text-xs">{{ c.pid }}</td>
+              <td class="px-3 py-2" :class="c.duracao_seg > 60 ? 'text-red-600 font-medium' : ''">
+                {{ fmtDuracao(c.duracao_seg) }}
+              </td>
+              <td class="px-3 py-2 text-xs">
+                {{ c.esperando_por ? `esperando: ${c.esperando_por}` : c.estado }}
+              </td>
+              <td class="px-3 py-2 font-mono text-xs text-gray-600 truncate max-w-md" :title="c.query">
+                {{ c.query }}
+              </td>
+              <td class="px-3 py-2 text-right">
+                <button @click="cancelarConsulta(c)" :disabled="cancelandoPid === c.pid"
+                        class="text-red-600 hover:text-red-800 font-medium disabled:opacity-50">
+                  {{ cancelandoPid === c.pid ? 'Cancelando...' : 'Cancelar' }}
                 </button>
               </td>
             </tr>

@@ -14,12 +14,12 @@ import (
 // --- mocks ---
 
 type mockRepo struct {
-	job     *SyncJob
-	jobs    []*SyncJob
-	control *SyncControl
-	total   int64
+	job      *SyncJob
+	jobs     []*SyncJob
+	control  *SyncControl
+	total    int64
 	progress []*SyncJobProgress
-	err     error
+	err      error
 }
 
 func (m *mockRepo) InsertJob(_ context.Context, empresaID, tipo, executor string) (*SyncJob, error) {
@@ -52,7 +52,7 @@ func (m *mockRepo) UpsertControl(_ context.Context, empresaID string, ativo bool
 	}
 	return &SyncControl{EmpresaID: empresaID, Ativo: ativo, IntervaloIncrementalMin: intervaloIncrementalMin, IntervaloFullDias: intervaloFullDias}, nil
 }
-func (m *mockRepo) UpdateControlAfterRun(_ context.Context, _, _ string) error { return m.err }
+func (m *mockRepo) UpdateControlAfterRun(_ context.Context, _, _ string) error     { return m.err }
 func (m *mockRepo) AdvanceScheduleOnDispatch(_ context.Context, _, _ string) error { return m.err }
 func (m *mockRepo) GetJobProgress(_ context.Context, _ string) ([]*SyncJobProgress, error) {
 	return m.progress, m.err
@@ -78,22 +78,28 @@ func (m *mockRepo) GetJobAtivo(_ context.Context, _ string) (*JobAtivoResult, er
 	}
 	return nil, nil
 }
-func (m *mockRepo) MarkStaleJobs(_ context.Context) (int64, error) { return 0, nil }
-func (m *mockRepo) UpdateJobHeartbeat(_ context.Context, _ string) error { return nil }
-func (m *mockRepo) GetJobsOverview(_ context.Context) ([]JobStatusCount, error) { return nil, nil }
-func (m *mockRepo) GetJobsAtivos(_ context.Context) ([]JobAtivoRow, error) { return nil, nil }
-func (m *mockRepo) CancelarJob(_ context.Context, _ string) error { return nil }
+func (m *mockRepo) MarkStaleJobs(_ context.Context) (int64, error)               { return 0, nil }
+func (m *mockRepo) UpdateJobHeartbeat(_ context.Context, _ string) error         { return nil }
+func (m *mockRepo) GetJobsOverview(_ context.Context) ([]JobStatusCount, error)  { return nil, nil }
+func (m *mockRepo) GetJobsAtivos(_ context.Context) ([]JobAtivoRow, error)       { return nil, nil }
+func (m *mockRepo) CancelarJob(_ context.Context, _ string) error                { return nil }
 func (m *mockRepo) InsertJobPage(_ context.Context, _, _ string, _, _ int) error { return nil }
-func (m *mockRepo) GetPendingPages(_ context.Context, _ string, _ int) ([]JobPage, error) { return nil, nil }
+func (m *mockRepo) GetPendingPages(_ context.Context, _ string, _ int) ([]JobPage, error) {
+	return nil, nil
+}
 func (m *mockRepo) CountPendingPages(_ context.Context, _ string) (int64, error) { return 0, nil }
-func (m *mockRepo) ClaimPageForProcessing(_ context.Context, _ string) (*JobPage, error) { return nil, nil }
-func (m *mockRepo) MarkPageConcluido(_ context.Context, _ string, _ int) error { return nil }
+func (m *mockRepo) ClaimPageForProcessing(_ context.Context, _ string) (*JobPage, error) {
+	return nil, nil
+}
+func (m *mockRepo) MarkPageConcluido(_ context.Context, _ string, _ int) error            { return nil }
 func (m *mockRepo) MarkPageErro(_ context.Context, _ string, _ string, _ time.Time) error { return nil }
-func (m *mockRepo) MarkPageCancelado(_ context.Context, _ string) error { return nil }
-func (m *mockRepo) GetDLQPages(_ context.Context) ([]DLQPageRow, error) { return nil, nil }
-func (m *mockRepo) RetryDLQPage(_ context.Context, _ string) error { return nil }
-func (m *mockRepo) GetPagesByJob(_ context.Context, _ string) ([]PageRow, error) { return nil, nil }
-func (m *mockRepo) GetLatestJobIDByEmpresa(_ context.Context, _ string) (string, error) { return "", nil }
+func (m *mockRepo) MarkPageCancelado(_ context.Context, _ string) error                   { return nil }
+func (m *mockRepo) GetDLQPages(_ context.Context) ([]DLQPageRow, error)                   { return nil, nil }
+func (m *mockRepo) RetryDLQPage(_ context.Context, _ string) error                        { return nil }
+func (m *mockRepo) GetPagesByJob(_ context.Context, _ string) ([]PageRow, error)          { return nil, nil }
+func (m *mockRepo) GetLatestJobIDByEmpresa(_ context.Context, _ string) (string, error) {
+	return "", nil
+}
 
 type mockDispatcher struct {
 	dispatched []webhooks.Event
@@ -172,7 +178,7 @@ func TestService_Configurar_Success(t *testing.T) {
 	ctrl, err := svc.Configurar(context.Background(), "emp-1", ConfigurarRequest{
 		Ativo:                   true,
 		IntervaloIncrementalMin: 60,
-		IntervaloFullDias:      7,
+		IntervaloFullDias:       7,
 	})
 	if err != nil {
 		t.Fatalf("Configurar: %v", err)
@@ -308,3 +314,9 @@ func TestForcarSync_ExecutorSeletivoComJobGeralAtivo_409(t *testing.T) {
 		t.Errorf("esperava erro 409, got %v", err)
 	}
 }
+
+// Manutenção operacional — não exercitada por estes testes.
+func (m *mockRepo) ConsultasAtivas(context.Context) ([]ConsultaAtiva, error)  { return nil, nil }
+func (m *mockRepo) CancelarConsulta(context.Context, int32) (bool, error)     { return false, nil }
+func (m *mockRepo) SchemaDoGrupo(context.Context, string) (string, error)     { return "", nil }
+func (m *mockRepo) RefreshView(context.Context, string, string) (bool, error) { return false, nil }

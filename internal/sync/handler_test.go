@@ -19,15 +19,15 @@ const testJWTSecret = "test-secret-minimo-32-caracteres-xpto"
 // mock service para handler
 
 type mockSvc struct {
-	status      *StatusResponse
-	jobs        []*SyncJob
-	total       int64
-	job         *SyncJob
-	control     *SyncControl
-	progress    []*SyncJobProgress
-	statusErr   error
-	listErr     error
-	forcarErr   error
+	status        *StatusResponse
+	jobs          []*SyncJob
+	total         int64
+	job           *SyncJob
+	control       *SyncControl
+	progress      []*SyncJobProgress
+	statusErr     error
+	listErr       error
+	forcarErr     error
 	configurarErr error
 	progressErr   error
 }
@@ -53,13 +53,15 @@ func (m *mockSvc) GetExecutorConfigs(_ context.Context, _ string) ([]*EmpresaExe
 func (m *mockSvc) UpdateExecutorConfig(_ context.Context, _, _ string, _ UpdateExecutorConfigRequest, _ string) (*EmpresaExecutorConfig, error) {
 	return nil, nil
 }
-func (m *mockSvc) StartupRecovery(_ context.Context) error { return nil }
+func (m *mockSvc) StartupRecovery(_ context.Context) error                      { return nil }
 func (m *mockSvc) GetAdminOverview(_ context.Context) (map[string]int64, error) { return nil, nil }
-func (m *mockSvc) GetJobsAtivos(_ context.Context) ([]JobAtivoRow, error) { return nil, nil }
-func (m *mockSvc) CancelarJob(_ context.Context, _ string) error { return nil }
-func (m *mockSvc) GetDLQPages(_ context.Context) ([]DLQPageRow, error) { return nil, nil }
-func (m *mockSvc) RetryDLQPage(_ context.Context, _ string) error { return nil }
-func (m *mockSvc) GetPagesByEmpresa(_ context.Context, _, _ string) ([]PageRow, error) { return nil, nil }
+func (m *mockSvc) GetJobsAtivos(_ context.Context) ([]JobAtivoRow, error)       { return nil, nil }
+func (m *mockSvc) CancelarJob(_ context.Context, _ string) error                { return nil }
+func (m *mockSvc) GetDLQPages(_ context.Context) ([]DLQPageRow, error)          { return nil, nil }
+func (m *mockSvc) RetryDLQPage(_ context.Context, _ string) error               { return nil }
+func (m *mockSvc) GetPagesByEmpresa(_ context.Context, _, _ string) ([]PageRow, error) {
+	return nil, nil
+}
 
 func newTestHandler(svc Service) *Handler {
 	return NewHandler(svc, auth.NewJWTService(testJWTSecret), NewSSEHub())
@@ -177,3 +179,10 @@ func TestHandler_GetJobProgress_Success(t *testing.T) {
 
 // garante que o pacote webhooks é usado (evitar import não utilizado em testes)
 var _ = webhooks.EventSyncConcluido
+
+// Manutenção operacional — não exercitada por estes testes.
+func (m *mockSvc) ListarConsultasAtivas(context.Context) ([]ConsultaAtiva, error) { return nil, nil }
+func (m *mockSvc) CancelarConsulta(context.Context, int32) (bool, error)          { return false, nil }
+func (m *mockSvc) RefreshViewsGrupo(context.Context, string) ([]RefreshViewResultado, error) {
+	return nil, nil
+}

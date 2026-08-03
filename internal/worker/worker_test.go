@@ -55,22 +55,36 @@ func (m *mockSyncRepo) AdvanceScheduleOnDispatch(_ context.Context, _, _ string)
 func (m *mockSyncRepo) GetJobProgress(_ context.Context, _ string) ([]*syncsvc.SyncJobProgress, error) {
 	return nil, nil
 }
-func (m *mockSyncRepo) MarkStaleJobs(_ context.Context) (int64, error) { return 0, nil }
+func (m *mockSyncRepo) MarkStaleJobs(_ context.Context) (int64, error)       { return 0, nil }
 func (m *mockSyncRepo) UpdateJobHeartbeat(_ context.Context, _ string) error { return nil }
-func (m *mockSyncRepo) GetJobsOverview(_ context.Context) ([]syncsvc.JobStatusCount, error) { return nil, nil }
-func (m *mockSyncRepo) GetJobsAtivos(_ context.Context) ([]syncsvc.JobAtivoRow, error) { return nil, nil }
-func (m *mockSyncRepo) CancelarJob(_ context.Context, _ string) error { return nil }
+func (m *mockSyncRepo) GetJobsOverview(_ context.Context) ([]syncsvc.JobStatusCount, error) {
+	return nil, nil
+}
+func (m *mockSyncRepo) GetJobsAtivos(_ context.Context) ([]syncsvc.JobAtivoRow, error) {
+	return nil, nil
+}
+func (m *mockSyncRepo) CancelarJob(_ context.Context, _ string) error                { return nil }
 func (m *mockSyncRepo) InsertJobPage(_ context.Context, _, _ string, _, _ int) error { return nil }
-func (m *mockSyncRepo) GetPendingPages(_ context.Context, _ string, _ int) ([]syncsvc.JobPage, error) { return nil, nil }
+func (m *mockSyncRepo) GetPendingPages(_ context.Context, _ string, _ int) ([]syncsvc.JobPage, error) {
+	return nil, nil
+}
 func (m *mockSyncRepo) CountPendingPages(_ context.Context, _ string) (int64, error) { return 0, nil }
-func (m *mockSyncRepo) ClaimPageForProcessing(_ context.Context, _ string) (*syncsvc.JobPage, error) { return nil, nil }
+func (m *mockSyncRepo) ClaimPageForProcessing(_ context.Context, _ string) (*syncsvc.JobPage, error) {
+	return nil, nil
+}
 func (m *mockSyncRepo) MarkPageConcluido(_ context.Context, _ string, _ int) error { return nil }
-func (m *mockSyncRepo) MarkPageErro(_ context.Context, _ string, _ string, _ time.Time) error { return nil }
-func (m *mockSyncRepo) MarkPageCancelado(_ context.Context, _ string) error { return nil }
+func (m *mockSyncRepo) MarkPageErro(_ context.Context, _ string, _ string, _ time.Time) error {
+	return nil
+}
+func (m *mockSyncRepo) MarkPageCancelado(_ context.Context, _ string) error         { return nil }
 func (m *mockSyncRepo) GetDLQPages(_ context.Context) ([]syncsvc.DLQPageRow, error) { return nil, nil }
-func (m *mockSyncRepo) RetryDLQPage(_ context.Context, _ string) error { return nil }
-func (m *mockSyncRepo) GetPagesByJob(_ context.Context, _ string) ([]syncsvc.PageRow, error) { return nil, nil }
-func (m *mockSyncRepo) GetLatestJobIDByEmpresa(_ context.Context, _ string) (string, error) { return "", nil }
+func (m *mockSyncRepo) RetryDLQPage(_ context.Context, _ string) error              { return nil }
+func (m *mockSyncRepo) GetPagesByJob(_ context.Context, _ string) ([]syncsvc.PageRow, error) {
+	return nil, nil
+}
+func (m *mockSyncRepo) GetLatestJobIDByEmpresa(_ context.Context, _ string) (string, error) {
+	return "", nil
+}
 func (m *mockSyncRepo) GetExecutorConfigs(_ context.Context, _ string) ([]*syncsvc.EmpresaExecutorConfig, error) {
 	return nil, nil
 }
@@ -86,7 +100,9 @@ func (m *mockSyncRepo) GetJobAtivo(_ context.Context, _ string) (*syncsvc.JobAti
 
 type mockOmieConfig struct{}
 
-func (m *mockOmieConfig) GetAll(_ context.Context) ([]*omie_config.EndpointConfig, error) { return nil, nil }
+func (m *mockOmieConfig) GetAll(_ context.Context) ([]*omie_config.EndpointConfig, error) {
+	return nil, nil
+}
 func (m *mockOmieConfig) GetByModulo(_ context.Context, _ string) (*omie_config.EndpointConfig, error) {
 	return nil, nil
 }
@@ -117,8 +133,8 @@ func (m *mockDispatcher) Dispatch(_ string, e webhooks.Event) {
 }
 
 type mockExecutor struct {
-	nome string
-	err  error
+	nome   string
+	err    error
 	called bool
 }
 
@@ -246,3 +262,11 @@ func TestWorker_ProcessJob_MultipleExecutors(t *testing.T) {
 		t.Errorf("status: got %q want concluido", repo.updatedStatus)
 	}
 }
+
+// Manutenção operacional — não exercitada por estes testes.
+func (m *mockSyncRepo) ConsultasAtivas(context.Context) ([]syncsvc.ConsultaAtiva, error) {
+	return nil, nil
+}
+func (m *mockSyncRepo) CancelarConsulta(context.Context, int32) (bool, error)     { return false, nil }
+func (m *mockSyncRepo) SchemaDoGrupo(context.Context, string) (string, error)     { return "", nil }
+func (m *mockSyncRepo) RefreshView(context.Context, string, string) (bool, error) { return false, nil }
