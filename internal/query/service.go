@@ -38,6 +38,27 @@ var writeKeywordRegex = regexp.MustCompile(`(?i)\b(insert|update|delete|drop|tru
 // que o statement interno seja validado como qualquer outra consulta.
 var explainPrefixRegex = regexp.MustCompile(`(?is)^explain\s*(\([^)]*\)\s*)?((analyze|verbose)\s+)*`)
 
+// stringLiteralRegex casa literais entre aspas simples, tratando ” escapado.
+var stringLiteralRegex = regexp.MustCompile(`'(?:[^']|'')*'`)
+
+// commentRegex casa comentários de linha e de bloco.
+var commentRegex = regexp.MustCompile(`(?s)--[^\n]*|/\*.*?\*/`)
+
+// semTextoLiteral substitui literais e comentários por espaço, para que a varredura
+// de palavras-chave veja apenas SQL executável.
+//
+// Sem isso, WHERE query ILIKE '%REFRESH MATERIALIZED VIEW%' seria rejeitado: a
+// palavra está dentro de uma string e não é comando algum. Consultar pg_stat_activity
+// procurando comandos pelo nome é justamente um dos usos legítimos da ferramenta.
+//
+// A substituição é por ESPAÇO, não por vazio: colar os pedaços permitiria esconder
+// comando de escrita — DELETE/*x*/FROM viraria DELETEFROM e escaparia da varredura,
+// que casa palavras inteiras.
+func semTextoLiteral(sql string) string {
+	sql = commentRegex.ReplaceAllString(sql, " ")
+	return stringLiteralRegex.ReplaceAllString(sql, " ")
+}
+
 // dangerousFunctions são funções que permitem acesso ao sistema de arquivos ou execução remota.
 var dangerousFunctions = []string{
 	"pg_read_file", "pg_ls_dir", "pg_execute_server_program", "pg_write_file",
@@ -80,8 +101,9 @@ func (s *service) ValidateSQL(sql string) error {
 		return apperror.Unprocessable("apenas SELECT, WITH ou EXPLAIN são permitidos")
 	}
 
-	// Palavras de escrita em qualquer posição — pega CTE modificadora.
-	if m := writeKeywordRegex.FindString(corpo); m != "" {
+	// Palavras de escrita em qualquer posição — pega CTE modificadora. Literais e
+	// comentários saem antes, senão uma string contendo a palavra viraria bloqueio.
+	if m := writeKeywordRegex.FindString(semTextoLiteral(corpo)); m != "" {
 		return apperror.Unprocessable("comando não permitido: " + strings.ToUpper(m))
 	}
 

@@ -27,6 +27,18 @@ func TestValidateSQL(t *testing.T) {
 		{"coluna deleted_at", "SELECT deleted_at FROM empresas", true},
 		{"coluna created_at", "SELECT created_at, updated_at FROM clientes", true},
 
+		// Palavra de escrita dentro de literal não é comando. Consultar
+		// pg_stat_activity procurando comandos pelo nome é uso legítimo.
+		{"palavra em literal", "SELECT * FROM pg_stat_activity WHERE query ILIKE '%REFRESH MATERIALIZED VIEW%'", true},
+		{"cancelar consulta travada", "SELECT pg_cancel_backend(pid) FROM pg_stat_activity WHERE query ILIKE '%REFRESH%'", true},
+		{"literal com delete", "SELECT * FROM audit WHERE acao = 'DELETE'", true},
+		{"comentario com drop", "SELECT 1 -- drop table clientes", true},
+
+		// Evasão via comentário no meio do comando: colar os pedaços produziria
+		// DELETEFROM e escaparia da varredura por palavra inteira.
+		{"delete com comentario no meio", "SELECT 1; DELETE/*x*/FROM clientes", false},
+		{"delete disfarcado em bloco", "WITH a AS (DELETE/**/FROM clientes RETURNING *) SELECT * FROM a", false},
+
 		// ── Bloqueados ──────────────────────────────────────────────────────
 		{"insert", "INSERT INTO clientes VALUES (1)", false},
 		{"update", "UPDATE clientes SET nome = 'x'", false},
