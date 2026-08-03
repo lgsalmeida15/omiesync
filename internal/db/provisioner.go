@@ -474,24 +474,36 @@ cp_categorias AS (
     FROM %s.contas_receber cr,
          LATERAL jsonb_array_elements(cr.raw -> 'categorias') AS cat_elem
 ),
+-- No máximo uma distribuição por (empresa, título).
+--
+-- Diferente de cp_categorias, cujos percentuais somam 100 e portanto rateiam o
+-- valor, o valor_final NÃO aplica o percentual do departamento: duas linhas de
+-- distribuição duplicariam o valor cheio. A deduplicação acontece AQUI, na CTE,
+-- e não num LEFT JOIN LATERAL no consumidor: o Postgres não indexa CTE, então o
+-- LATERAL vira laço aninhado varrendo a CTE inteira por linha de movimento.
+-- Medido: 171 ms com hash join contra mais de 2 minutos com o LATERAL.
 cp_distribuicao AS (
-    SELECT
-        cp.empresa_id,
-        cp.codigo_lancamento::TEXT                     AS id,
-        (dist_elem ->> 'nValDep')::NUMERIC             AS valor_distribuido,
-        (dist_elem ->> 'nPerDep')::NUMERIC             AS percentual_distribuicao,
-        dist_elem ->> 'cCodDep'                        AS codigo_departamento
-    FROM %s.contas_pagar cp,
-         LATERAL jsonb_array_elements(cp.raw -> 'distribuicao') AS dist_elem
-    UNION ALL
-    SELECT
-        cr.empresa_id,
-        cr.codigo_lancamento::TEXT,
-        (dist_elem ->> 'nValDep')::NUMERIC,
-        (dist_elem ->> 'nPerDep')::NUMERIC,
-        dist_elem ->> 'cCodDep'
-    FROM %s.contas_receber cr,
-         LATERAL jsonb_array_elements(cr.raw -> 'distribuicao') AS dist_elem
+    SELECT DISTINCT ON (empresa_id, id) *
+    FROM (
+        SELECT
+            cp.empresa_id,
+            cp.codigo_lancamento::TEXT                     AS id,
+            (dist_elem ->> 'nValDep')::NUMERIC             AS valor_distribuido,
+            (dist_elem ->> 'nPerDep')::NUMERIC             AS percentual_distribuicao,
+            dist_elem ->> 'cCodDep'                        AS codigo_departamento
+        FROM %s.contas_pagar cp,
+             LATERAL jsonb_array_elements(cp.raw -> 'distribuicao') AS dist_elem
+        UNION ALL
+        SELECT
+            cr.empresa_id,
+            cr.codigo_lancamento::TEXT,
+            (dist_elem ->> 'nValDep')::NUMERIC,
+            (dist_elem ->> 'nPerDep')::NUMERIC,
+            dist_elem ->> 'cCodDep'
+        FROM %s.contas_receber cr,
+             LATERAL jsonb_array_elements(cr.raw -> 'distribuicao') AS dist_elem
+    ) dist_todas
+    ORDER BY empresa_id, id, codigo_departamento
 ),
 movimentos_processados AS (
     SELECT
@@ -559,19 +571,9 @@ movimentos_processados AS (
         END                                            AS ajuste_receita_despesa
     FROM movimentos_unificados m
     LEFT JOIN cp_categorias   c    ON m.codigo_titulo = c.id   AND m.empresa_id = c.empresa_id
-    -- No máximo uma distribuição por título. Diferente de cp_categorias, cujos
-    -- percentuais somam 100 e portanto rateiam o valor, o valor_final NÃO aplica o
-    -- percentual do departamento: duas linhas de distribuição duplicariam o valor
-    -- cheio. Hoje nenhum título tem mais de um departamento (medido: 11.703 com
-    -- zero, 26 com um), então o LIMIT 1 é inócuo — existe para que passar a ratear
-    -- por departamento seja uma decisão explícita, e não uma inflação silenciosa.
-    LEFT JOIN LATERAL (
-        SELECT dd.codigo_departamento, dd.percentual_distribuicao, dd.valor_distribuido
-        FROM cp_distribuicao dd
-        WHERE dd.id = m.codigo_titulo AND dd.empresa_id = m.empresa_id
-        ORDER BY dd.codigo_departamento
-        LIMIT 1
-    ) d ON TRUE
+    -- cp_distribuicao já vem deduplicada por (empresa, título), então este join
+    -- não multiplica linhas. Hash join, não laço aninhado.
+    LEFT JOIN cp_distribuicao d    ON m.codigo_titulo = d.id   AND m.empresa_id = d.empresa_id
     LEFT JOIN %s.contas_correntes cc
            ON cc.codigo_conta_corrente::TEXT = m.codigo_conta_corrente
           AND cc.empresa_id = m.empresa_id
@@ -693,24 +695,36 @@ cp_categorias AS (
     FROM %s.contas_receber cr,
          LATERAL jsonb_array_elements(cr.raw -> 'categorias') AS cat_elem
 ),
+-- No máximo uma distribuição por (empresa, título).
+--
+-- Diferente de cp_categorias, cujos percentuais somam 100 e portanto rateiam o
+-- valor, o valor_final NÃO aplica o percentual do departamento: duas linhas de
+-- distribuição duplicariam o valor cheio. A deduplicação acontece AQUI, na CTE,
+-- e não num LEFT JOIN LATERAL no consumidor: o Postgres não indexa CTE, então o
+-- LATERAL vira laço aninhado varrendo a CTE inteira por linha de movimento.
+-- Medido: 171 ms com hash join contra mais de 2 minutos com o LATERAL.
 cp_distribuicao AS (
-    SELECT
-        cp.empresa_id,
-        cp.codigo_lancamento::TEXT                     AS id,
-        (dist_elem ->> 'nValDep')::NUMERIC             AS valor_distribuido,
-        (dist_elem ->> 'nPerDep')::NUMERIC             AS percentual_distribuicao,
-        dist_elem ->> 'cCodDep'                        AS codigo_departamento
-    FROM %s.contas_pagar cp,
-         LATERAL jsonb_array_elements(cp.raw -> 'distribuicao') AS dist_elem
-    UNION ALL
-    SELECT
-        cr.empresa_id,
-        cr.codigo_lancamento::TEXT,
-        (dist_elem ->> 'nValDep')::NUMERIC,
-        (dist_elem ->> 'nPerDep')::NUMERIC,
-        dist_elem ->> 'cCodDep'
-    FROM %s.contas_receber cr,
-         LATERAL jsonb_array_elements(cr.raw -> 'distribuicao') AS dist_elem
+    SELECT DISTINCT ON (empresa_id, id) *
+    FROM (
+        SELECT
+            cp.empresa_id,
+            cp.codigo_lancamento::TEXT                     AS id,
+            (dist_elem ->> 'nValDep')::NUMERIC             AS valor_distribuido,
+            (dist_elem ->> 'nPerDep')::NUMERIC             AS percentual_distribuicao,
+            dist_elem ->> 'cCodDep'                        AS codigo_departamento
+        FROM %s.contas_pagar cp,
+             LATERAL jsonb_array_elements(cp.raw -> 'distribuicao') AS dist_elem
+        UNION ALL
+        SELECT
+            cr.empresa_id,
+            cr.codigo_lancamento::TEXT,
+            (dist_elem ->> 'nValDep')::NUMERIC,
+            (dist_elem ->> 'nPerDep')::NUMERIC,
+            dist_elem ->> 'cCodDep'
+        FROM %s.contas_receber cr,
+             LATERAL jsonb_array_elements(cr.raw -> 'distribuicao') AS dist_elem
+    ) dist_todas
+    ORDER BY empresa_id, id, codigo_departamento
 ),
 movimentos_processados AS (
     SELECT
@@ -778,19 +792,9 @@ movimentos_processados AS (
         END                                            AS ajuste_receita_despesa
     FROM movimentos_unificados m
     LEFT JOIN cp_categorias   c    ON m.codigo_titulo = c.id   AND m.empresa_id = c.empresa_id
-    -- No máximo uma distribuição por título. Diferente de cp_categorias, cujos
-    -- percentuais somam 100 e portanto rateiam o valor, o valor_final NÃO aplica o
-    -- percentual do departamento: duas linhas de distribuição duplicariam o valor
-    -- cheio. Hoje nenhum título tem mais de um departamento (medido: 11.703 com
-    -- zero, 26 com um), então o LIMIT 1 é inócuo — existe para que passar a ratear
-    -- por departamento seja uma decisão explícita, e não uma inflação silenciosa.
-    LEFT JOIN LATERAL (
-        SELECT dd.codigo_departamento, dd.percentual_distribuicao, dd.valor_distribuido
-        FROM cp_distribuicao dd
-        WHERE dd.id = m.codigo_titulo AND dd.empresa_id = m.empresa_id
-        ORDER BY dd.codigo_departamento
-        LIMIT 1
-    ) d ON TRUE
+    -- cp_distribuicao já vem deduplicada por (empresa, título), então este join
+    -- não multiplica linhas. Hash join, não laço aninhado.
+    LEFT JOIN cp_distribuicao d    ON m.codigo_titulo = d.id   AND m.empresa_id = d.empresa_id
     LEFT JOIN %s.contas_correntes cc
            ON cc.codigo_conta_corrente::TEXT = m.codigo_conta_corrente
           AND cc.empresa_id = m.empresa_id

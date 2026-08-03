@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -72,6 +73,23 @@ type Worker struct {
 	hub        *syncsvc.SSEHub
 	pool       *pgxpool.Pool
 	log        zerolog.Logger
+
+	// Coalescência de refresh por schema. As views gerenciais são do GRUPO, mas o
+	// sync é por empresa — um grupo com 5 empresas disparava 5 refreshes completos
+	// da mesma view, serializados pelo lock exclusivo do REFRESH. Observado em
+	// produção: 5 refreshes empilhados, o primeiro rodando há 26 minutos e os
+	// outros em espera, com o dashboard inacessível o tempo todo.
+	refreshMu    sync.Mutex
+	refreshAtivo map[string]*refreshState
+}
+
+type refreshState struct {
+	// pendente sinaliza que chegou pedido novo enquanto um refresh rodava; ao
+	// terminar, roda mais uma vez para incorporar os dados que chegaram depois.
+	pendente bool
+	// full acumula: se qualquer pedido da janela pediu histórico, o refresh final
+	// também atualiza a histórica.
+	full bool
 }
 
 func NewWorker(
@@ -95,6 +113,80 @@ func NewWorker(
 		hub:        hub,
 		pool:       pool,
 		log:        log.With().Str("component", "worker").Logger(),
+
+		refreshAtivo: make(map[string]*refreshState),
+	}
+}
+
+// agendarRefresh atualiza as views gerenciais do schema, garantindo no máximo um
+// REFRESH em andamento por schema.
+//
+// O REFRESH (sem CONCURRENTLY) toma lock exclusivo e bloqueia toda leitura da view.
+// Como as views são do grupo e o sync é por empresa, sem coalescência um grupo com
+// N empresas enfileira N refreshes idênticos, e o dashboard fica indisponível
+// durante a soma de todos eles.
+//
+// Se chegar pedido enquanto um refresh roda, marca pendente em vez de enfileirar:
+// ao terminar, executa mais uma vez — o suficiente para incorporar o que chegou no
+// intervalo, independente de quantos pedidos tenham ocorrido.
+func (w *Worker) agendarRefresh(schema string, full bool) {
+	w.refreshMu.Lock()
+	if st, rodando := w.refreshAtivo[schema]; rodando {
+		st.pendente = true
+		st.full = st.full || full
+		w.refreshMu.Unlock()
+		w.log.Debug().Str("schema", schema).Msg("worker: refresh já em andamento, coalescido")
+		return
+	}
+	w.refreshAtivo[schema] = &refreshState{full: full}
+	w.refreshMu.Unlock()
+
+	go func() {
+		for {
+			w.refreshMu.Lock()
+			st := w.refreshAtivo[schema]
+			executarFull := st.full
+			st.pendente = false
+			st.full = false
+			w.refreshMu.Unlock()
+
+			w.executarRefresh(schema, executarFull)
+
+			w.refreshMu.Lock()
+			if !w.refreshAtivo[schema].pendente {
+				delete(w.refreshAtivo, schema)
+				w.refreshMu.Unlock()
+				return
+			}
+			w.refreshMu.Unlock()
+		}
+	}()
+}
+
+func (w *Worker) executarRefresh(schema string, full bool) {
+	safe := pgx.Identifier{schema}.Sanitize()
+
+	acCtx, acCancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer acCancel()
+	if _, err := w.pool.Exec(acCtx, fmt.Sprintf(
+		"REFRESH MATERIALIZED VIEW %s.matvw_gerencial_ano_corrente", safe,
+	)); err != nil {
+		w.log.Warn().Err(err).Str("schema", schema).Msg("worker: refresh matvw_gerencial_ano_corrente falhou")
+	} else {
+		w.log.Info().Str("schema", schema).Msg("worker: matvw_gerencial_ano_corrente atualizada")
+	}
+
+	if !full {
+		return
+	}
+	histCtx, histCancel := context.WithTimeout(context.Background(), 2*time.Hour)
+	defer histCancel()
+	if _, err := w.pool.Exec(histCtx, fmt.Sprintf(
+		"REFRESH MATERIALIZED VIEW %s.matvw_gerencial_historico", safe,
+	)); err != nil {
+		w.log.Warn().Err(err).Str("schema", schema).Msg("worker: refresh matvw_gerencial_historico falhou")
+	} else {
+		w.log.Info().Str("schema", schema).Msg("worker: matvw_gerencial_historico atualizada")
 	}
 }
 
@@ -260,40 +352,11 @@ func (w *Worker) execute(ctx context.Context, job *syncsvc.SyncJob, creds *Empre
 		w.finalizarJob(ctx, job.ID, creds.GrupoID, job.EmpresaID, "concluido", "", now)
 
 		// Refresh assíncrono das views gerenciais após sync bem-sucedido.
-		// Incremental: apenas ano_corrente (dataset pequeno, rápido).
-		// Full: ano_corrente + historico (dataset grande — timeout estendido para historico).
+		// Incremental: apenas ano_corrente. Full ou re-provisionamento: as duas.
 		if w.pool != nil {
-			schema := creds.Schema
 			// Re-provisionamento entra aqui: se as views foram recriadas WITH NO DATA,
 			// a histórica precisa ser repopulada mesmo num sync incremental.
-			isFull := job.Tipo == "full" || reprovisionado
-			go func() {
-				safe := pgx.Identifier{schema}.Sanitize()
-
-				// Sempre atualiza view do ano corrente
-				acCtx, acCancel := context.WithTimeout(context.Background(), 30*time.Minute)
-				defer acCancel()
-				if _, err := w.pool.Exec(acCtx, fmt.Sprintf(
-					"REFRESH MATERIALIZED VIEW %s.matvw_gerencial_ano_corrente", safe,
-				)); err != nil {
-					w.log.Warn().Err(err).Str("schema", schema).Msg("worker: refresh matvw_gerencial_ano_corrente falhou")
-				} else {
-					w.log.Info().Str("schema", schema).Msg("worker: matvw_gerencial_ano_corrente atualizada")
-				}
-
-				// Apenas em sync full: atualiza histórico (pode demorar)
-				if isFull {
-					histCtx, histCancel := context.WithTimeout(context.Background(), 2*time.Hour)
-					defer histCancel()
-					if _, err := w.pool.Exec(histCtx, fmt.Sprintf(
-						"REFRESH MATERIALIZED VIEW %s.matvw_gerencial_historico", safe,
-					)); err != nil {
-						w.log.Warn().Err(err).Str("schema", schema).Msg("worker: refresh matvw_gerencial_historico falhou")
-					} else {
-						w.log.Info().Str("schema", schema).Msg("worker: matvw_gerencial_historico atualizada")
-					}
-				}
-			}()
+			w.agendarRefresh(creds.Schema, job.Tipo == "full" || reprovisionado)
 		}
 	}
 
