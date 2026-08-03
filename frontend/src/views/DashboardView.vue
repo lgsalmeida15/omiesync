@@ -117,11 +117,22 @@
       </div>
     </Teleport>
 
+    <!-- Abas -->
+    <div class="dash-tabs">
+      <button v-for="t in abas" :key="t.id"
+              :class="['dash-tab', { active: aba === t.id }]"
+              @click="aba = t.id">{{ t.label }}</button>
+    </div>
+
     <!-- Loading / erro -->
     <div v-if="carregando && !dados" class="state-msg">
       <AppSpinner /> Carregando dashboard...
     </div>
     <div v-else-if="erro" class="state-msg state-msg--erro">{{ erro }}</div>
+
+    <!-- Aba Resultado: componente carregado sob demanda para não pesar no bundle
+         inicial do dashboard, que já é o maior da aplicação. -->
+    <ResultadoPivot v-else-if="aba === 'resultado'" :grupo-id="grupoIDAtivo" :filtros="filtrosAtivos" />
 
     <!-- Conteúdo -->
     <div v-else-if="dados" class="dash-content">
@@ -206,7 +217,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, watch, defineAsyncComponent } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { Chart, registerables } from 'chart.js'
 import ChartDataLabels from 'chartjs-plugin-datalabels'
@@ -219,6 +230,30 @@ Chart.register(...registerables, ChartDataLabels)
 const auth   = useAuthStore()
 const router = useRouter()
 const route  = useRoute()
+
+const ResultadoPivot = defineAsyncComponent(
+  () => import('@/components/dashboard/ResultadoPivot.vue')
+)
+
+const abas = [
+  { id: 'geral',     label: 'VISÃO GERAL' },
+  { id: 'resultado', label: 'RESULTADO'   },
+] as const
+const aba = ref<'geral' | 'resultado'>('geral')
+
+// Grupo resolvido em carregar(); a aba Resultado consulta o mesmo grupo.
+const grupoIDAtivo = ref('')
+
+// Espelha os filtros da topbar no formato que a API espera, para que as duas abas
+// mostrem sempre o mesmo recorte.
+const filtrosAtivos = computed(() => ({
+  ano:              filtros.ano,
+  empresas:         filtros.empresas.length         ? filtros.empresas         : undefined,
+  contas_correntes: filtros.contas_correntes.length ? filtros.contas_correntes : undefined,
+  departamentos:    filtros.departamentos.length    ? filtros.departamentos    : undefined,
+  categorias:       filtros.categorias.length       ? filtros.categorias       : undefined,
+  cliente:          filtros.cliente || undefined,
+}))
 
 // ── Estado ─────────────────────────────────────────────────────────────────
 const dados      = ref<DashboardData | null>(null)
@@ -485,6 +520,7 @@ async function carregar() {
     erro.value = 'Nenhum grupo associado. Faça login novamente.'
     return
   }
+  grupoIDAtivo.value = grupoID
 
   carregando.value = true
   erro.value = ''
@@ -698,6 +734,21 @@ onBeforeUnmount(() => {
 
 /* ── Conteúdo ──────────────────────────────────────────────────────────── */
 .dash-content { display: flex; flex-direction: column; gap: 20px; }
+
+.dash-tabs {
+  display: flex; gap: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 18px;
+}
+.dash-tab {
+  background: none; border: none;
+  border-bottom: 2px solid transparent;
+  padding: 9px 16px; margin-bottom: -1px;
+  font-family: var(--mono); font-size: 10px; letter-spacing: 1.2px;
+  color: var(--text3); cursor: pointer; transition: var(--trans);
+}
+.dash-tab:hover { color: var(--text2); }
+.dash-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
 
 .section-title {
   display: flex; align-items: center; gap: 8px;

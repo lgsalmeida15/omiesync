@@ -61,6 +61,7 @@ func (h *Handler) Routes() http.Handler {
 		"SELECT id, codigo_projeto, nome, descricao, data_inicio, data_fim, status, synced_at FROM %s.projetos ORDER BY nome"))
 
 	r.Get("/{grupoID}/dashboard", h.dashboardHandler)
+	r.Get("/{grupoID}/pivot", h.pivotHandler)
 
 	return r
 }
@@ -139,20 +140,25 @@ func (h *Handler) queryHandler(tabela, sqlTemplate string) http.HandlerFunc {
 	}
 }
 
-func (h *Handler) dashboardHandler(w http.ResponseWriter, r *http.Request) {
-	grupoID := chi.URLParam(r, "grupoID")
-
+// autorizaGrupo garante que o usuário só leia dados do próprio grupo.
+// admin_global acessa qualquer um. Retorna false já tendo escrito a resposta.
+func autorizaGrupo(w http.ResponseWriter, r *http.Request, grupoID string) bool {
 	claims, ok := auth.ClaimsFromContext(r.Context())
 	if !ok {
 		response.Unauthorized(w, "não autenticado")
-		return
+		return false
 	}
 	if claims.Role != "admin_global" && claims.GrupoID != grupoID {
 		response.FromAppError(w, apperror.Forbidden("acesso negado"))
-		return
+		return false
 	}
+	return true
+}
 
-	// Parâmetros de filtro
+// parseDashboardParams lê os filtros da query string. Compartilhado entre dashboard
+// e pivot: divergência aqui faria as duas telas mostrarem recortes diferentes do
+// mesmo período, sem nenhum erro aparente.
+func parseDashboardParams(r *http.Request, grupoID string) DashboardParams {
 	ano := time.Now().Year()
 	if v := r.URL.Query().Get("ano"); v != "" {
 		if parsed, err := strconv.Atoi(v); err == nil && parsed > 2000 {
@@ -174,7 +180,7 @@ func (h *Handler) dashboardHandler(w http.ResponseWriter, r *http.Request) {
 		return out
 	}
 
-	params := DashboardParams{
+	return DashboardParams{
 		GrupoID:         grupoID,
 		Ano:             ano,
 		Empresas:        split(r.URL.Query().Get("empresas")),
@@ -183,6 +189,15 @@ func (h *Handler) dashboardHandler(w http.ResponseWriter, r *http.Request) {
 		Categorias:      split(r.URL.Query().Get("categorias")),
 		Cliente:         strings.TrimSpace(r.URL.Query().Get("cliente")),
 	}
+}
+
+func (h *Handler) dashboardHandler(w http.ResponseWriter, r *http.Request) {
+	grupoID := chi.URLParam(r, "grupoID")
+	if !autorizaGrupo(w, r, grupoID) {
+		return
+	}
+
+	params := parseDashboardParams(r, grupoID)
 
 	data, err := QueryDashboard(r.Context(), h.pool, params)
 	if err != nil {
@@ -194,6 +209,26 @@ func (h *Handler) dashboardHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		response.Error(w, http.StatusInternalServerError, "erro ao consultar dashboard", err)
+		return
+	}
+
+	response.OK(w, data)
+}
+
+// pivotHandler serve a aba "Resultado": matriz de categoria e cliente por mês.
+func (h *Handler) pivotHandler(w http.ResponseWriter, r *http.Request) {
+	grupoID := chi.URLParam(r, "grupoID")
+	if !autorizaGrupo(w, r, grupoID) {
+		return
+	}
+
+	data, err := QueryPivot(r.Context(), h.pool, parseDashboardParams(r, grupoID))
+	if err != nil {
+		if errors.Is(err, ErrViewNaoPopulada) {
+			response.FromAppError(w, apperror.Unprocessable(ErrViewNaoPopulada.Error()))
+			return
+		}
+		response.Error(w, http.StatusInternalServerError, "erro ao consultar resultado", err)
 		return
 	}
 

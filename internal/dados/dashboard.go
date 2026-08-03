@@ -119,8 +119,12 @@ func QueryDashboard(ctx context.Context, pool *pgxpool.Pool, p DashboardParams) 
 	}, nil
 }
 
-func queryGraficoMensal(ctx context.Context, pool *pgxpool.Pool, safe, view string, p DashboardParams) ([]GraficoMensal, error) {
-	args := []any{p.Ano}
+// buildFiltroAno monta o WHERE compartilhado pelas consultas que leem a matvw por
+// ano. Extraído para que dashboard e pivot não divirjam: filtro aplicado só num
+// dos dois produziria números diferentes para o mesmo recorte, sem erro visível.
+// $1 é sempre o ano.
+func buildFiltroAno(p DashboardParams) (where string, args []any) {
+	args = []any{p.Ano}
 	conditions := []string{"ano = $1"}
 	idx := 2
 
@@ -149,7 +153,11 @@ func queryGraficoMensal(ctx context.Context, pool *pgxpool.Pool, safe, view stri
 		args = append(args, "%"+p.Cliente+"%")
 	}
 
-	where := strings.Join(conditions, " AND ")
+	return strings.Join(conditions, " AND "), args
+}
+
+func queryGraficoMensal(ctx context.Context, pool *pgxpool.Pool, safe, view string, p DashboardParams) ([]GraficoMensal, error) {
+	where, args := buildFiltroAno(p)
 	sql := fmt.Sprintf(`
 		SELECT
 			mes,
