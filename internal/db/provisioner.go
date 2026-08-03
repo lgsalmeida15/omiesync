@@ -21,7 +21,8 @@ import (
 //	v5 — remove a matvw_gerencial_resultado unificada
 //	v6 — movimentos_financeiros: carga completa, renomeia colunas, recria as matvw
 //	v7 — extrato/contas_correntes: coluna fluxo_caixa, recria as matvw
-const CurrentSchemaVersion = 7
+//	v8 — matvw no grão de movimento: remove o DISTINCT ON que descartava baixas parciais
+const CurrentSchemaVersion = 8
 
 // Provisioner cria e inicializa schemas de tenant.
 type Provisioner struct {
@@ -342,6 +343,24 @@ BEGIN
 END
 $$`, "'"+schemaName+"'", safe),
 
+		// Auto-upgrade v8: as views passam ao grão de movimento. Recria as que ainda
+		// têm o DISTINCT ON, que descartava baixas parciais. Idempotente: a definição
+		// nova não contém o marcador, então nas execuções seguintes nada acontece.
+		fmt.Sprintf(`DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_matviews
+               WHERE schemaname = %[1]s AND matviewname = 'matvw_gerencial_ano_corrente'
+                 AND definition LIKE '%%DISTINCT ON%%') THEN
+        DROP MATERIALIZED VIEW %[2]s.matvw_gerencial_ano_corrente CASCADE;
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_matviews
+               WHERE schemaname = %[1]s AND matviewname = 'matvw_gerencial_historico'
+                 AND definition LIKE '%%DISTINCT ON%%') THEN
+        DROP MATERIALIZED VIEW %[2]s.matvw_gerencial_historico CASCADE;
+    END IF;
+END
+$$`, "'"+schemaName+"'", safe),
+
 		// ── View: ano corrente + previsões futuras ────────────────────────────────
 		// Filtro: ano >= ano atual (captura previsões de extrato para anos futuros).
 		// REFRESH: após todo sync (incremental e full) — dataset pequeno, rápido.
@@ -385,14 +404,18 @@ movimentos_unificados AS (
 
     UNION ALL
 
-    -- Movimentos realizados do ano corrente em diante.
-    -- DISTINCT ON mantém o grão de título (uma baixa em lote traz N títulos por
-    -- movimento, e o modelo gerencial raciocina por título). Movimentos sem título
-    -- usam o próprio id como chave, senão todos colapsariam numa linha só — no
-    -- Postgres, NULL agrupa com NULL no DISTINCT ON.
-    -- Os parênteses são obrigatórios: sem eles o ORDER BY final ligaria ao UNION
-    -- inteiro e o DISTINCT ON seria rejeitado.
-    (SELECT DISTINCT ON (mf.empresa_id, COALESCE(mf.codigo_titulo::TEXT, 'mov:' || mf.id::TEXT))
+    -- Movimentos realizados do ano corrente em diante, no grão de MOVIMENTO.
+    --
+    -- Houve aqui um DISTINCT ON por título, herdado de quando o ETL fazia upsert e
+    -- só guardava um movimento por título. Ele descartava baixas parciais: um título
+    -- pago em quatro parcelas aparecia com uma só, e as outras três sumiam do
+    -- resultado. Medido em produção: 723 movimentos em 189 títulos, dos quais apenas
+    -- 189 chegavam à view.
+    --
+    -- Cada baixa é uma saída de caixa distinta e todas devem contar. O fan-out com
+    -- cp_categorias é correto por construção: os percentuais somam 100, então N
+    -- movimentos × M categorias somam exatamente o valor dos N movimentos.
+    SELECT
         mf.empresa_id,
         mf.codigo_conta_corrente::TEXT                            AS codigo_conta_corrente,
         mf.raw -> 'detalhes' ->> 'nCodCliente'                   AS codigo_cliente,
@@ -427,7 +450,6 @@ movimentos_unificados AS (
       AND NULLIF(mf.raw -> 'detalhes' ->> 'dDtPagamento','') IS NOT NULL
       AND EXTRACT(YEAR FROM TO_DATE(NULLIF(mf.raw -> 'detalhes' ->> 'dDtPagamento',''), 'DD/MM/YYYY'))
           >= EXTRACT(YEAR FROM CURRENT_DATE)
-    ORDER BY mf.empresa_id, COALESCE(mf.codigo_titulo::TEXT, 'mov:' || mf.id::TEXT), mf.id DESC)
 ),
 cp_categorias AS (
     SELECT
@@ -537,7 +559,19 @@ movimentos_processados AS (
         END                                            AS ajuste_receita_despesa
     FROM movimentos_unificados m
     LEFT JOIN cp_categorias   c    ON m.codigo_titulo = c.id   AND m.empresa_id = c.empresa_id
-    LEFT JOIN cp_distribuicao d    ON m.codigo_titulo = d.id   AND m.empresa_id = d.empresa_id
+    -- No máximo uma distribuição por título. Diferente de cp_categorias, cujos
+    -- percentuais somam 100 e portanto rateiam o valor, o valor_final NÃO aplica o
+    -- percentual do departamento: duas linhas de distribuição duplicariam o valor
+    -- cheio. Hoje nenhum título tem mais de um departamento (medido: 11.703 com
+    -- zero, 26 com um), então o LIMIT 1 é inócuo — existe para que passar a ratear
+    -- por departamento seja uma decisão explícita, e não uma inflação silenciosa.
+    LEFT JOIN LATERAL (
+        SELECT dd.codigo_departamento, dd.percentual_distribuicao, dd.valor_distribuido
+        FROM cp_distribuicao dd
+        WHERE dd.id = m.codigo_titulo AND dd.empresa_id = m.empresa_id
+        ORDER BY dd.codigo_departamento
+        LIMIT 1
+    ) d ON TRUE
     LEFT JOIN %s.contas_correntes cc
            ON cc.codigo_conta_corrente::TEXT = m.codigo_conta_corrente
           AND cc.empresa_id = m.empresa_id
@@ -601,10 +635,10 @@ movimentos_unificados AS (
     -- ter data passada. Um ramo filtrando ano < ano atual seria sempre vazio e só
     -- custaria tempo de REFRESH.
     --
-    -- Movimentos realizados de anos anteriores.
-    -- Ver comentário equivalente em matvw_gerencial_ano_corrente sobre o DISTINCT ON
-    -- e sobre a obrigatoriedade dos parênteses neste arm.
-    (SELECT DISTINCT ON (mf.empresa_id, COALESCE(mf.codigo_titulo::TEXT, 'mov:' || mf.id::TEXT))
+    -- Movimentos realizados de anos anteriores, no grão de MOVIMENTO.
+    -- Ver comentário equivalente em matvw_gerencial_ano_corrente sobre a remoção do
+    -- DISTINCT ON, que descartava baixas parciais.
+    SELECT
         mf.empresa_id,
         mf.codigo_conta_corrente::TEXT                            AS codigo_conta_corrente,
         mf.raw -> 'detalhes' ->> 'nCodCliente'                   AS codigo_cliente,
@@ -635,7 +669,6 @@ movimentos_unificados AS (
       AND NULLIF(mf.raw -> 'detalhes' ->> 'dDtPagamento','') IS NOT NULL
       AND EXTRACT(YEAR FROM TO_DATE(NULLIF(mf.raw -> 'detalhes' ->> 'dDtPagamento',''), 'DD/MM/YYYY'))
           < EXTRACT(YEAR FROM CURRENT_DATE)
-    ORDER BY mf.empresa_id, COALESCE(mf.codigo_titulo::TEXT, 'mov:' || mf.id::TEXT), mf.id DESC)
 ),
 cp_categorias AS (
     SELECT
@@ -745,7 +778,19 @@ movimentos_processados AS (
         END                                            AS ajuste_receita_despesa
     FROM movimentos_unificados m
     LEFT JOIN cp_categorias   c    ON m.codigo_titulo = c.id   AND m.empresa_id = c.empresa_id
-    LEFT JOIN cp_distribuicao d    ON m.codigo_titulo = d.id   AND m.empresa_id = d.empresa_id
+    -- No máximo uma distribuição por título. Diferente de cp_categorias, cujos
+    -- percentuais somam 100 e portanto rateiam o valor, o valor_final NÃO aplica o
+    -- percentual do departamento: duas linhas de distribuição duplicariam o valor
+    -- cheio. Hoje nenhum título tem mais de um departamento (medido: 11.703 com
+    -- zero, 26 com um), então o LIMIT 1 é inócuo — existe para que passar a ratear
+    -- por departamento seja uma decisão explícita, e não uma inflação silenciosa.
+    LEFT JOIN LATERAL (
+        SELECT dd.codigo_departamento, dd.percentual_distribuicao, dd.valor_distribuido
+        FROM cp_distribuicao dd
+        WHERE dd.id = m.codigo_titulo AND dd.empresa_id = m.empresa_id
+        ORDER BY dd.codigo_departamento
+        LIMIT 1
+    ) d ON TRUE
     LEFT JOIN %s.contas_correntes cc
            ON cc.codigo_conta_corrente::TEXT = m.codigo_conta_corrente
           AND cc.empresa_id = m.empresa_id
