@@ -9,12 +9,15 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/rs/zerolog"
+
+	rootdb "omie-sync-api/db"
 	"omie-sync-api/internal/audit"
 	"omie-sync-api/internal/auth"
 	"omie-sync-api/internal/config"
 	"omie-sync-api/internal/dados"
 	"omie-sync-api/internal/db"
-	rootdb "omie-sync-api/db"
 	"omie-sync-api/internal/empresas"
 	"omie-sync-api/internal/etl"
 	"omie-sync-api/internal/etl/progress"
@@ -118,6 +121,16 @@ func main() {
 		log.Error().Err(err).Msg("falha no startup recovery — continuando mesmo assim")
 	}
 
+	// Provisiona os schemas ANTES de o scheduler subir.
+	//
+	// Antes isso só acontecia no início de um job de sync, o que criava um impasse:
+	// o upgrade precisa dropar as views materializadas, o DROP precisa do lock
+	// exclusivo, e o lock costuma estar ocupado justamente pelo REFRESH lento que o
+	// upgrade viria corrigir. O job travava e a correção nunca era aplicada.
+	//
+	// No processo recém-iniciado não há refresh em andamento, então o lock está livre.
+	provisionarSchemas(context.Background(), pool, provisioner, log)
+
 	scheduler.Start()
 	defer scheduler.Stop()
 
@@ -175,4 +188,50 @@ func main() {
 
 	<-done
 	log.Info().Msg("servidor encerrado")
+}
+
+// provisionarSchemas aplica upgrades pendentes de schema em todos os grupos ativos.
+//
+// Roda no startup, de propósito. Enquanto isso dependia do início de um job de sync,
+// um schema desatualizado só era corrigido se alguém sincronizasse — e, pior, o DROP
+// das views materializadas disputava lock com o REFRESH que o upgrade viria consertar.
+//
+// Falha de um grupo não impede os demais nem a subida da aplicação: sem isso, um
+// schema problemático deixaria a API inteira fora do ar.
+func provisionarSchemas(ctx context.Context, pool *pgxpool.Pool, provisioner *db.Provisioner, log zerolog.Logger) {
+	rows, err := pool.Query(ctx,
+		`SELECT schema_name FROM _etl.grupos WHERE deleted_at IS NULL ORDER BY nome`)
+	if err != nil {
+		log.Error().Err(err).Msg("provisionamento: falha ao listar grupos — continuando")
+		return
+	}
+	var schemas []string
+	for rows.Next() {
+		var s string
+		if err := rows.Scan(&s); err != nil {
+			log.Error().Err(err).Msg("provisionamento: falha ao ler grupo")
+			continue
+		}
+		schemas = append(schemas, s)
+	}
+	rows.Close()
+
+	atualizados := 0
+	for _, schema := range schemas {
+		if !provisioner.NeedsProvisioning(ctx, schema) {
+			continue
+		}
+		inicio := time.Now()
+		if err := provisioner.ProvisionSchema(ctx, schema); err != nil {
+			log.Error().Err(err).Str("schema", schema).
+				Msg("provisionamento: falha no upgrade de schema — será tentado no próximo sync")
+			continue
+		}
+		atualizados++
+		log.Info().Str("schema", schema).Dur("duracao", time.Since(inicio)).
+			Msg("provisionamento: schema atualizado")
+	}
+
+	log.Info().Int("grupos", len(schemas)).Int("atualizados", atualizados).
+		Msg("provisionamento de schemas concluído")
 }
