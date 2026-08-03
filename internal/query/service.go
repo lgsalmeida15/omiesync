@@ -25,11 +25,18 @@ func NewService() Service {
 	return &service{}
 }
 
-var forbiddenPrefixes = []string{
-	"insert", "update", "delete", "drop", "truncate",
-	"alter", "create", "grant", "revoke", "execute",
-	"call", "do", "copy", "with",
-}
+// writeKeywords são comandos de escrita. Verificados em QUALQUER posição, não só no
+// prefixo, para barrar CTE que modifica dados — WITH x AS (DELETE ...) SELECT ... — que
+// de outro modo passaria pelo teste de prefixo.
+//
+// O casamento é por palavra inteira: "update" não casa com a coluna "updated_at",
+// nem "delete" com "deleted_at".
+var writeKeywordRegex = regexp.MustCompile(`(?i)\b(insert|update|delete|drop|truncate` +
+	`|alter|create|grant|revoke|execute|call|copy|merge|refresh|vacuum|reindex)\b`)
+
+// explainPrefixRegex remove o cabeçalho EXPLAIN [(opções)] [ANALYZE] [VERBOSE] para
+// que o statement interno seja validado como qualquer outra consulta.
+var explainPrefixRegex = regexp.MustCompile(`(?is)^explain\s*(\([^)]*\)\s*)?((analyze|verbose)\s+)*`)
 
 // dangerousFunctions são funções que permitem acesso ao sistema de arquivos ou execução remota.
 var dangerousFunctions = []string{
@@ -55,15 +62,27 @@ func (s *service) ValidateSQL(sql string) error {
 		return apperror.Unprocessable("múltiplos statements não são permitidos")
 	}
 
-	// C2.4 — Verificar prefixo: deve ser SELECT.
-	if !strings.HasPrefix(lower, "select") {
-		return apperror.Unprocessable("apenas SELECT é permitido")
+	// EXPLAIN é análise, não escrita: remove o cabeçalho e valida o statement interno.
+	// Mesmo EXPLAIN ANALYZE, que de fato executa, é inofensivo aqui — a transação é
+	// READ ONLY e o statement_timeout de 30s continua valendo.
+	corpo := lower
+	if explainPrefixRegex.MatchString(corpo) {
+		corpo = strings.TrimSpace(explainPrefixRegex.ReplaceAllString(corpo, ""))
+		if corpo == "" {
+			return apperror.Unprocessable("EXPLAIN exige uma consulta")
+		}
 	}
 
-	for _, prefix := range forbiddenPrefixes {
-		if strings.HasPrefix(lower, prefix) {
-			return apperror.Unprocessable("apenas SELECT é permitido")
-		}
+	// Aceita SELECT e WITH (CTE). WITH era rejeitado por prefixo, o que barrava
+	// consultas de leitura legítimas — a proteção real contra CTE de escrita é a
+	// varredura de palavras-chave abaixo, somada à transação READ ONLY.
+	if !strings.HasPrefix(corpo, "select") && !strings.HasPrefix(corpo, "with") {
+		return apperror.Unprocessable("apenas SELECT, WITH ou EXPLAIN são permitidos")
+	}
+
+	// Palavras de escrita em qualquer posição — pega CTE modificadora.
+	if m := writeKeywordRegex.FindString(corpo); m != "" {
+		return apperror.Unprocessable("comando não permitido: " + strings.ToUpper(m))
 	}
 
 	// C2.2 — Bloquear funções perigosas em qualquer posição do SQL.
@@ -148,7 +167,13 @@ func (s *service) Execute(ctx context.Context, pool *pgxpool.Pool, schema, sql s
 }
 
 // injectLimit garante que a query tenha no máximo LIMIT 1000.
+//
+// EXPLAIN fica de fora: o plano tem poucas linhas e nem SELECT ... FROM (EXPLAIN ...)
+// nem EXPLAIN ... LIMIT são SQL válido.
 func injectLimit(sql string) string {
+	if explainPrefixRegex.MatchString(strings.ToLower(strings.TrimSpace(sql))) {
+		return sql
+	}
 	if limitRegex.MatchString(sql) {
 		// Envolve como subquery para sobrescrever qualquer LIMIT existente.
 		return fmt.Sprintf("SELECT * FROM (%s) AS _q LIMIT 1000", sql)
