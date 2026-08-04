@@ -36,20 +36,20 @@
                 <span class="pv-rotulo">{{ n.rotulo }}</span>
               </td>
               <td v-for="(v, i) in n.meses" :key="i"
-                  :class="['pv-td-num', { 'pv-previsto': i + 1 >= dados.mes_corte, 'pv-zero': v === 0 }]">
+                  :class="['pv-td-num', { 'pv-previsto': i + 1 >= dados.mes_corte, 'pv-zero': v === 0, 'pv-neg': v < 0 }]">
                 {{ v === 0 ? '—' : fmt(v) }}
               </td>
-              <td class="pv-td-total">{{ fmt(n.total) }}</td>
+              <td class="pv-td-total" :class="{ 'pv-neg': n.total < 0 }">{{ fmt(n.total) }}</td>
             </tr>
           </tbody>
           <tfoot>
             <tr class="pv-tfoot">
               <td class="pv-td-dim">TOTAL GERAL</td>
               <td v-for="(v, i) in dados.totais_mes" :key="i"
-                  :class="['pv-td-num', { 'pv-previsto': i + 1 >= dados.mes_corte }]">
+                  :class="['pv-td-num', { 'pv-previsto': i + 1 >= dados.mes_corte, 'pv-neg': v < 0 }]">
                 {{ v === 0 ? '—' : fmt(v) }}
               </td>
-              <td class="pv-td-total">{{ fmt(dados.total_geral) }}</td>
+              <td class="pv-td-total" :class="{ 'pv-neg': dados.total_geral < 0 }">{{ fmt(dados.total_geral) }}</td>
             </tr>
           </tfoot>
         </table>
@@ -63,6 +63,7 @@ import { ref, computed, watch } from 'vue'
 import { fetchPivot, type PivotData, type PivotLinha } from '@/api/pivot'
 import type { DashboardParams } from '@/api/dashboard'
 import AppSpinner from '@/components/ui/AppSpinner.vue'
+import { fmtNumero } from '@/utils/formato'
 
 const props = defineProps<{ grupoId: string; filtros: DashboardParams }>()
 
@@ -125,6 +126,12 @@ const arvore = computed<No[]>(() => {
     lista.push(n)
     porPai.set(n.paiId, lista)
   }
+
+  // Receita antes de despesa. O SQL ordena por `tipo`, e alfabeticamente "despesa"
+  // vem primeiro — invertido em relação à leitura de um resultado.
+  const pesoTipo = (rotulo: string) => (rotulo.toUpperCase() === 'RECEITA' ? 0 : 1)
+  const raiz = porPai.get(null)
+  if (raiz) raiz.sort((a, b) => pesoTipo(a.rotulo) - pesoTipo(b.rotulo))
   const saida: No[] = []
   const descer = (paiId: string | null) => {
     for (const n of porPai.get(paiId) ?? []) {
@@ -160,8 +167,8 @@ function expandirAte(nivel: number) {
   )
 }
 
-const fmt = (v: number) =>
-  v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+// Notação contábil: negativo entre parênteses. Ver src/utils/formato.ts.
+const fmt = fmtNumero
 
 // ── Carregamento ───────────────────────────────────────────────────────────
 async function carregar() {
@@ -241,6 +248,9 @@ watch(() => [props.grupoId, props.filtros], carregar, { deep: true, immediate: t
 }
 .pv-td-total { border-left: 1px solid var(--border); font-weight: 600; color: var(--text); }
 .pv-zero { color: var(--text3); opacity: 0.45; }
+/* Negativo em vermelho, somado aos parênteses da notação contábil. !important
+   porque .pv-td-total define cor própria e a especificidade empata. */
+.pv-neg { color: var(--red) !important; }
 .pv-previsto { background: rgba(245,158,11,0.055); }
 
 .pv-tr { border-bottom: 1px solid var(--border); }

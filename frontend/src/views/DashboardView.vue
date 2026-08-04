@@ -233,13 +233,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onBeforeUnmount, watch, defineAsyncComponent } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, watch, nextTick, defineAsyncComponent } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { Chart, registerables } from 'chart.js'
 import ChartDataLabels from 'chartjs-plugin-datalabels'
 import { useAuthStore } from '@/stores/auth'
 import { fetchDashboard, fetchFiltros, type DashboardData, type FiltrosDisponiveis } from '@/api/dashboard'
 import AppSpinner from '@/components/ui/AppSpinner.vue'
+import { fmtMoeda, fmtCompacto } from '@/utils/formato'
 
 Chart.register(...registerables, ChartDataLabels)
 
@@ -433,17 +434,9 @@ const canvasAcum    = ref<HTMLCanvasElement | null>(null)
 let chartRecDesp: Chart | null = null
 let chartAcum:    Chart | null = null
 
-const fmt = (v: number) =>
-  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(v)
-
-function fmtK(v: number) {
-  const abs  = Math.abs(v)
-  const sign = v < 0 ? '-' : ''
-  if (abs >= 1_000_000) return `${sign}R$${(abs / 1_000_000).toFixed(1)}M`
-  if (abs >= 1_000)     return `${sign}R$${(abs / 1_000).toFixed(0)}K`
-  if (abs === 0)        return ''
-  return fmt(v)
-}
+// Formatação contábil: negativo entre parênteses. Ver src/utils/formato.ts.
+const fmt  = fmtMoeda
+const fmtK = fmtCompacto
 
 function chartColors() {
   const dark = document.documentElement.getAttribute('data-theme') !== 'light'
@@ -619,6 +612,23 @@ watch(
   () => document.documentElement.getAttribute('data-theme'),
   () => { if (dados.value) { buildChartRecDesp(); buildChartAcum() } }
 )
+
+// Reconstrói ao voltar da aba Resultado.
+//
+// As abas usam cadeia v-if, então ir para Resultado DESMONTA o .dash-content e
+// destrói os <canvas>. Ao voltar, novos canvas são criados, mas as instâncias do
+// Chart.js ainda apontam para os antigos — e o gráfico aparece vazio.
+//
+// Antes só o watch de `dados` reconstruía, e trocar de aba não altera os dados.
+// Era por isso que recarregar a página ou limpar os filtros "consertava": ambos
+// mudam `dados`.
+watch(aba, novaAba => {
+  if (novaAba !== 'geral' || !dados.value) return
+  nextTick(() => {
+    buildChartRecDesp()
+    buildChartAcum()
+  })
+})
 
 // ── Carregamento ───────────────────────────────────────────────────────────
 async function carregar() {
