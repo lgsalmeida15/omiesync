@@ -10,17 +10,27 @@
         <!-- Ano -->
         <div class="fi">
           <span class="fi-label">ANO</span>
-          <select class="fi-select" v-model="filtros.ano" @change="carregar">
+          <select class="fi-select" v-model="filtros.ano" @change="onAnoChange">
             <option v-for="a in anosDisponiveis" :key="a" :value="a">{{ a }}</option>
           </select>
         </div>
 
-        <!-- Contas correntes -->
+        <!-- Empresas: só aparece quando há mais de uma no grupo -->
+        <div class="fi" v-if="filtrosDisponiveis.empresas.length > 1">
+          <span class="fi-label">EMPRESA</span>
+          <div class="fi-multi">
+            <button class="fi-select fi-trigger" @click.stop="toggleDropdown('emp', $event)">
+              {{ rotuloLista('empresas', filtrosDisponiveis.empresas.length) }}<span class="chv">▾</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Contas correntes: apenas das empresas selecionadas -->
         <div class="fi" v-if="filtrosDisponiveis.contas_correntes.length">
           <span class="fi-label">CONTAS</span>
           <div class="fi-multi">
             <button class="fi-select fi-trigger" @click.stop="toggleDropdown('contas', $event)">
-              {{ filtros.contas_correntes.length ? `${filtros.contas_correntes.length} sel.` : 'Todas' }}<span class="chv">▾</span>
+              {{ rotuloLista('contas_correntes', filtrosDisponiveis.contas_correntes.length) }}<span class="chv">▾</span>
             </button>
           </div>
         </div>
@@ -30,7 +40,7 @@
           <span class="fi-label">DEPARTAMENTO</span>
           <div class="fi-multi">
             <button class="fi-select fi-trigger" @click.stop="toggleDropdown('dept', $event)">
-              {{ filtros.departamentos.length ? `${filtros.departamentos.length} sel.` : 'Todos' }}<span class="chv">▾</span>
+              {{ rotuloLista('departamentos', filtrosDisponiveis.departamentos.length) }}<span class="chv">▾</span>
             </button>
           </div>
         </div>
@@ -40,7 +50,7 @@
           <span class="fi-label">CATEGORIA</span>
           <div class="fi-multi">
             <button class="fi-select fi-trigger" @click.stop="toggleDropdown('cat', $event)">
-              {{ filtros.categorias.length ? `${filtros.categorias.length} sel.` : 'Todas' }}<span class="chv">▾</span>
+              {{ rotuloCategorias }}<span class="chv">▾</span>
             </button>
           </div>
         </div>
@@ -59,16 +69,6 @@
           />
         </div>
 
-        <!-- Empresas -->
-        <div class="fi" v-if="filtrosDisponiveis.empresas.length > 1">
-          <span class="fi-label">EMPRESAS</span>
-          <div class="fi-multi">
-            <button class="fi-select fi-trigger" @click.stop="toggleDropdown('emp', $event)">
-              {{ filtros.empresas.length ? `${filtros.empresas.length} sel.` : 'Todas' }}<span class="chv">▾</span>
-            </button>
-          </div>
-        </div>
-
         <!-- Limpar -->
         <button class="fi-clear" @click="limparFiltros" title="Limpar filtros">✕</button>
       </div>
@@ -76,32 +76,48 @@
 
     <!-- Dropdowns fixos — renderizados no body via Teleport para escapar de overflow:hidden -->
     <Teleport to="body">
+      <!-- Empresas -->
+      <div v-if="dropdown === 'emp'" class="fd-fixed" :style="fdStyle" @click.stop>
+        <div class="fd-acoes">
+          <button class="fd-acao" @click="selecionarTodos('empresas')">Marcar todas</button>
+        </div>
+        <label v-for="e in filtrosDisponiveis.empresas" :key="e.id" class="chk-item">
+          <input type="checkbox" :checked="marcado('empresas', e.id)"
+                 @change="alternar('empresas', e.id, filtrosDisponiveis.empresas.map(x => x.id))" />
+          {{ e.nome }}
+        </label>
+      </div>
       <!-- Contas correntes -->
       <div v-if="dropdown === 'contas'" class="fd-fixed" :style="fdStyle" @click.stop>
+        <div class="fd-acoes">
+          <button class="fd-acao" @click="selecionarTodos('contas_correntes')">Marcar todas</button>
+        </div>
         <label v-for="cc in filtrosDisponiveis.contas_correntes" :key="cc.codigo" class="chk-item">
-          <input type="checkbox" :value="cc.codigo" v-model="filtros.contas_correntes" @change="carregar" />
+          <input type="checkbox" :checked="marcado('contas_correntes', cc.codigo)"
+                 @change="alternar('contas_correntes', cc.codigo, filtrosDisponiveis.contas_correntes.map(x => x.codigo))" />
           {{ cc.descricao }}
         </label>
       </div>
       <!-- Departamentos -->
       <div v-if="dropdown === 'dept'" class="fd-fixed" :style="fdStyle" @click.stop>
+        <div class="fd-acoes">
+          <button class="fd-acao" @click="selecionarTodos('departamentos')">Marcar todos</button>
+        </div>
         <label v-for="d in filtrosDisponiveis.departamentos" :key="d" class="chk-item">
-          <input type="checkbox" :value="d" v-model="filtros.departamentos" @change="carregar" />
+          <input type="checkbox" :checked="marcado('departamentos', d)"
+                 @change="alternar('departamentos', d, filtrosDisponiveis.departamentos)" />
           {{ d }}
         </label>
       </div>
-      <!-- Categorias -->
+      <!-- Categorias: lista de exclusão, com "Transferência" oculta por padrão -->
       <div v-if="dropdown === 'cat'" class="fd-fixed" :style="fdStyle" @click.stop>
+        <div class="fd-acoes">
+          <button class="fd-acao" @click="todasCategorias">Marcar todas</button>
+          <button class="fd-acao" @click="padraoCategorias">Padrão</button>
+        </div>
         <label v-for="c in filtrosDisponiveis.categorias" :key="c" class="chk-item">
-          <input type="checkbox" :value="c" v-model="filtros.categorias" @change="carregar" />
+          <input type="checkbox" :checked="categoriaMarcada(c)" @change="alternarCategoria(c)" />
           {{ c }}
-        </label>
-      </div>
-      <!-- Empresas -->
-      <div v-if="dropdown === 'emp'" class="fd-fixed" :style="fdStyle" @click.stop>
-        <label v-for="e in filtrosDisponiveis.empresas" :key="e.id" class="chk-item">
-          <input type="checkbox" :value="e.id" v-model="filtros.empresas" @change="carregar" />
-          {{ e.nome }}
         </label>
       </div>
       <!-- Autocomplete cliente -->
@@ -222,7 +238,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { Chart, registerables } from 'chart.js'
 import ChartDataLabels from 'chartjs-plugin-datalabels'
 import { useAuthStore } from '@/stores/auth'
-import { fetchDashboard, type DashboardData, type FiltrosDisponiveis } from '@/api/dashboard'
+import { fetchDashboard, fetchFiltros, type DashboardData, type FiltrosDisponiveis } from '@/api/dashboard'
 import AppSpinner from '@/components/ui/AppSpinner.vue'
 
 Chart.register(...registerables, ChartDataLabels)
@@ -253,6 +269,7 @@ const filtrosAtivos = computed(() => ({
   departamentos:    filtros.departamentos.length    ? filtros.departamentos    : undefined,
   categorias:       filtros.categorias.length       ? filtros.categorias       : undefined,
   cliente:          filtros.cliente || undefined,
+  categorias_excluir: filtros.categorias_excluir.length ? filtros.categorias_excluir : undefined,
 }))
 
 // ── Estado ─────────────────────────────────────────────────────────────────
@@ -268,13 +285,122 @@ const anosDisponiveis = computed(() => {
   return anos
 })
 
+/**
+ * Categoria oculta por padrão. É lista de EXCLUSÃO: se fosse de inclusão, uma
+ * categoria nova no Omie ficaria fora dos números em silêncio até alguém marcá-la.
+ */
+const CATEGORIA_OCULTA_PADRAO = 'Transferência'
+
 const filtros = reactive({
-  ano:              anoAtual,
-  contas_correntes: [] as string[],
-  departamentos:    [] as string[],
-  categorias:       [] as string[],
-  empresas:         [] as string[],
-  cliente:          '',
+  ano:               anoAtual,
+  contas_correntes:  [] as string[],
+  departamentos:     [] as string[],
+  categorias:        [] as string[],
+  empresas:          [] as string[],
+  cliente:           '',
+  categorias_excluir: [CATEGORIA_OCULTA_PADRAO] as string[],
+})
+
+/**
+ * Ordem da cascata. Cada filtro é restringido apenas pelos anteriores, e mudar um
+ * limpa os seguintes — senão sobra uma conta selecionada que não pertence mais à
+ * empresa escolhida e o resultado vem vazio sem explicação.
+ */
+const ordemCascata = ['empresas', 'contas_correntes', 'departamentos', 'cliente'] as const
+
+function limparAbaixo(alterado: string) {
+  const i = ordemCascata.indexOf(alterado as typeof ordemCascata[number])
+  if (i < 0) return
+  for (const campo of ordemCascata.slice(i + 1)) {
+    if (campo === 'cliente') filtros.cliente = ''
+    else filtros[campo] = []
+  }
+}
+
+type CampoLista = 'empresas' | 'contas_correntes' | 'departamentos'
+
+/**
+ * Seleção vazia significa "todas". As caixas então aparecem MARCADAS nesse estado —
+ * é o que de fato está sendo exibido, e deixá-las desmarcadas mostrando tudo seria
+ * enganoso.
+ */
+function marcado(campo: CampoLista, valor: string): boolean {
+  return filtros[campo].length === 0 || filtros[campo].includes(valor)
+}
+
+function alternar(campo: CampoLista, valor: string, todos: string[]) {
+  const atual = filtros[campo]
+  if (atual.length === 0) {
+    // Saindo do "todas": materializa a lista completa menos o desmarcado.
+    filtros[campo] = todos.filter(v => v !== valor)
+  } else if (atual.includes(valor)) {
+    filtros[campo] = atual.filter(v => v !== valor)
+  } else {
+    const proximo = [...atual, valor]
+    // Marcar tudo volta a "todas" (array vazio), para que item novo entre sozinho.
+    filtros[campo] = proximo.length === todos.length ? [] : proximo
+  }
+  limparAbaixo(campo)
+  carregar()
+}
+
+/**
+ * Ano é o topo da cascata: um departamento ou categoria que existia em 2026 pode não
+ * existir em 2025, e a seleção obsoleta produziria tela vazia sem explicação. Limpar
+ * é preferível — o custo é ter de remarcar ao comparar o mesmo recorte entre anos.
+ * A exclusão de categorias é preservada, porque é preferência de exibição.
+ */
+function onAnoChange() {
+  filtros.empresas         = []
+  filtros.contas_correntes = []
+  filtros.departamentos    = []
+  filtros.categorias       = []
+  filtros.cliente          = ''
+  carregar()
+}
+
+/** Marcar todos e limpar têm o mesmo efeito: array vazio = sem filtro = todas. */
+function selecionarTodos(campo: CampoLista) {
+  filtros[campo] = []
+  limparAbaixo(campo)
+  carregar()
+}
+
+// ── Categorias: lista de exclusão, não de inclusão ─────────────────────────
+function categoriaMarcada(valor: string): boolean {
+  return !filtros.categorias_excluir.includes(valor)
+}
+
+function alternarCategoria(valor: string) {
+  filtros.categorias_excluir = filtros.categorias_excluir.includes(valor)
+    ? filtros.categorias_excluir.filter(v => v !== valor)
+    : [...filtros.categorias_excluir, valor]
+  carregar()
+}
+
+function todasCategorias() {
+  filtros.categorias_excluir = []
+  carregar()
+}
+
+function padraoCategorias() {
+  filtros.categorias_excluir = [CATEGORIA_OCULTA_PADRAO]
+  carregar()
+}
+
+/** Rótulo do gatilho: informa o estado sem obrigar a abrir o dropdown. */
+function rotuloLista(campo: CampoLista, total: number): string {
+  const n = filtros[campo].length
+  return n === 0 ? 'Todas' : `${n} de ${total}`
+}
+
+const rotuloCategorias = computed(() => {
+  const ex = filtros.categorias_excluir.length
+  if (ex === 0) return 'Todas'
+  if (ex === 1 && filtros.categorias_excluir[0] === CATEGORIA_OCULTA_PADRAO) {
+    return 'Todas exc. Transf.'
+  }
+  return `${ex} oculta${ex > 1 ? 's' : ''}`
 })
 
 const filtrosDisponiveis = reactive<FiltrosDisponiveis>({
@@ -526,21 +652,16 @@ async function carregar() {
   erro.value = ''
 
   try {
-    const res = await fetchDashboard(grupoID, {
-      ano:              filtros.ano,
-      empresas:         filtros.empresas.length         ? filtros.empresas         : undefined,
-      contas_correntes: filtros.contas_correntes.length ? filtros.contas_correntes : undefined,
-      departamentos:    filtros.departamentos.length    ? filtros.departamentos    : undefined,
-      categorias:       filtros.categorias.length       ? filtros.categorias       : undefined,
-      cliente:          filtros.cliente || undefined,
-    })
+    // Opções e dados em paralelo. As opções vêm do endpoint próprio, em cascata:
+    // antes as cinco consultas DISTINCT rodavam junto com a agregação pesada a cada
+    // mudança de filtro.
+    const [res, opcoes] = await Promise.all([
+      fetchDashboard(grupoID, filtrosAtivos.value),
+      fetchFiltros(grupoID, filtrosAtivos.value),
+    ])
 
     dados.value = res
-
-    const semFiltros =
-      !filtros.empresas.length && !filtros.contas_correntes.length &&
-      !filtros.departamentos.length && !filtros.categorias.length && !filtros.cliente
-    if (semFiltros) Object.assign(filtrosDisponiveis, res.filtros_disponiveis)
+    Object.assign(filtrosDisponiveis, opcoes)
 
   } catch (e: unknown) {
     const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
@@ -563,6 +684,8 @@ function limparFiltros() {
   filtros.empresas         = []
   filtros.cliente          = ''
   filtros.ano              = anoAtual
+  // Volta ao padrão, não a "tudo visível": Transferência segue oculta.
+  filtros.categorias_excluir = [CATEGORIA_OCULTA_PADRAO]
   carregar()
 }
 
@@ -693,6 +816,23 @@ onBeforeUnmount(() => {
   z-index: 9999;
   padding: 4px 0;
 }
+
+.fd-acoes {
+  display: flex; gap: 6px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border2);
+  position: sticky; top: 0;
+  background: var(--card);
+}
+.fd-acao {
+  flex: 1;
+  background: var(--bg3); color: var(--text2);
+  border: 1px solid var(--border2); border-radius: 6px;
+  padding: 4px 8px;
+  font-family: var(--mono); font-size: 9px; letter-spacing: 0.5px;
+  cursor: pointer; transition: var(--trans); white-space: nowrap;
+}
+.fd-acao:hover { border-color: var(--accent); color: var(--accent); }
 
 .chk-item {
   display: flex;

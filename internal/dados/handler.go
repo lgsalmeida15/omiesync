@@ -62,6 +62,7 @@ func (h *Handler) Routes() http.Handler {
 
 	r.Get("/{grupoID}/dashboard", h.dashboardHandler)
 	r.Get("/{grupoID}/pivot", h.pivotHandler)
+	r.Get("/{grupoID}/filtros", h.filtrosHandler)
 
 	return r
 }
@@ -188,7 +189,34 @@ func parseDashboardParams(r *http.Request, grupoID string) DashboardParams {
 		Departamentos:   split(r.URL.Query().Get("departamentos")),
 		Categorias:      split(r.URL.Query().Get("categorias")),
 		Cliente:         strings.TrimSpace(r.URL.Query().Get("cliente")),
+		// Vazio por padrão: o backend não decide o que ocultar. Quem define o
+		// padrão é a tela, para que outros consumidores da API não herdem a
+		// exclusão sem pedir.
+		CategoriasExcluir: split(r.URL.Query().Get("categorias_excluir")),
 	}
+}
+
+// filtrosHandler serve apenas as opções de filtro, em cascata.
+//
+// Separado do dashboard porque as cinco consultas DISTINCT eram reexecutadas junto
+// com a agregação pesada a cada mudança de filtro. Agora a tela recarrega as opções
+// só quando um filtro de nível superior muda.
+func (h *Handler) filtrosHandler(w http.ResponseWriter, r *http.Request) {
+	grupoID := chi.URLParam(r, "grupoID")
+	if !autorizaGrupo(w, r, grupoID) {
+		return
+	}
+
+	data, err := QueryFiltros(r.Context(), h.pool, parseDashboardParams(r, grupoID))
+	if err != nil {
+		if errors.Is(err, ErrViewNaoPopulada) {
+			response.FromAppError(w, apperror.Unprocessable(ErrViewNaoPopulada.Error()))
+			return
+		}
+		response.Error(w, http.StatusInternalServerError, "erro ao consultar filtros", err)
+		return
+	}
+	response.OK(w, data)
 }
 
 func (h *Handler) dashboardHandler(w http.ResponseWriter, r *http.Request) {

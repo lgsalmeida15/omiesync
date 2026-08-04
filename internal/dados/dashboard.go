@@ -32,7 +32,31 @@ type DashboardParams struct {
 	Departamentos   []string
 	Categorias      []string
 	Cliente         string
+
+	// CategoriasExcluir remove categorias do resultado. É lista de exclusão, e não
+	// de inclusão, de propósito: com inclusão, uma categoria nova no Omie ficaria
+	// fora dos números em silêncio até alguém marcá-la. Excluindo, o que é novo
+	// entra automaticamente.
+	//
+	// Não afeta as listas de opções — a categoria excluída precisa continuar
+	// aparecendo no filtro para que o usuário possa incluí-la de volta.
+	CategoriasExcluir []string
 }
+
+// nivelFiltro identifica até onde aplicar os filtros. As opções de cada filtro são
+// restringidas apenas pelos níveis ACIMA dele: se as categorias disponíveis fossem
+// filtradas pela categoria selecionada, marcar uma faria as outras desaparecerem da
+// lista e o multi-select deixaria de funcionar.
+type nivelFiltro int
+
+const (
+	nivelAno nivelFiltro = iota
+	nivelEmpresas
+	nivelContas
+	nivelDepartamentos
+	nivelCategorias
+	nivelTodos
+)
 
 // schemaForGrupo resolve o schema_name do grupo.
 func schemaForGrupo(ctx context.Context, pool *pgxpool.Pool, grupoID string) (string, error) {
@@ -78,7 +102,7 @@ func QueryDashboard(ctx context.Context, pool *pgxpool.Pool, p DashboardParams) 
 		return nil, fmt.Errorf("dados.QueryDashboard saldo_cc: %w", err)
 	}
 
-	filtros, err := queryFiltrosDisponiveis(ctx, pool, safe, view, p.GrupoID)
+	filtros, err := queryFiltrosDisponiveis(ctx, pool, safe, view, p)
 	if err != nil {
 		if isViewNaoPopulada(err) {
 			return nil, ErrViewNaoPopulada
@@ -119,38 +143,48 @@ func QueryDashboard(ctx context.Context, pool *pgxpool.Pool, p DashboardParams) 
 	}, nil
 }
 
-// buildFiltroAno monta o WHERE compartilhado pelas consultas que leem a matvw por
-// ano. Extraído para que dashboard e pivot não divirjam: filtro aplicado só num
-// dos dois produziria números diferentes para o mesmo recorte, sem erro visível.
-// $1 é sempre o ano.
+// buildFiltroAno monta o WHERE completo, usado pelas consultas de dados.
+// Extraído para que dashboard e pivot não divirjam: filtro aplicado só num dos
+// dois produziria números diferentes para o mesmo recorte, sem erro visível.
 func buildFiltroAno(p DashboardParams) (where string, args []any) {
+	return buildFiltro(p, nivelTodos)
+}
+
+// buildFiltro monta o WHERE aplicando os filtros até o nível pedido. $1 é sempre o ano.
+//
+// A exclusão de categorias entra apenas em nivelTodos: ela é filtro de dados, não de
+// opções. Nas listas a categoria excluída precisa continuar visível para poder ser
+// remarcada.
+func buildFiltro(p DashboardParams, ate nivelFiltro) (where string, args []any) {
 	args = []any{p.Ano}
 	conditions := []string{"ano = $1"}
 	idx := 2
 
-	if len(p.Empresas) > 0 {
-		conditions = append(conditions, fmt.Sprintf("empresa_id::text = ANY($%d)", idx))
-		args = append(args, p.Empresas)
+	add := func(cond string, val any) {
+		conditions = append(conditions, fmt.Sprintf(cond, idx))
+		args = append(args, val)
 		idx++
 	}
-	if len(p.ContasCorrentes) > 0 {
-		conditions = append(conditions, fmt.Sprintf("codigo_conta_corrente = ANY($%d)", idx))
-		args = append(args, p.ContasCorrentes)
-		idx++
+
+	if ate >= nivelEmpresas && len(p.Empresas) > 0 {
+		add("empresa_id::text = ANY($%d)", p.Empresas)
 	}
-	if len(p.Departamentos) > 0 {
-		conditions = append(conditions, fmt.Sprintf("departamento_final = ANY($%d)", idx))
-		args = append(args, p.Departamentos)
-		idx++
+	if ate >= nivelContas && len(p.ContasCorrentes) > 0 {
+		add("codigo_conta_corrente = ANY($%d)", p.ContasCorrentes)
 	}
-	if len(p.Categorias) > 0 {
-		conditions = append(conditions, fmt.Sprintf("descricao_categoria_superior = ANY($%d)", idx))
-		args = append(args, p.Categorias)
-		idx++
+	if ate >= nivelDepartamentos && len(p.Departamentos) > 0 {
+		add("departamento_final = ANY($%d)", p.Departamentos)
 	}
-	if p.Cliente != "" {
-		conditions = append(conditions, fmt.Sprintf("cliente_final ILIKE $%d", idx))
-		args = append(args, "%"+p.Cliente+"%")
+	if ate >= nivelCategorias && len(p.Categorias) > 0 {
+		add("descricao_categoria_superior = ANY($%d)", p.Categorias)
+	}
+	if ate >= nivelTodos {
+		if len(p.CategoriasExcluir) > 0 {
+			add("NOT (COALESCE(descricao_categoria_superior, '') = ANY($%d))", p.CategoriasExcluir)
+		}
+		if p.Cliente != "" {
+			add("cliente_final ILIKE $%d", "%"+p.Cliente+"%")
+		}
 	}
 
 	return strings.Join(conditions, " AND "), args
@@ -231,122 +265,131 @@ func querySaldoContasCorrentes(ctx context.Context, pool *pgxpool.Pool, safe str
 	return saldo, err
 }
 
-func queryFiltrosDisponiveis(ctx context.Context, pool *pgxpool.Pool, safe, view, grupoID string) (FiltrosDisponiveis, error) {
+// queryFiltrosDisponiveis monta as opções de cada filtro em CASCATA: cada lista é
+// restringida apenas pelos filtros de nível superior.
+//
+// Restringir um filtro por si mesmo quebraria o multi-select — marcar uma categoria
+// faria as demais desaparecerem da lista, impedindo marcar a segunda.
+func queryFiltrosDisponiveis(ctx context.Context, pool *pgxpool.Pool, safe, view string, p DashboardParams) (FiltrosDisponiveis, error) {
 	var f FiltrosDisponiveis
 
-	// Contas correntes do grupo (com nome)
+	// Empresas: só o ano restringe. Vem de _etl.empresas e não da view, para que uma
+	// empresa recém-cadastrada apareça no filtro antes de ter movimento sincronizado.
+	rowsEmp, err := pool.Query(ctx, `
+		SELECT id::text, nome
+		FROM _etl.empresas
+		WHERE grupo_id = $1 AND deleted_at IS NULL
+		ORDER BY nome
+	`, p.GrupoID)
+	if err != nil {
+		return f, fmt.Errorf("filtros empresas: %w", err)
+	}
+	f.Empresas = []EmpresaItem{}
+	for rowsEmp.Next() {
+		var item EmpresaItem
+		if err := rowsEmp.Scan(&item.ID, &item.Nome); err != nil {
+			rowsEmp.Close()
+			return f, err
+		}
+		f.Empresas = append(f.Empresas, item)
+	}
+	rowsEmp.Close()
+	if err := rowsEmp.Err(); err != nil {
+		return f, fmt.Errorf("filtros empresas: %w", err)
+	}
+
+	// Contas correntes: restringidas pelas empresas selecionadas. Vêm da tabela de
+	// cadastro, não da view, para incluir conta sem movimento no período.
+	ccArgs := []any{p.GrupoID}
+	ccEmpresaFilter := ""
+	if len(p.Empresas) > 0 {
+		ccEmpresaFilter = " AND e.id::text = ANY($2)"
+		ccArgs = append(ccArgs, p.Empresas)
+	}
 	rowsCC, err := pool.Query(ctx, fmt.Sprintf(`
 		SELECT DISTINCT cc.codigo_conta_corrente::text, cc.descricao
 		FROM %s.contas_correntes cc
 		JOIN _etl.empresas e ON e.id = cc.empresa_id
 		WHERE e.grupo_id = $1
 		  AND e.deleted_at IS NULL
-		  AND cc.fluxo_caixa = 'S'
+		  AND cc.fluxo_caixa = 'S'%s
 		ORDER BY cc.descricao
-	`, safe), grupoID)
+	`, safe, ccEmpresaFilter), ccArgs...)
 	if err != nil {
 		return f, fmt.Errorf("filtros contas_correntes: %w", err)
 	}
-	defer rowsCC.Close()
+	f.ContasCorrentes = []ContaCorrenteItem{}
 	for rowsCC.Next() {
 		var item ContaCorrenteItem
 		if err := rowsCC.Scan(&item.Codigo, &item.Descricao); err != nil {
+			rowsCC.Close()
 			return f, err
 		}
 		f.ContasCorrentes = append(f.ContasCorrentes, item)
 	}
-	if f.ContasCorrentes == nil {
-		f.ContasCorrentes = []ContaCorrenteItem{}
+	rowsCC.Close()
+	if err := rowsCC.Err(); err != nil {
+		return f, fmt.Errorf("filtros contas_correntes: %w", err)
 	}
 
-	// Departamentos distintos da view
-	rowsDept, err := pool.Query(ctx, fmt.Sprintf(`
-		SELECT DISTINCT departamento_final
-		FROM %s.%s
-		WHERE departamento_final IS NOT NULL AND departamento_final != ''
-		ORDER BY departamento_final
-	`, safe, view))
-	if err != nil {
-		return f, fmt.Errorf("filtros departamentos: %w", err)
-	}
-	defer rowsDept.Close()
-	for rowsDept.Next() {
-		var d string
-		if err := rowsDept.Scan(&d); err != nil {
-			return f, err
-		}
-		f.Departamentos = append(f.Departamentos, d)
-	}
-	if f.Departamentos == nil {
-		f.Departamentos = []string{}
+	// Os três seguintes saem da view, cada um com o WHERE do seu nível.
+	textos := []struct {
+		coluna string
+		nivel  nivelFiltro
+		limite string
+		dest   *[]string
+		nome   string
+	}{
+		{"departamento_final", nivelContas, "", &f.Departamentos, "departamentos"},
+		{"descricao_categoria_superior", nivelDepartamentos, "", &f.Categorias, "categorias"},
+		{"cliente_final", nivelCategorias, "LIMIT 300", &f.Clientes, "clientes"},
 	}
 
-	// Categorias superiores distintas da view
-	rowsCat, err := pool.Query(ctx, fmt.Sprintf(`
-		SELECT DISTINCT descricao_categoria_superior
-		FROM %s.%s
-		WHERE descricao_categoria_superior IS NOT NULL AND descricao_categoria_superior != ''
-		ORDER BY descricao_categoria_superior
-	`, safe, view))
-	if err != nil {
-		return f, fmt.Errorf("filtros categorias: %w", err)
-	}
-	defer rowsCat.Close()
-	for rowsCat.Next() {
-		var c string
-		if err := rowsCat.Scan(&c); err != nil {
-			return f, err
-		}
-		f.Categorias = append(f.Categorias, c)
-	}
-	if f.Categorias == nil {
-		f.Categorias = []string{}
-	}
+	for _, t := range textos {
+		where, args := buildFiltro(p, t.nivel)
+		sql := fmt.Sprintf(`
+			SELECT DISTINCT %s
+			FROM %s.%s
+			WHERE %s AND %s IS NOT NULL AND %s != ''
+			ORDER BY %s
+			%s
+		`, t.coluna, safe, view, where, t.coluna, t.coluna, t.coluna, t.limite)
 
-	// Clientes distintos da view (para autocomplete)
-	rowsCli, err := pool.Query(ctx, fmt.Sprintf(`
-		SELECT DISTINCT cliente_final
-		FROM %s.%s
-		WHERE cliente_final IS NOT NULL AND cliente_final != ''
-		ORDER BY cliente_final
-		LIMIT 300
-	`, safe, view))
-	if err != nil {
-		return f, fmt.Errorf("filtros clientes: %w", err)
-	}
-	defer rowsCli.Close()
-	for rowsCli.Next() {
-		var c string
-		if err := rowsCli.Scan(&c); err != nil {
-			return f, err
+		rows, err := pool.Query(ctx, sql, args...)
+		if err != nil {
+			return f, fmt.Errorf("filtros %s: %w", t.nome, err)
 		}
-		f.Clientes = append(f.Clientes, c)
-	}
-	if f.Clientes == nil {
-		f.Clientes = []string{}
-	}
-
-	// Empresas ativas do grupo
-	rowsEmp, err := pool.Query(ctx, `
-		SELECT id::text, nome
-		FROM _etl.empresas
-		WHERE grupo_id = $1 AND deleted_at IS NULL
-		ORDER BY nome
-	`, grupoID)
-	if err != nil {
-		return f, fmt.Errorf("filtros empresas: %w", err)
-	}
-	defer rowsEmp.Close()
-	for rowsEmp.Next() {
-		var item EmpresaItem
-		if err := rowsEmp.Scan(&item.ID, &item.Nome); err != nil {
-			return f, err
+		*t.dest = []string{}
+		for rows.Next() {
+			var v string
+			if err := rows.Scan(&v); err != nil {
+				rows.Close()
+				return f, fmt.Errorf("filtros %s scan: %w", t.nome, err)
+			}
+			*t.dest = append(*t.dest, v)
 		}
-		f.Empresas = append(f.Empresas, item)
-	}
-	if f.Empresas == nil {
-		f.Empresas = []EmpresaItem{}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return f, fmt.Errorf("filtros %s: %w", t.nome, err)
+		}
 	}
 
 	return f, nil
+}
+
+// QueryFiltros devolve apenas as opções de filtro, sem a agregação de dados.
+func QueryFiltros(ctx context.Context, pool *pgxpool.Pool, p DashboardParams) (*FiltrosDisponiveis, error) {
+	schema, err := schemaForGrupo(ctx, pool, p.GrupoID)
+	if err != nil {
+		return nil, err
+	}
+
+	f, err := queryFiltrosDisponiveis(ctx, pool, pgx.Identifier{schema}.Sanitize(), viewName(p.Ano), p)
+	if err != nil {
+		if isViewNaoPopulada(err) {
+			return nil, ErrViewNaoPopulada
+		}
+		return nil, fmt.Errorf("dados.QueryFiltros: %w", err)
+	}
+	return &f, nil
 }
