@@ -13,8 +13,13 @@ export interface PivotLinha {
 export interface PivotData {
   ano: number
   linhas: PivotLinha[]
-  totais_mes: number[]
-  total_geral: number
+  /**
+   * Receita MENOS despesa de cada mês — não a soma das linhas. Não inclui o saldo
+   * das contas correntes, então difere do card RESULTADO da Visão Geral pelo caixa
+   * de abertura.
+   */
+  resultado_mes: number[]
+  resultado_total: number
   /** Primeiro mês projetado (1-12). 13 = ano inteiro realizado. */
   mes_corte: number
 }

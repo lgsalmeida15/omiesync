@@ -44,12 +44,15 @@
           </tbody>
           <tfoot>
             <tr class="pv-tfoot">
-              <td class="pv-td-dim">TOTAL GERAL</td>
-              <td v-for="(v, i) in dados.totais_mes" :key="i"
+              <td class="pv-td-dim">
+                RESULTADO
+                <span class="pv-nota" title="Receita menos despesa do período. Não inclui o saldo das contas correntes, por isso difere do card RESULTADO da Visão Geral.">?</span>
+              </td>
+              <td v-for="(v, i) in dados.resultado_mes" :key="i"
                   :class="['pv-td-num', { 'pv-previsto': i + 1 >= dados.mes_corte, 'pv-neg': v < 0 }]">
                 {{ v === 0 ? '—' : fmt(v) }}
               </td>
-              <td class="pv-td-total" :class="{ 'pv-neg': dados.total_geral < 0 }">{{ fmt(dados.total_geral) }}</td>
+              <td class="pv-td-total" :class="{ 'pv-neg': dados.resultado_total < 0 }">{{ fmt(dados.resultado_total) }}</td>
             </tr>
           </tfoot>
         </table>
@@ -279,4 +282,10 @@ watch(() => [props.grupoId, props.filtros], carregar, { deep: true, immediate: t
   font-family: var(--mono); font-size: 11px; padding: 10px 12px;
 }
 .pv-tfoot .pv-td-dim { font-size: 10px; letter-spacing: 1px; }
+.pv-nota {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 13px; height: 13px; margin-left: 6px;
+  border: 1px solid var(--border2); border-radius: 50%;
+  font-size: 9px; color: var(--text3); cursor: help; font-weight: 400;
+}
 </style>

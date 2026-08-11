@@ -25,10 +25,20 @@ type PivotLinha struct {
 }
 
 type PivotResponse struct {
-	Ano        int          `json:"ano"`
-	Linhas     []PivotLinha `json:"linhas"`
-	TotaisMes  [12]float64  `json:"totais_mes"`
-	TotalGeral float64      `json:"total_geral"`
+	Ano    int          `json:"ano"`
+	Linhas []PivotLinha `json:"linhas"`
+
+	// ResultadoMes é receita MENOS despesa de cada mês, não a soma das linhas.
+	//
+	// Antes o rodapé somava tudo no mesmo acumulador. Como receita e despesa são
+	// ambas grandezas positivas, o resultado era receita + despesa — um número sem
+	// significado financeiro.
+	//
+	// Não inclui o saldo das contas correntes: o card RESULTADO da Visão Geral é
+	// receita − despesa + saldo, então os dois diferem pelo caixa de abertura, de
+	// propósito. Um é resultado do período; o outro, posição de caixa.
+	ResultadoMes   [12]float64 `json:"resultado_mes"`
+	ResultadoTotal float64     `json:"resultado_total"`
 	// MesCorte separa realizado de previsto: a matvw usa considerar_mov_ext, então
 	// meses anteriores vêm de movimentos realizados e os seguintes, de provisões do
 	// extrato. Sem marcar a fronteira, a tela compara naturezas diferentes.
@@ -51,7 +61,12 @@ func QueryPivot(ctx context.Context, pool *pgxpool.Pool, p DashboardParams) (*Pi
 	// FILTER (WHERE mes = N) é o pivot: uma coluna por mês, uma linha por combinação.
 	sql := fmt.Sprintf(`
 		SELECT
-			COALESCE(receita_despesa, 'nao classificado')          AS tipo,
+			-- Deriva de ajuste_receita_despesa, e não da coluna textual
+			-- receita_despesa, que é NULL quando a classificação não resolve.
+			-- O dashboard usa o ajuste, cujo ELSE manda o não classificado para
+			-- despesa; agrupar pelo texto criaria um terceiro grupo aqui e faria
+			-- as duas abas divergirem no total.
+			CASE ajuste_receita_despesa WHEN 1 THEN 'receita' ELSE 'despesa' END AS tipo,
 			COALESCE(NULLIF(descricao_categoria_superior, ''), 'Sem categoria') AS cat_superior,
 			COALESCE(NULLIF(descricao_categoria_final, ''),    'Sem categoria') AS cat_final,
 			COALESCE(NULLIF(cliente_final, ''), 'Não informado')   AS cliente,
@@ -97,12 +112,19 @@ func QueryPivot(ctx context.Context, pool *pgxpool.Pool, p DashboardParams) (*Pi
 			return nil, fmt.Errorf("dados.QueryPivot scan: %w", err)
 		}
 
-		// Totais no servidor: se a tela somasse por conta própria, arredondamento
-		// divergiria do que o banco reporta nos cards.
-		for i, v := range l.Meses {
-			resp.TotaisMes[i] += v
+		// Resultado no servidor: se a tela calculasse por conta própria,
+		// arredondamento divergiria do que o banco reporta nos cards.
+		//
+		// As linhas seguem com a magnitude positiva — quem carrega o sinal é o
+		// rodapé, onde despesa subtrai.
+		sinal := 1.0
+		if l.Tipo == "despesa" {
+			sinal = -1.0
 		}
-		resp.TotalGeral += l.Total
+		for i, v := range l.Meses {
+			resp.ResultadoMes[i] += sinal * v
+		}
+		resp.ResultadoTotal += sinal * l.Total
 		resp.Linhas = append(resp.Linhas, l)
 	}
 	if err := rows.Err(); err != nil {
