@@ -15,6 +15,14 @@
           </select>
         </div>
 
+        <!-- Mês: só no Fluxo de Caixa; as outras abas são anuais -->
+        <div class="fi" v-if="aba === 'fluxo'">
+          <span class="fi-label">MÊS</span>
+          <select class="fi-select" v-model.number="mesSelecionado">
+            <option v-for="m in mesesDoAno" :key="m.v" :value="m.v">{{ m.n }}</option>
+          </select>
+        </div>
+
         <!-- Empresas: só aparece quando há mais de uma no grupo -->
         <div class="fi" v-if="filtrosDisponiveis.empresas.length > 1">
           <span class="fi-label">EMPRESA</span>
@@ -149,6 +157,7 @@
     <!-- Aba Resultado: componente carregado sob demanda para não pesar no bundle
          inicial do dashboard, que já é o maior da aplicação. -->
     <ResultadoPivot v-else-if="aba === 'resultado'" :grupo-id="grupoIDAtivo" :filtros="filtrosAtivos" />
+    <FluxoCaixa v-else-if="aba === 'fluxo'" :grupo-id="grupoIDAtivo" :filtros="filtrosAtivos" :mes="mesSelecionado" />
 
     <!-- Conteúdo -->
     <div v-else-if="dados" class="dash-content">
@@ -251,12 +260,28 @@ const route  = useRoute()
 const ResultadoPivot = defineAsyncComponent(
   () => import('@/components/dashboard/ResultadoPivot.vue')
 )
+const FluxoCaixa = defineAsyncComponent(
+  () => import('@/components/dashboard/FluxoCaixa.vue')
+)
 
 const abas = [
   { id: 'geral',     label: 'VISÃO GERAL' },
   { id: 'resultado', label: 'RESULTADO'   },
+  { id: 'fluxo',     label: 'FLUXO DE CAIXA' },
 ] as const
-const aba = ref<'geral' | 'resultado'>('geral')
+const aba = ref<'geral' | 'resultado' | 'fluxo'>('geral')
+
+/**
+ * Mês só existe no Fluxo de Caixa. Visão Geral e Resultado são anuais — filtrar
+ * por mês ali esvaziaria onze das doze colunas, então o seletor some fora da aba.
+ */
+const mesSelecionado = ref(new Date().getMonth() + 1)
+const mesesDoAno = [
+  { v: 1,  n: 'Janeiro' },   { v: 2,  n: 'Fevereiro' }, { v: 3,  n: 'Março' },
+  { v: 4,  n: 'Abril' },     { v: 5,  n: 'Maio' },      { v: 6,  n: 'Junho' },
+  { v: 7,  n: 'Julho' },     { v: 8,  n: 'Agosto' },    { v: 9,  n: 'Setembro' },
+  { v: 10, n: 'Outubro' },   { v: 11, n: 'Novembro' },  { v: 12, n: 'Dezembro' },
+]
 
 // Grupo resolvido em carregar(); a aba Resultado consulta o mesmo grupo.
 const grupoIDAtivo = ref('')

@@ -33,6 +33,11 @@ type DashboardParams struct {
 	Categorias      []string
 	Cliente         string
 
+	// Mes (1-12) só é usado pelo fluxo de caixa. Fica fora de buildFiltro de
+	// propósito: dashboard e pivot são anuais, e filtrar por mês ali esvaziaria
+	// onze das doze colunas.
+	Mes int
+
 	// CategoriasExcluir remove categorias do resultado. É lista de exclusão, e não
 	// de inclusão, de propósito: com inclusão, uma categoria nova no Omie ficaria
 	// fora dos números em silêncio até alguém marcá-la. Excluindo, o que é novo

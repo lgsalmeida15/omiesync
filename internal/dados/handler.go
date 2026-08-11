@@ -63,6 +63,7 @@ func (h *Handler) Routes() http.Handler {
 	r.Get("/{grupoID}/dashboard", h.dashboardHandler)
 	r.Get("/{grupoID}/pivot", h.pivotHandler)
 	r.Get("/{grupoID}/filtros", h.filtrosHandler)
+	r.Get("/{grupoID}/fluxo-caixa", h.fluxoCaixaHandler)
 
 	return r
 }
@@ -167,6 +168,15 @@ func parseDashboardParams(r *http.Request, grupoID string) DashboardParams {
 		}
 	}
 
+	// 0 significa "não informado": só o fluxo de caixa usa mês, e ele resolve o
+	// padrão (mês vigente) por conta própria.
+	mes := 0
+	if v := r.URL.Query().Get("mes"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil && parsed >= 1 && parsed <= 12 {
+			mes = parsed
+		}
+	}
+
 	split := func(s string) []string {
 		if s == "" {
 			return nil
@@ -189,11 +199,32 @@ func parseDashboardParams(r *http.Request, grupoID string) DashboardParams {
 		Departamentos:   split(r.URL.Query().Get("departamentos")),
 		Categorias:      split(r.URL.Query().Get("categorias")),
 		Cliente:         strings.TrimSpace(r.URL.Query().Get("cliente")),
+		Mes:             mes,
 		// Vazio por padrão: o backend não decide o que ocultar. Quem define o
 		// padrão é a tela, para que outros consumidores da API não herdem a
 		// exclusão sem pedir.
 		CategoriasExcluir: split(r.URL.Query().Get("categorias_excluir")),
 	}
+}
+
+// fluxoCaixaHandler serve a aba "Fluxo de Caixa": lançamentos do mês, resumo e
+// próximos vencimentos.
+func (h *Handler) fluxoCaixaHandler(w http.ResponseWriter, r *http.Request) {
+	grupoID := chi.URLParam(r, "grupoID")
+	if !autorizaGrupo(w, r, grupoID) {
+		return
+	}
+
+	data, err := QueryFluxoCaixa(r.Context(), h.pool, parseDashboardParams(r, grupoID))
+	if err != nil {
+		if errors.Is(err, ErrViewNaoPopulada) {
+			response.FromAppError(w, apperror.Unprocessable(ErrViewNaoPopulada.Error()))
+			return
+		}
+		response.Error(w, http.StatusInternalServerError, "erro ao consultar fluxo de caixa", err)
+		return
+	}
+	response.OK(w, data)
 }
 
 // filtrosHandler serve apenas as opções de filtro, em cascata.
