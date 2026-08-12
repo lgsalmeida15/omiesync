@@ -8,7 +8,7 @@ export interface FluxoTransacao {
   tipo: 'receita' | 'despesa'
   categoria: string
   valor: number
-  status: 'Recebido' | 'Pago' | 'Previsto'
+  status: 'Recebido' | 'Pago' | 'Pendente'
   /** true = movimento realizado; false = provisão do extrato. */
   realizado: boolean
 }

@@ -20,9 +20,9 @@ type FluxoTransacao struct {
 	Tipo      string  `json:"tipo"`   // "receita" | "despesa"
 	Categoria string  `json:"categoria"`
 	Valor     float64 `json:"valor"`
-	Status    string  `json:"status"` // "Recebido" | "Pago" | "Previsto"
+	Status    string  `json:"status"` // "Recebido" | "Pago" | "Pendente"
 	// Realizado separa o que já aconteceu (movimentos) do que é provisão do
-	// extrato. A listagem do mês mostra só realizado; o calendário, os dois.
+	// extrato. Alimenta o filtro de situação da listagem e o marcador do calendário.
 	Realizado bool `json:"realizado"`
 }
 
@@ -63,7 +63,7 @@ const colunasFluxo = `
 	COALESCE(NULLIF(descricao_categoria_final, ''), 'Sem categoria')       AS categoria,
 	valor_final                                                            AS valor,
 	CASE
-		WHEN mov_ou_extrato = 'ext'        THEN 'Previsto'
+		WHEN mov_ou_extrato = 'ext'        THEN 'Pendente'
 		WHEN ajuste_receita_despesa = 1    THEN 'Recebido'
 		ELSE                                    'Pago'
 	END                                                                    AS status,

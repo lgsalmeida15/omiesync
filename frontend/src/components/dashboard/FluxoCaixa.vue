@@ -88,13 +88,13 @@
         </div>
       </div>
 
-      <!-- Listagem: só realizado, conforme combinado -->
+      <!-- Listagem: realizado e pendente, a coluna Status distingue -->
       <section class="fc-card">
         <div class="fc-card-head">
           <div>
-            <div class="fc-card-title">TRANSAÇÕES EFETUADAS</div>
+            <div class="fc-card-title">TRANSAÇÕES</div>
             <div class="fc-card-sub">
-              {{ diaSelecionado ? `Dia ${diaSelecionado}` : 'Mês inteiro' }} — pagas e recebidas
+              {{ diaSelecionado ? `Dia ${diaSelecionado}` : 'Mês inteiro' }} — efetuadas e pendentes
             </div>
           </div>
           <div class="fc-filtros">
@@ -104,10 +104,15 @@
               <option value="receita">Recebimentos</option>
               <option value="despesa">Pagamentos</option>
             </select>
+            <select v-model="filtroSituacao" class="fc-select">
+              <option value="">Todas as situações</option>
+              <option value="efetuada">Efetuadas</option>
+              <option value="pendente">Pendentes</option>
+            </select>
           </div>
         </div>
 
-        <p v-if="!listagem.length" class="fc-vazio">Nenhuma transação efetuada no período.</p>
+        <p v-if="!listagem.length" class="fc-vazio">Nenhuma transação no período.</p>
         <div v-else class="fc-scroll">
           <table class="fc-table">
             <thead>
@@ -129,7 +134,9 @@
                 <td class="ta-r mono" :class="t.tipo === 'receita' ? 'res-val--in' : 'res-val--out'">
                   {{ fmtMoeda(t.valor) }}
                 </td>
-                <td><span class="pill pill--ok">{{ t.status }}</span></td>
+                <td>
+                  <span :class="['pill', pillStatus(t)]">{{ t.status }}</span>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -145,6 +152,7 @@ import { fetchFluxoCaixa, type FluxoCaixaData, type FluxoResumo } from '@/api/fl
 import type { DashboardParams } from '@/api/dashboard'
 import AppSpinner from '@/components/ui/AppSpinner.vue'
 import { fmtMoeda, fmtCompacto } from '@/utils/formato'
+import { filtrarTransacoes, classeStatus } from '@/utils/fluxo'
 
 const props = defineProps<{ grupoId: string; filtros: DashboardParams; mes: number }>()
 
@@ -157,6 +165,7 @@ const erro           = ref('')
 const diaSelecionado = ref<number | null>(null)
 const busca          = ref('')
 const filtroTipo     = ref('')
+const filtroSituacao = ref('')
 
 // ── Calendário ─────────────────────────────────────────────────────────────
 const diasNoMes = computed(() =>
@@ -207,16 +216,17 @@ const resumo = computed<FluxoResumo>(() => {
   return r
 })
 
-// ── Listagem: apenas realizado ─────────────────────────────────────────────
-const listagem = computed(() => {
-  const q = busca.value.trim().toLowerCase()
-  return (dados.value?.transacoes ?? []).filter(t =>
-    t.realizado &&
-    (diaSelecionado.value === null || t.dia === diaSelecionado.value) &&
-    (!filtroTipo.value || t.tipo === filtroTipo.value) &&
-    (!q || t.descricao.toLowerCase().includes(q) || t.categoria.toLowerCase().includes(q))
-  )
-})
+// ── Listagem: efetuadas e pendentes; a coluna Status distingue ─────────────
+const listagem = computed(() =>
+  filtrarTransacoes(dados.value?.transacoes ?? [], {
+    dia: diaSelecionado.value,
+    tipo: filtroTipo.value,
+    situacao: filtroSituacao.value,
+    busca: busca.value,
+  })
+)
+
+const pillStatus = classeStatus
 
 // ── Carregamento ───────────────────────────────────────────────────────────
 async function carregar() {
@@ -247,7 +257,8 @@ watch(() => [props.grupoId, props.filtros, props.mes], carregar, { deep: true, i
 }
 .fc-state--erro { color: var(--red); }
 
-.fc-grid { display: grid; grid-template-columns: 1fr 320px; gap: 16px; align-items: start; }
+/* minmax(0,...) impede que o calendário estique sem limite em telas largas. */
+.fc-grid { display: grid; grid-template-columns: minmax(0, 760px) 320px; gap: 16px; align-items: start; }
 @media (max-width: 1100px) { .fc-grid { grid-template-columns: 1fr; } }
 
 .fc-lateral { display: flex; flex-direction: column; gap: 16px; }
@@ -280,14 +291,14 @@ watch(() => [props.grupoId, props.filtros, props.mes], carregar, { deep: true, i
 /* ── Calendário ── */
 .cal-semana, .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
 .cal-semana {
-  margin-bottom: 4px; font-family: var(--mono); font-size: 9px;
+  margin-bottom: 4px; font-family: var(--mono); font-size: 10px;
   color: var(--text3); text-align: center;
 }
-.cal-vazio { aspect-ratio: 1 / 0.85; }
+.cal-vazio { aspect-ratio: 1 / 0.58; }
 .cal-dia {
-  position: relative; aspect-ratio: 1 / 0.85;
-  display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
-  padding: 4px 5px; overflow: hidden;
+  position: relative; aspect-ratio: 1 / 0.58;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 0;
+  padding: 3px 6px; overflow: hidden;
   background: var(--bg3); border: 1px solid var(--border2); border-radius: 7px;
   cursor: pointer; transition: var(--trans); text-align: left;
 }
@@ -295,17 +306,17 @@ watch(() => [props.grupoId, props.filtros, props.mes], carregar, { deep: true, i
 .cal-dia--vazio { opacity: 0.35; cursor: default; }
 .cal-dia--sel { border-color: var(--accent); background: rgba(0,229,255,0.08); }
 .cal-dia--hoje .cal-num { color: var(--accent); font-weight: 700; }
-.cal-num { font-family: var(--mono); font-size: 10px; color: var(--text2); }
+.cal-num { font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--text2); line-height: 1.3; }
 .cal-val {
-  font-family: var(--mono); font-size: 9px; line-height: 1.25;
+  font-family: var(--mono); font-size: 11px; line-height: 1.2;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
 }
 .cal-val--in  { color: var(--green); }
 .cal-val--out { color: var(--red); }
-/* Marca discreta de que o dia contém provisão, não só realizado. */
+/* Marca discreta de que o dia contém pendência, não só realizado. */
 .cal-prev {
-  position: absolute; top: 4px; right: 4px;
-  width: 5px; height: 5px; border-radius: 50%;
+  position: absolute; top: 5px; right: 5px;
+  width: 6px; height: 6px; border-radius: 50%;
   background: rgba(245,158,11,0.85);
 }
 
@@ -362,6 +373,6 @@ watch(() => [props.grupoId, props.filtros, props.mes], carregar, { deep: true, i
   font-family: var(--mono); font-size: 9px; font-weight: 600; white-space: nowrap;
 }
 .pill--in  { background: rgba(34,197,94,0.12); color: var(--green); }
-.pill--out { background: rgba(239,68,68,0.12); color: var(--red); }
-.pill--ok  { background: rgba(255,255,255,0.06); color: var(--text2); }
+.pill--out  { background: rgba(239,68,68,0.12); color: var(--red); }
+.pill--pend { background: rgba(245,158,11,0.14); color: #f59e0b; }
 </style>
