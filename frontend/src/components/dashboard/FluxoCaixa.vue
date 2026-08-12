@@ -70,18 +70,20 @@
             </div>
           </section>
 
-          <section class="fc-card">
+          <section class="fc-card fc-card--venc">
             <div class="fc-card-title">PRÓXIMOS VENCIMENTOS</div>
             <div class="fc-card-sub">A partir de hoje, em qualquer mês</div>
             <p v-if="!dados.proximos_vencimentos.length" class="fc-vazio">Nada previsto adiante.</p>
-            <div v-for="(t, i) in dados.proximos_vencimentos" :key="i" class="venc-item">
-              <div class="venc-data">{{ t.data.slice(0, 5) }}</div>
-              <div class="venc-desc">
-                <span class="venc-nome">{{ t.descricao }}</span>
-                <span class="venc-cat">{{ t.categoria }}</span>
-              </div>
-              <div class="venc-val" :class="t.tipo === 'receita' ? 'res-val--in' : 'res-val--out'">
-                {{ fmtMoeda(t.valor) }}
+            <div v-else class="venc-lista">
+              <div v-for="(t, i) in dados.proximos_vencimentos" :key="i" class="venc-item">
+                <div class="venc-data">{{ t.data.slice(0, 5) }}</div>
+                <div class="venc-desc">
+                  <span class="venc-nome">{{ t.descricao }}</span>
+                  <span class="venc-cat">{{ t.categoria }}</span>
+                </div>
+                <div class="venc-val" :class="t.tipo === 'receita' ? 'res-val--in' : 'res-val--out'">
+                  {{ fmtMoeda(t.valor) }}
+                </div>
               </div>
             </div>
           </section>
@@ -257,11 +259,18 @@ watch(() => [props.grupoId, props.filtros, props.mes], carregar, { deep: true, i
 }
 .fc-state--erro { color: var(--red); }
 
-/* minmax(0,...) impede que o calendário estique sem limite em telas largas. */
-.fc-grid { display: grid; grid-template-columns: minmax(0, 760px) 320px; gap: 16px; align-items: start; }
+/* O calendário para de crescer em 760px para manter as células compactas; a
+   sobra da largura vai para a coluna lateral, senão viraria vazio à direita. */
+.fc-grid {
+  display: grid; grid-template-columns: minmax(0, 760px) minmax(320px, 1fr);
+  gap: 16px; align-items: stretch;
+}
 @media (max-width: 1100px) { .fc-grid { grid-template-columns: 1fr; } }
 
+/* O card de vencimentos absorve a altura que sobra, então a coluna lateral
+   termina na mesma linha do calendário em qualquer viewport. */
 .fc-lateral { display: flex; flex-direction: column; gap: 16px; }
+.fc-card--venc { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
 .fc-card {
   background: var(--card); border: 1px solid var(--border);
@@ -338,18 +347,27 @@ watch(() => [props.grupoId, props.filtros, props.mes], carregar, { deep: true, i
 .res-linha--total .res-val { font-size: 14px; }
 
 /* ── Próximos vencimentos ── */
+/* A lista rola em vez de esticar o card com o volume de títulos. A rolagem fica
+   na lista, não no card, para o título continuar visível. */
+/* flex-basis 140px, não auto: é o basis que a grade usa para dimensionar a
+   linha. Com basis auto a lista inteira entrava na conta e esticava o
+   calendário junto. O grow faz a lista preencher a altura que sobrar. */
+.venc-lista { flex: 1 1 140px; min-height: 0; overflow-y: auto; padding-right: 6px; }
 .venc-item {
-  display: grid; grid-template-columns: 42px 1fr auto; gap: 8px; align-items: center;
-  padding: 7px 0; border-bottom: 1px solid var(--border);
+  display: grid; grid-template-columns: 38px 1fr auto; gap: 8px; align-items: center;
+  padding: 5px 0; border-bottom: 1px solid var(--border);
 }
 .venc-item:last-child { border-bottom: none; }
 .venc-data { font-family: var(--mono); font-size: 10px; color: var(--text3); }
 .venc-desc { min-width: 0; display: flex; flex-direction: column; }
 .venc-nome {
-  font-size: 12px; color: var(--text);
+  font-size: 12px; line-height: 1.3; color: var(--text);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.venc-cat { font-family: var(--mono); font-size: 9px; color: var(--text3); }
+.venc-cat {
+  font-family: var(--mono); font-size: 9px; line-height: 1.3; color: var(--text3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .venc-val { font-family: var(--mono); font-size: 11px; font-weight: 600; white-space: nowrap; }
 
 /* ── Tabela ── */
