@@ -100,11 +100,20 @@
         <div class="fd-acoes">
           <button class="fd-acao" @click="selecionarTodos('contas_correntes')">Marcar todas</button>
         </div>
-        <label v-for="cc in filtrosDisponiveis.contas_correntes" :key="cc.codigo" class="chk-item">
-          <input type="checkbox" :checked="marcado('contas_correntes', cc.codigo)"
-                 @change="alternar('contas_correntes', cc.codigo, filtrosDisponiveis.contas_correntes.map(x => x.codigo))" />
-          {{ cc.descricao }}
-        </label>
+        <template v-for="g in gruposContas" :key="g.id">
+          <div class="fd-grupo">
+            <span class="fd-grupo-rot">{{ g.rotulo }} ({{ g.contas.length }})</span>
+            <span class="fd-grupo-acoes">
+              <button class="fd-acao" @click="alternarGrupoContas(g, true)">Marcar</button>
+              <button class="fd-acao" @click="alternarGrupoContas(g, false)">Desmarcar</button>
+            </span>
+          </div>
+          <label v-for="cc in g.contas" :key="cc.codigo" class="chk-item">
+            <input type="checkbox" :checked="marcado('contas_correntes', cc.codigo)"
+                   @change="alternar('contas_correntes', cc.codigo, todasAsContas())" />
+            {{ cc.descricao }}
+          </label>
+        </template>
       </div>
       <!-- Departamentos -->
       <div v-if="dropdown === 'dept'" class="fd-fixed" :style="fdStyle" @click.stop>
@@ -250,6 +259,7 @@ import { useAuthStore } from '@/stores/auth'
 import { fetchDashboard, fetchFiltros, type DashboardData, type FiltrosDisponiveis } from '@/api/dashboard'
 import AppSpinner from '@/components/ui/AppSpinner.vue'
 import { fmtMoeda, fmtCompacto } from '@/utils/formato'
+import { agruparContas, aplicarGrupo, type GrupoContas } from '@/utils/contas'
 
 Chart.register(...registerables, ChartDataLabels)
 
@@ -382,6 +392,23 @@ function onAnoChange() {
   filtros.departamentos    = []
   filtros.categorias       = []
   filtros.cliente          = ''
+  carregar()
+}
+
+// ── Contas correntes agrupadas pela marca do Omie ──────────────────────────
+// filtrosDisponiveis é reactive, não ref: acessar .value aqui devolve undefined.
+const gruposContas = computed(() => agruparContas(filtrosDisponiveis.contas_correntes))
+
+function todasAsContas(): string[] {
+  return filtrosDisponiveis.contas_correntes.map(c => c.codigo)
+}
+
+/** Marca ou desmarca de uma vez todas as contas de um grupo. */
+function alternarGrupoContas(g: GrupoContas, marcar: boolean) {
+  filtros.contas_correntes = aplicarGrupo(
+    todasAsContas(), filtros.contas_correntes, g.contas.map(c => c.codigo), marcar,
+  )
+  limparAbaixo('contas_correntes')
   carregar()
 }
 
@@ -868,6 +895,20 @@ onBeforeUnmount(() => {
   cursor: pointer; transition: var(--trans); white-space: nowrap;
 }
 .fd-acao:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Cabeçalho de grupo de contas correntes. */
+.fd-grupo {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 8px 12px 5px;
+  border-top: 1px solid var(--border);
+}
+.fd-grupo:first-child { border-top: none; }
+.fd-grupo-rot {
+  font-family: var(--mono); font-size: 9px; letter-spacing: 1px;
+  color: var(--text3); font-weight: 600; white-space: nowrap;
+}
+.fd-grupo-acoes { display: flex; gap: 4px; }
+.fd-grupo-acoes .fd-acao { flex: 0 0 auto; padding: 3px 7px; font-size: 8px; }
 
 .chk-item {
   display: flex;

@@ -23,7 +23,8 @@ import (
 //	v7 — extrato/contas_correntes: coluna fluxo_caixa, recria as matvw
 //	v8 — matvw no grão de movimento: remove o DISTINCT ON que descartava baixas parciais
 //	v9 — mv_id + índice único nas matvw, para permitir REFRESH ... CONCURRENTLY
-const CurrentSchemaVersion = 9
+//	v10 — ramo ext deixa de filtrar por conta corrente; recria as matvw
+const CurrentSchemaVersion = 10
 
 // Provisioner cria e inicializa schemas de tenant.
 type Provisioner struct {
@@ -379,6 +380,21 @@ BEGIN
 END
 $$`, "'"+schemaName+"'", safe),
 
+		// Auto-upgrade v10: recria a view do ano corrente que ainda restringe o ramo
+		// ext por conta corrente. O marcador é 'e.fluxo_caixa' — alias da tabela
+		// extrato, que sai da definição nova. Não casa com 'cc.fluxo_caixa', que
+		// permanece como coluna conta_considerada. Só a view do ano corrente tem ramo
+		// ext, então a histórica não é tocada.
+		fmt.Sprintf(`DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_matviews
+               WHERE schemaname = %[1]s AND matviewname = 'matvw_gerencial_ano_corrente'
+                 AND definition LIKE '%%e.fluxo_caixa%%') THEN
+        DROP MATERIALIZED VIEW %[2]s.matvw_gerencial_ano_corrente CASCADE;
+    END IF;
+END
+$$`, "'"+schemaName+"'", safe),
+
 		// ── View: ano corrente + previsões futuras ────────────────────────────────
 		// Filtro: ano >= ano atual (captura previsões de extrato para anos futuros).
 		// REFRESH: após todo sync (incremental e full) — dataset pequeno, rápido.
@@ -415,8 +431,12 @@ movimentos_unificados AS (
     LEFT JOIN %s.contas_correntes cc
         ON cc.codigo_conta_corrente = e.codigo_conta_corrente
        AND cc.empresa_id = e.empresa_id
-    WHERE e.fluxo_caixa            = 'S'
-      AND e.raw ->> 'cSituacao'    = 'Previsto'
+    -- Sem corte por e.fluxo_caixa: as provisões de TODAS as contas entram. O corte
+    -- anterior era assimétrico — o ramo mov nunca teve equivalente, então o passado
+    -- de uma conta contava e o futuro dela não. Pior: no Omie 'S' significa NÃO
+    -- considerada no fluxo de caixa, de modo que o filtro selecionava justamente o
+    -- conjunto oposto ao pretendido. A escolha de contas agora é só do usuário.
+    WHERE e.raw ->> 'cSituacao'    = 'Previsto'
       AND e.data_lancamento IS NOT NULL
       AND EXTRACT(YEAR FROM e.data_lancamento) >= EXTRACT(YEAR FROM CURRENT_DATE)
 

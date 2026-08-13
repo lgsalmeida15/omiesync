@@ -305,6 +305,11 @@ func queryFiltrosDisponiveis(ctx context.Context, pool *pgxpool.Pool, safe, view
 
 	// Contas correntes: restringidas pelas empresas selecionadas. Vêm da tabela de
 	// cadastro, não da view, para incluir conta sem movimento no período.
+	//
+	// Sem corte por fluxo_caixa: a lista traz TODAS as contas. Antes só saíam as
+	// marcadas 'S', o que escondia contas cujos movimentos realizados já entravam
+	// nos números — o usuário não conseguia nem vê-las, nem desmarcá-las. A marca
+	// agora acompanha o item e serve só para agrupar o filtro na tela.
 	ccArgs := []any{p.GrupoID}
 	ccEmpresaFilter := ""
 	if len(p.Empresas) > 0 {
@@ -312,12 +317,12 @@ func queryFiltrosDisponiveis(ctx context.Context, pool *pgxpool.Pool, safe, view
 		ccArgs = append(ccArgs, p.Empresas)
 	}
 	rowsCC, err := pool.Query(ctx, fmt.Sprintf(`
-		SELECT DISTINCT cc.codigo_conta_corrente::text, cc.descricao
+		SELECT DISTINCT cc.codigo_conta_corrente::text, cc.descricao,
+		       COALESCE(cc.fluxo_caixa, '')
 		FROM %s.contas_correntes cc
 		JOIN _etl.empresas e ON e.id = cc.empresa_id
 		WHERE e.grupo_id = $1
-		  AND e.deleted_at IS NULL
-		  AND cc.fluxo_caixa = 'S'%s
+		  AND e.deleted_at IS NULL%s
 		ORDER BY cc.descricao
 	`, safe, ccEmpresaFilter), ccArgs...)
 	if err != nil {
@@ -326,7 +331,7 @@ func queryFiltrosDisponiveis(ctx context.Context, pool *pgxpool.Pool, safe, view
 	f.ContasCorrentes = []ContaCorrenteItem{}
 	for rowsCC.Next() {
 		var item ContaCorrenteItem
-		if err := rowsCC.Scan(&item.Codigo, &item.Descricao); err != nil {
+		if err := rowsCC.Scan(&item.Codigo, &item.Descricao, &item.FluxoCaixa); err != nil {
 			rowsCC.Close()
 			return f, err
 		}

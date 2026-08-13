@@ -25,6 +25,12 @@ export interface GraficoAcumulado {
 export interface ContaCorrenteItem {
   codigo: string
   descricao: string
+  /**
+   * Marca cFluxoCaixa do Omie. Semântica invertida em relação ao nome:
+   * 'S' = NÃO considerada no fluxo de caixa, 'N' = considerada.
+   * Vazio = conta que o extrato ainda não sincronizou.
+   */
+  fluxo_caixa: string
 }
 
 export interface EmpresaItem {
