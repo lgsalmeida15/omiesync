@@ -40,10 +40,9 @@ type FiltrosDisponiveis struct {
 type ContaCorrenteItem struct {
 	Codigo    string `json:"codigo"`
 	Descricao string `json:"descricao"`
-	// FluxoCaixa é a marca cFluxoCaixa do Omie, usada só para agrupar o filtro.
-	// Atenção à semântica, que é invertida em relação ao nome: 'S' = NÃO
-	// considerada no fluxo de caixa, 'N' = considerada. Vazio = conta que o
-	// extrato ainda não sincronizou, e por isso não se sabe.
+	// FluxoCaixa é a marca cFluxoCaixa do Omie, usada só para agrupar o filtro:
+	// 'S' = considerada no fluxo de caixa, 'N' = não considerada. Vazio = conta
+	// que o extrato ainda não sincronizou, e por isso não se sabe.
 	FluxoCaixa string `json:"fluxo_caixa"`
 }
 

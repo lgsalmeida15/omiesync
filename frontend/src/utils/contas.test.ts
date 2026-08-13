@@ -6,17 +6,15 @@ const c = (codigo: string, descricao: string, fluxo_caixa: string): ContaCorrent
   ({ codigo, descricao, fluxo_caixa })
 
 describe('agruparContas', () => {
-  // No Omie 'S' = NÃO considerada e 'N' = considerada. Se alguém "corrigir" essa
-  // inversão achando que é engano, estes dois testes quebram.
-  it("'N' vai para Consideradas", () => {
-    const g = agruparContas([c('1', 'Banco A', 'N')])
+  it("'S' vai para Consideradas", () => {
+    const g = agruparContas([c('1', 'Banco A', 'S')])
     expect(g).toHaveLength(1)
     expect(g[0].id).toBe('consideradas')
     expect(g[0].rotulo).toBe('Consideradas')
   })
 
-  it("'S' vai para Não consideradas", () => {
-    const g = agruparContas([c('1', 'Banco A', 'S')])
+  it("'N' vai para Não consideradas", () => {
+    const g = agruparContas([c('1', 'Banco A', 'N')])
     expect(g[0].id).toBe('nao_consideradas')
     expect(g[0].rotulo).toBe('Não consideradas')
   })
@@ -32,7 +30,7 @@ describe('agruparContas', () => {
   })
 
   it('normaliza caixa e espaços da marca', () => {
-    const g = agruparContas([c('1', 'A', ' n '), c('2', 'B', 's')])
+    const g = agruparContas([c('1', 'A', ' s '), c('2', 'B', 'n')])
     expect(g.map(x => x.id)).toEqual(['consideradas', 'nao_consideradas'])
   })
 
@@ -42,17 +40,17 @@ describe('agruparContas', () => {
   })
 
   it('separa os três grupos na ordem fixa', () => {
-    const g = agruparContas([c('1', 'A', 'S'), c('2', 'B', ''), c('3', 'C', 'N')])
+    const g = agruparContas([c('1', 'A', 'N'), c('2', 'B', ''), c('3', 'C', 'S')])
     expect(g.map(x => x.id)).toEqual(['consideradas', 'nao_consideradas', 'sem_marca'])
   })
 
   it('omite grupos vazios', () => {
-    const g = agruparContas([c('1', 'A', 'N'), c('2', 'B', 'N')])
+    const g = agruparContas([c('1', 'A', 'S'), c('2', 'B', 'S')])
     expect(g).toHaveLength(1)
   })
 
   it('preserva a ordem de entrada dentro do grupo', () => {
-    const g = agruparContas([c('1', 'Zeta', 'N'), c('2', 'Alfa', 'N')])
+    const g = agruparContas([c('1', 'Zeta', 'S'), c('2', 'Alfa', 'S')])
     expect(g[0].contas.map(x => x.descricao)).toEqual(['Zeta', 'Alfa'])
   })
 
@@ -61,7 +59,7 @@ describe('agruparContas', () => {
   })
 
   it('nenhuma conta é perdida no agrupamento', () => {
-    const itens = [c('1', 'A', 'N'), c('2', 'B', 'S'), c('3', 'C', ''), c('4', 'D', 'N')]
+    const itens = [c('1', 'A', 'S'), c('2', 'B', 'N'), c('3', 'C', ''), c('4', 'D', 'S')]
     const total = agruparContas(itens).reduce((s, g) => s + g.contas.length, 0)
     expect(total).toBe(itens.length)
   })

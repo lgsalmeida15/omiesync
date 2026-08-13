@@ -26,9 +26,8 @@ export interface ContaCorrenteItem {
   codigo: string
   descricao: string
   /**
-   * Marca cFluxoCaixa do Omie. Semântica invertida em relação ao nome:
-   * 'S' = NÃO considerada no fluxo de caixa, 'N' = considerada.
-   * Vazio = conta que o extrato ainda não sincronizou.
+   * Marca cFluxoCaixa do Omie: 'S' = considerada no fluxo de caixa,
+   * 'N' = não considerada. Vazio = conta que o extrato ainda não sincronizou.
    */
   fluxo_caixa: string
 }

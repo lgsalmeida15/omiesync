@@ -8,11 +8,8 @@ export interface GrupoContas {
 }
 
 /**
- * Agrupa as contas correntes pela marca cFluxoCaixa do Omie.
- *
- * A semântica é invertida em relação ao nome do campo, e isso não é engano de
- * leitura: no Omie 'S' significa que a conta NÃO é considerada no fluxo de
- * caixa, e 'N' que ela é. Confirmado com o usuário.
+ * Agrupa as contas correntes pela marca cFluxoCaixa do Omie:
+ * 'S' = considerada no fluxo de caixa, 'N' = não considerada.
  *
  * Contas sem marca ficam num terceiro grupo em vez de irem para "não
  * consideradas": a ausência do campo significa que o extrato ainda não
@@ -30,8 +27,8 @@ export function agruparContas(itens: ContaCorrenteItem[]): GrupoContas[] {
 
   for (const c of itens) {
     const marca = (c.fluxo_caixa ?? '').trim().toUpperCase()
-    if (marca === 'N')      grupos[0].contas.push(c)
-    else if (marca === 'S') grupos[1].contas.push(c)
+    if (marca === 'S')      grupos[0].contas.push(c)
+    else if (marca === 'N') grupos[1].contas.push(c)
     else                    grupos[2].contas.push(c)
   }
 

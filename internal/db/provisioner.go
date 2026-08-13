@@ -433,9 +433,8 @@ movimentos_unificados AS (
        AND cc.empresa_id = e.empresa_id
     -- Sem corte por e.fluxo_caixa: as provisões de TODAS as contas entram. O corte
     -- anterior era assimétrico — o ramo mov nunca teve equivalente, então o passado
-    -- de uma conta contava e o futuro dela não. Pior: no Omie 'S' significa NÃO
-    -- considerada no fluxo de caixa, de modo que o filtro selecionava justamente o
-    -- conjunto oposto ao pretendido. A escolha de contas agora é só do usuário.
+    -- de uma conta não marcada contava nos números e o futuro dela não, sem que ela
+    -- sequer aparecesse no filtro. A escolha de contas agora é só do usuário.
     WHERE e.raw ->> 'cSituacao'    = 'Previsto'
       AND e.data_lancamento IS NOT NULL
       AND EXTRACT(YEAR FROM e.data_lancamento) >= EXTRACT(YEAR FROM CURRENT_DATE)
