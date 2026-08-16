@@ -315,9 +315,18 @@ const erro       = ref('')
 const dropdown   = ref<string | null>(null)
 
 const anoAtual = new Date().getFullYear()
+
+/**
+ * Inclui o ano seguinte: a matvw do ano corrente guarda provisões com
+ * `ano >= ano atual`, e o executor de extrato coleta 1 ano à frente. Sem o
+ * ano+1 na lista, esse dado ficava gravado e inalcançável pela tela.
+ *
+ * O ano seguinte vem parcialmente povoado — o horizonte termina no mesmo dia
+ * do ano que vem, então os últimos meses ficam vazios. É fiel ao coletado.
+ */
 const anosDisponiveis = computed(() => {
   const anos = []
-  for (let a = anoAtual; a >= anoAtual - 5; a--) anos.push(a)
+  for (let a = anoAtual + 1; a >= anoAtual - 5; a--) anos.push(a)
   return anos
 })
 
