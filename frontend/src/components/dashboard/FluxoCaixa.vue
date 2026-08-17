@@ -1,7 +1,7 @@
 <template>
   <div class="fc">
     <div v-if="carregando" class="fc-state">
-      <AppSpinner /> Carregando {{ soReceitas ? 'recebimentos' : 'fluxo de caixa' }}...
+      <AppSpinner /> Carregando {{ rotuloCarregando }}...
     </div>
     <div v-else-if="erro" class="fc-state fc-state--erro">{{ erro }}</div>
 
@@ -11,7 +11,7 @@
         <section class="fc-card">
           <div class="fc-card-head">
             <div>
-              <div class="fc-card-title">{{ soReceitas ? 'CALENDÁRIO DE RECEBIMENTOS' : 'CALENDÁRIO FINANCEIRO' }}</div>
+              <div class="fc-card-title">{{ tituloCalendario }}</div>
               <div class="fc-card-sub">{{ nomeMes[dados.mes - 1] }} de {{ dados.ano }}</div>
             </div>
             <button v-if="diaSelecionado" class="fc-btn" @click="diaSelecionado = null">
@@ -48,15 +48,17 @@
             <div class="fc-card-title">{{ diaSelecionado ? `RESUMO — DIA ${diaSelecionado}` : 'RESUMO DO MÊS' }}</div>
             <div class="fc-card-sub">{{ diaSelecionado ? 'Seleção atual' : 'Acumulado do período' }}</div>
 
-            <div class="res-linha">
-              <span class="res-rot">Recebido</span>
-              <span class="res-val res-val--in">{{ fmtMoeda(resumo.recebido) }}</span>
-            </div>
-            <div class="res-linha">
-              <span class="res-rot">A receber<span class="res-prev">previsto</span></span>
-              <span class="res-val res-val--in">{{ fmtMoeda(resumo.a_receber) }}</span>
-            </div>
-            <template v-if="!soReceitas">
+            <template v-if="tipo !== 'despesa'">
+              <div class="res-linha">
+                <span class="res-rot">Recebido</span>
+                <span class="res-val res-val--in">{{ fmtMoeda(resumo.recebido) }}</span>
+              </div>
+              <div class="res-linha">
+                <span class="res-rot">A receber<span class="res-prev">previsto</span></span>
+                <span class="res-val res-val--in">{{ fmtMoeda(resumo.a_receber) }}</span>
+              </div>
+            </template>
+            <template v-if="tipo !== 'receita'">
               <div class="res-linha">
                 <span class="res-rot">Pago</span>
                 <span class="res-val res-val--out">{{ fmtMoeda(resumo.pago) }}</span>
@@ -67,7 +69,7 @@
               </div>
             </template>
             <div class="res-linha res-linha--total">
-              <span class="res-rot">{{ soReceitas ? 'Total' : 'Resultado' }}</span>
+              <span class="res-rot">{{ umLadoSo ? 'Total' : 'Resultado' }}</span>
               <span class="res-val" :class="resumo.resultado < 0 ? 'res-val--out' : 'res-val--in'">
                 {{ fmtMoeda(resumo.resultado) }}
               </span>
@@ -105,7 +107,7 @@
           </div>
           <div class="fc-filtros">
             <input v-model="busca" class="fc-input" placeholder="Buscar descrição ou categoria..." />
-            <select v-if="!soReceitas" v-model="filtroTipo" class="fc-select">
+            <select v-if="!umLadoSo" v-model="filtroTipo" class="fc-select">
               <option value="">Todos os tipos</option>
               <option value="receita">Recebimentos</option>
               <option value="despesa">Pagamentos</option>
@@ -154,7 +156,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { fetchFluxoCaixa, type FluxoCaixaData, type FluxoResumo } from '@/api/fluxocaixa'
+import { fetchFluxoCaixa, type FluxoCaixaData, type FluxoResumo, type FluxoTransacao } from '@/api/fluxocaixa'
 import type { DashboardParams } from '@/api/dashboard'
 import AppSpinner from '@/components/ui/AppSpinner.vue'
 import { fmtMoeda, fmtCompacto } from '@/utils/formato'
@@ -164,11 +166,24 @@ const props = withDefaults(defineProps<{
   grupoId: string
   filtros: DashboardParams
   mes: number
-  /** 'receita' restringe a visão a recebimentos (aba Contas a Receber). */
-  tipo?: 'todos' | 'receita'
+  /** Restringe a visão a um lado: abas Contas a Receber e Contas a Pagar. */
+  tipo?: 'todos' | 'receita' | 'despesa'
 }>(), { tipo: 'todos' })
 
+const umLadoSo   = computed(() => props.tipo !== 'todos')
 const soReceitas = computed(() => props.tipo === 'receita')
+
+const tituloCalendario = computed(() => ({
+  todos:   'CALENDÁRIO FINANCEIRO',
+  receita: 'CALENDÁRIO DE RECEBIMENTOS',
+  despesa: 'CALENDÁRIO DE PAGAMENTOS',
+}[props.tipo]))
+
+const rotuloCarregando = computed(() => ({
+  todos:   'fluxo de caixa',
+  receita: 'recebimentos',
+  despesa: 'pagamentos',
+}[props.tipo]))
 
 const nomeMes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
                  'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
@@ -189,23 +204,28 @@ const filtroSituacao = ref('')
  */
 const dados = computed<FluxoCaixaData | null>(() => {
   if (!bruto.value) return null
-  if (!soReceitas.value) return bruto.value
+  if (!umLadoSo.value) return bruto.value
 
-  const transacoes = bruto.value.transacoes.filter(t => t.tipo === 'receita')
+  const doLado = (t: FluxoTransacao) => t.tipo === props.tipo
+  const transacoes = bruto.value.transacoes.filter(doLado)
   const resumo: FluxoResumo = {
     recebido: 0, a_receber: 0, pago: 0, a_pagar: 0, resultado: 0,
   }
   for (const t of transacoes) {
-    if (t.realizado) resumo.recebido += t.valor
-    else resumo.a_receber += t.valor
+    if (soReceitas.value) t.realizado ? (resumo.recebido += t.valor) : (resumo.a_receber += t.valor)
+    else                  t.realizado ? (resumo.pago += t.valor)     : (resumo.a_pagar += t.valor)
   }
-  resumo.resultado = resumo.recebido + resumo.a_receber
+  // Aqui o total é a soma do lado, não uma diferença: tudo na tela é do mesmo
+  // sinal, então subtrair não teria contra o quê.
+  resumo.resultado = soReceitas.value
+    ? resumo.recebido + resumo.a_receber
+    : resumo.pago + resumo.a_pagar
 
   return {
     ...bruto.value,
     transacoes,
     resumo,
-    proximos_vencimentos: bruto.value.proximos_vencimentos.filter(t => t.tipo === 'receita'),
+    proximos_vencimentos: bruto.value.proximos_vencimentos.filter(doLado),
   }
 })
 

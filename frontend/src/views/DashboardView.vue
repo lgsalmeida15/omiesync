@@ -167,7 +167,8 @@
          inicial do dashboard, que já é o maior da aplicação. -->
     <ResultadoPivot v-else-if="aba === 'resultado'" :grupo-id="grupoIDAtivo" :filtros="filtrosAtivos" />
     <FluxoCaixa v-else-if="aba === 'fluxo'" :grupo-id="grupoIDAtivo" :filtros="filtrosAtivos" :mes="mesSelecionado" />
-    <ContasReceber v-else-if="aba === 'receber'" :grupo-id="grupoIDAtivo" :filtros="filtrosAtivos" :mes="mesSelecionado" />
+    <ContasPorTipo v-else-if="aba === 'receber'" :grupo-id="grupoIDAtivo" :filtros="filtrosAtivos" :mes="mesSelecionado" tipo="receita" />
+    <ContasPorTipo v-else-if="aba === 'pagar'"   :grupo-id="grupoIDAtivo" :filtros="filtrosAtivos" :mes="mesSelecionado" tipo="despesa" />
 
     <!-- Conteúdo -->
     <div v-else-if="dados" class="dash-content">
@@ -274,8 +275,8 @@ const ResultadoPivot = defineAsyncComponent(
 const FluxoCaixa = defineAsyncComponent(
   () => import('@/components/dashboard/FluxoCaixa.vue')
 )
-const ContasReceber = defineAsyncComponent(
-  () => import('@/components/dashboard/ContasReceber.vue')
+const ContasPorTipo = defineAsyncComponent(
+  () => import('@/components/dashboard/ContasPorTipo.vue')
 )
 
 const abas = [
@@ -283,11 +284,12 @@ const abas = [
   { id: 'resultado', label: 'RESULTADO'   },
   { id: 'fluxo',     label: 'FLUXO DE CAIXA' },
   { id: 'receber',   label: 'CONTAS A RECEBER' },
+  { id: 'pagar',     label: 'CONTAS A PAGAR' },
 ] as const
-const aba = ref<'geral' | 'resultado' | 'fluxo' | 'receber'>('geral')
+const aba = ref<'geral' | 'resultado' | 'fluxo' | 'receber' | 'pagar'>('geral')
 
 /** Abas mensais: são as que exibem o seletor de MÊS. */
-const abasMensais = ['fluxo', 'receber']
+const abasMensais = ['fluxo', 'receber', 'pagar']
 const abaMensal = computed(() => abasMensais.includes(aba.value))
 
 /**

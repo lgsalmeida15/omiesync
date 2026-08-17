@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { porCategoria, topClientes, totalMarcados } from './agregacao'
+import { porCategoria, topEntidades, totalMarcados } from './agregacao'
 import type { FluxoTransacao } from '@/api/fluxocaixa'
 
 const t = (descricao: string, categoria: string, valor: number): FluxoTransacao =>
@@ -32,15 +32,15 @@ describe('porCategoria', () => {
   })
 })
 
-describe('topClientes', () => {
+describe('topEntidades', () => {
   it('soma por cliente e ordena', () => {
-    const r = topClientes([t('ACME', 'X', 100), t('BETA', 'X', 300), t('ACME', 'Y', 250)])
+    const r = topEntidades([t('ACME', 'X', 100), t('BETA', 'X', 300), t('ACME', 'Y', 250)])
     expect(r).toEqual([{ rotulo: 'ACME', valor: 350 }, { rotulo: 'BETA', valor: 300 }])
   })
 
   it('corta nos 10 maiores', () => {
     const muitos = Array.from({ length: 25 }, (_, i) => t(`CLIENTE ${i}`, 'X', i + 1))
-    const r = topClientes(muitos)
+    const r = topEntidades(muitos)
     expect(r).toHaveLength(10)
     expect(r[0].valor).toBe(25)
     expect(r[9].valor).toBe(16)
@@ -49,16 +49,16 @@ describe('topClientes', () => {
   it('corta por valor somado, não por quantidade de lançamentos', () => {
     // GRANDE tem 1 lançamento alto; PEQUENO tem 5 baixos. GRANDE deve vir antes.
     const movs = [t('GRANDE', 'X', 500), ...Array.from({ length: 5 }, () => t('PEQUENO', 'X', 10))]
-    expect(topClientes(movs, 1)).toEqual([{ rotulo: 'GRANDE', valor: 500 }])
+    expect(topEntidades(movs, 1)).toEqual([{ rotulo: 'GRANDE', valor: 500 }])
   })
 
   it('respeita limite customizado', () => {
-    const r = topClientes([t('A', 'X', 3), t('B', 'X', 2), t('C', 'X', 1)], 2)
+    const r = topEntidades([t('A', 'X', 3), t('B', 'X', 2), t('C', 'X', 1)], 2)
     expect(r.map(x => x.rotulo)).toEqual(['A', 'B'])
   })
 
   it('lista vazia devolve vazio', () => {
-    expect(topClientes([])).toEqual([])
+    expect(topEntidades([])).toEqual([])
   })
 })
 

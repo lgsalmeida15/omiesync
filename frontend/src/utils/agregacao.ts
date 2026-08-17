@@ -25,18 +25,19 @@ function agrupar(
     .sort((a, b) => b.valor - a.valor || a.rotulo.localeCompare(b.rotulo))
 }
 
-/** Recebimentos somados por categoria final. */
+/** Valores somados por categoria final. */
 export function porCategoria(transacoes: FluxoTransacao[]): Agregado[] {
   return agrupar(transacoes, t => t.categoria)
 }
 
 /**
- * Recebimentos somados por cliente, limitados aos `limite` maiores.
+ * Valores somados por entidade (cliente nos recebimentos, fornecedor nos
+ * pagamentos), limitados aos `limite` maiores.
  *
- * O corte é aplicado depois da soma: um cliente com muitos lançamentos
- * pequenos tem de competir pelo total, não pela quantidade.
+ * O corte é aplicado depois da soma: quem tem muitos lançamentos pequenos
+ * compete pelo total, não pela quantidade.
  */
-export function topClientes(transacoes: FluxoTransacao[], limite = 10): Agregado[] {
+export function topEntidades(transacoes: FluxoTransacao[], limite = 10): Agregado[] {
   return agrupar(transacoes, t => t.descricao).slice(0, limite)
 }
 
