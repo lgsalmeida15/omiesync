@@ -1,6 +1,8 @@
 <template>
   <div class="fc">
-    <div v-if="carregando" class="fc-state"><AppSpinner /> Carregando fluxo de caixa...</div>
+    <div v-if="carregando" class="fc-state">
+      <AppSpinner /> Carregando {{ soReceitas ? 'recebimentos' : 'fluxo de caixa' }}...
+    </div>
     <div v-else-if="erro" class="fc-state fc-state--erro">{{ erro }}</div>
 
     <template v-else-if="dados">
@@ -9,7 +11,7 @@
         <section class="fc-card">
           <div class="fc-card-head">
             <div>
-              <div class="fc-card-title">CALENDÁRIO FINANCEIRO</div>
+              <div class="fc-card-title">{{ soReceitas ? 'CALENDÁRIO DE RECEBIMENTOS' : 'CALENDÁRIO FINANCEIRO' }}</div>
               <div class="fc-card-sub">{{ nomeMes[dados.mes - 1] }} de {{ dados.ano }}</div>
             </div>
             <button v-if="diaSelecionado" class="fc-btn" @click="diaSelecionado = null">
@@ -54,16 +56,18 @@
               <span class="res-rot">A receber<span class="res-prev">previsto</span></span>
               <span class="res-val res-val--in">{{ fmtMoeda(resumo.a_receber) }}</span>
             </div>
-            <div class="res-linha">
-              <span class="res-rot">Pago</span>
-              <span class="res-val res-val--out">{{ fmtMoeda(resumo.pago) }}</span>
-            </div>
-            <div class="res-linha">
-              <span class="res-rot">A pagar<span class="res-prev">previsto</span></span>
-              <span class="res-val res-val--out">{{ fmtMoeda(resumo.a_pagar) }}</span>
-            </div>
+            <template v-if="!soReceitas">
+              <div class="res-linha">
+                <span class="res-rot">Pago</span>
+                <span class="res-val res-val--out">{{ fmtMoeda(resumo.pago) }}</span>
+              </div>
+              <div class="res-linha">
+                <span class="res-rot">A pagar<span class="res-prev">previsto</span></span>
+                <span class="res-val res-val--out">{{ fmtMoeda(resumo.a_pagar) }}</span>
+              </div>
+            </template>
             <div class="res-linha res-linha--total">
-              <span class="res-rot">Resultado</span>
+              <span class="res-rot">{{ soReceitas ? 'Total' : 'Resultado' }}</span>
               <span class="res-val" :class="resumo.resultado < 0 ? 'res-val--out' : 'res-val--in'">
                 {{ fmtMoeda(resumo.resultado) }}
               </span>
@@ -101,7 +105,7 @@
           </div>
           <div class="fc-filtros">
             <input v-model="busca" class="fc-input" placeholder="Buscar descrição ou categoria..." />
-            <select v-model="filtroTipo" class="fc-select">
+            <select v-if="!soReceitas" v-model="filtroTipo" class="fc-select">
               <option value="">Todos os tipos</option>
               <option value="receita">Recebimentos</option>
               <option value="despesa">Pagamentos</option>
@@ -156,18 +160,59 @@ import AppSpinner from '@/components/ui/AppSpinner.vue'
 import { fmtMoeda, fmtCompacto } from '@/utils/formato'
 import { filtrarTransacoes, classeStatus } from '@/utils/fluxo'
 
-const props = defineProps<{ grupoId: string; filtros: DashboardParams; mes: number }>()
+const props = withDefaults(defineProps<{
+  grupoId: string
+  filtros: DashboardParams
+  mes: number
+  /** 'receita' restringe a visão a recebimentos (aba Contas a Receber). */
+  tipo?: 'todos' | 'receita'
+}>(), { tipo: 'todos' })
+
+const soReceitas = computed(() => props.tipo === 'receita')
 
 const nomeMes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
                  'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
 
-const dados          = ref<FluxoCaixaData | null>(null)
+const bruto          = ref<FluxoCaixaData | null>(null)
 const carregando     = ref(false)
 const erro           = ref('')
 const diaSelecionado = ref<number | null>(null)
 const busca          = ref('')
 const filtroTipo     = ref('')
 const filtroSituacao = ref('')
+
+/**
+ * Na visão de recebimentos o recorte é aplicado uma vez, aqui: transações,
+ * resumo e próximos vencimentos passam a enxergar só receitas. Filtrar em cada
+ * consumidor separadamente deixaria algum deles para trás — o resumo já vem
+ * totalizado do servidor e precisa ser recalculado junto.
+ */
+const dados = computed<FluxoCaixaData | null>(() => {
+  if (!bruto.value) return null
+  if (!soReceitas.value) return bruto.value
+
+  const transacoes = bruto.value.transacoes.filter(t => t.tipo === 'receita')
+  const resumo: FluxoResumo = {
+    recebido: 0, a_receber: 0, pago: 0, a_pagar: 0, resultado: 0,
+  }
+  for (const t of transacoes) {
+    if (t.realizado) resumo.recebido += t.valor
+    else resumo.a_receber += t.valor
+  }
+  resumo.resultado = resumo.recebido + resumo.a_receber
+
+  return {
+    ...bruto.value,
+    transacoes,
+    resumo,
+    proximos_vencimentos: bruto.value.proximos_vencimentos.filter(t => t.tipo === 'receita'),
+  }
+})
+
+// Emite as transações já recortadas para quem compõe a tela (os gráficos da aba
+// Contas a Receber), evitando uma segunda chamada ao mesmo endpoint.
+const emit = defineEmits<{ (e: 'dados', d: FluxoCaixaData | null): void }>()
+watch(dados, d => emit('dados', d), { immediate: true })
 
 // ── Calendário ─────────────────────────────────────────────────────────────
 const diasNoMes = computed(() =>
@@ -236,7 +281,7 @@ async function carregar() {
   carregando.value = true
   erro.value = ''
   try {
-    dados.value = await fetchFluxoCaixa(props.grupoId, { ...props.filtros, mes: props.mes })
+    bruto.value = await fetchFluxoCaixa(props.grupoId, { ...props.filtros, mes: props.mes })
     diaSelecionado.value = null
   } catch (e: unknown) {
     const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message

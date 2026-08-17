@@ -15,8 +15,8 @@
           </select>
         </div>
 
-        <!-- Mês: só no Fluxo de Caixa; as outras abas são anuais -->
-        <div class="fi" v-if="aba === 'fluxo'">
+        <!-- Mês: só nas abas mensais; Visão Geral e Resultado são anuais -->
+        <div class="fi" v-if="abaMensal">
           <span class="fi-label">MÊS</span>
           <select class="fi-select" v-model.number="mesSelecionado">
             <option v-for="m in mesesDoAno" :key="m.v" :value="m.v">{{ m.n }}</option>
@@ -167,6 +167,7 @@
          inicial do dashboard, que já é o maior da aplicação. -->
     <ResultadoPivot v-else-if="aba === 'resultado'" :grupo-id="grupoIDAtivo" :filtros="filtrosAtivos" />
     <FluxoCaixa v-else-if="aba === 'fluxo'" :grupo-id="grupoIDAtivo" :filtros="filtrosAtivos" :mes="mesSelecionado" />
+    <ContasReceber v-else-if="aba === 'receber'" :grupo-id="grupoIDAtivo" :filtros="filtrosAtivos" :mes="mesSelecionado" />
 
     <!-- Conteúdo -->
     <div v-else-if="dados" class="dash-content">
@@ -273,13 +274,21 @@ const ResultadoPivot = defineAsyncComponent(
 const FluxoCaixa = defineAsyncComponent(
   () => import('@/components/dashboard/FluxoCaixa.vue')
 )
+const ContasReceber = defineAsyncComponent(
+  () => import('@/components/dashboard/ContasReceber.vue')
+)
 
 const abas = [
   { id: 'geral',     label: 'VISÃO GERAL' },
   { id: 'resultado', label: 'RESULTADO'   },
   { id: 'fluxo',     label: 'FLUXO DE CAIXA' },
+  { id: 'receber',   label: 'CONTAS A RECEBER' },
 ] as const
-const aba = ref<'geral' | 'resultado' | 'fluxo'>('geral')
+const aba = ref<'geral' | 'resultado' | 'fluxo' | 'receber'>('geral')
+
+/** Abas mensais: são as que exibem o seletor de MÊS. */
+const abasMensais = ['fluxo', 'receber']
+const abaMensal = computed(() => abasMensais.includes(aba.value))
 
 /**
  * Mês só existe no Fluxo de Caixa. Visão Geral e Resultado são anuais — filtrar
