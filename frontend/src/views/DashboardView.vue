@@ -150,12 +150,16 @@
       </div>
     </Teleport>
 
-    <!-- Abas -->
-    <div class="dash-tabs">
-      <button v-for="t in abas" :key="t.id"
-              :class="['dash-tab', { active: aba === t.id }]"
-              @click="aba = t.id">{{ t.label }}</button>
-    </div>
+    <!-- Abas na faixa fixa do cabeçalho, logo abaixo dos filtros.
+         Mesmo `defer` dos filtros: #appbar-tabs é renderizado pelo MainLayout e
+         sem ele o querySelector do alvo devolve null na montagem. -->
+    <Teleport defer to="#appbar-tabs">
+      <div class="dash-tabs">
+        <button v-for="t in abas" :key="t.id"
+                :class="['dash-tab', { active: aba === t.id }]"
+                @click="aba = t.id">{{ t.label }}</button>
+      </div>
+    </Teleport>
 
     <!-- Loading / erro -->
     <div v-if="carregando && !dados" class="state-msg">
@@ -181,7 +185,7 @@
             <span class="kpi-label">RECEITA TOTAL</span>
             <span class="kpi-icon kpi-icon--green">↑</span>
           </div>
-          <div class="kpi-value kpi-value--green">{{ fmt(dados.cards.receita_total) }}</div>
+          <div class="kpi-value kpi-value--green">{{ fmtExato(dados.cards.receita_total) }}</div>
           <div class="kpi-sub">Ano {{ filtros.ano }}</div>
         </div>
         <div class="kpi-card kpi-despesa">
@@ -189,7 +193,7 @@
             <span class="kpi-label">DESPESA TOTAL</span>
             <span class="kpi-icon kpi-icon--red">↓</span>
           </div>
-          <div class="kpi-value kpi-value--red">{{ fmt(dados.cards.despesa_total) }}</div>
+          <div class="kpi-value kpi-value--red">{{ fmtDespesa(dados.cards.despesa_total) }}</div>
           <div class="kpi-sub">Ano {{ filtros.ano }}</div>
         </div>
         <div class="kpi-card kpi-resultado">
@@ -198,7 +202,7 @@
             <span class="kpi-icon kpi-icon--accent">◈</span>
           </div>
           <div class="kpi-value" :class="dados.cards.resultado >= 0 ? 'kpi-value--green' : 'kpi-value--red'">
-            {{ fmt(dados.cards.resultado) }}
+            {{ fmtExato(dados.cards.resultado) }}
           </div>
           <div class="kpi-sub">Receita − Despesa + Saldo CC</div>
         </div>
@@ -207,7 +211,7 @@
             <span class="kpi-label">SALDO CONTAS</span>
             <span class="kpi-icon kpi-icon--yellow">⬡</span>
           </div>
-          <div class="kpi-value kpi-value--yellow">{{ fmt(dados.cards.saldo_contas_correntes) }}</div>
+          <div class="kpi-value kpi-value--yellow">{{ fmtExato(dados.cards.saldo_contas_correntes) }}</div>
           <div class="kpi-sub">Saldo inicial cadastrado</div>
         </div>
       </div>
@@ -221,9 +225,9 @@
               <div class="chart-sub">Evolução mensal — {{ filtros.ano }}</div>
             </div>
             <div class="chart-legend">
-              <span class="leg-dot" style="background:var(--green)"></span>Receita
-              <span class="leg-dot" style="background:var(--red)"></span>Despesa
-              <span class="leg-dot" style="background:var(--accent)"></span>Resultado
+              <span class="leg-dot" style="background:var(--success)"></span>Receita
+              <span class="leg-dot" style="background:var(--danger)"></span>Despesa
+              <span class="leg-dot" style="background:var(--primary)"></span>Resultado
             </div>
           </div>
           <div class="chart-wrap"><canvas ref="canvasRecDesp"></canvas></div>
@@ -236,9 +240,9 @@
               <div class="chart-sub">Progressão mensal — {{ filtros.ano }}</div>
             </div>
             <div class="chart-legend">
-              <span class="leg-dot" style="background:var(--accent)"></span>Acumulado
-              <span class="leg-dot" style="background:var(--green)"></span>Positivo
-              <span class="leg-dot" style="background:var(--red)"></span>Negativo
+              <span class="leg-dot" style="background:var(--primary)"></span>Acumulado
+              <span class="leg-dot" style="background:var(--success)"></span>Positivo
+              <span class="leg-dot" style="background:var(--danger)"></span>Negativo
             </div>
           </div>
           <div class="chart-wrap"><canvas ref="canvasAcum"></canvas></div>
@@ -258,14 +262,17 @@ import { useRouter, useRoute } from 'vue-router'
 import { Chart, registerables } from 'chart.js'
 import ChartDataLabels from 'chartjs-plugin-datalabels'
 import { useAuthStore } from '@/stores/auth'
+import { useUiStore } from '@/stores/ui'
 import { fetchDashboard, fetchFiltros, type DashboardData, type FiltrosDisponiveis } from '@/api/dashboard'
 import AppSpinner from '@/components/ui/AppSpinner.vue'
-import { fmtMoeda, fmtCompacto } from '@/utils/formato'
+import { fmtMoeda, fmtMoedaExata, fmtCompacto } from '@/utils/formato'
+import { coresGrafico, comAlfa } from '@/utils/tema'
 import { agruparContas, aplicarGrupo, type GrupoContas } from '@/utils/contas'
 
 Chart.register(...registerables, ChartDataLabels)
 
 const auth   = useAuthStore()
+const ui     = useUiStore()   // fonte reativa do tema para os gráficos
 const router = useRouter()
 const route  = useRoute()
 
@@ -508,18 +515,35 @@ let chartAcum:    Chart | null = null
 
 // Formatação contábil: negativo entre parênteses. Ver src/utils/formato.ts.
 const fmt  = fmtMoeda
+const fmtExato = fmtMoedaExata   // cards de KPI: valor cheio, com centavos
+
+/**
+ * Despesa sempre entre parênteses, mesmo vindo positiva da API. Sem isso o card
+ * de despesa e o de receita mostram dois números de aparência idêntica, e a
+ * leitura rápida sugere que um soma ao outro.
+ */
+function fmtDespesa(v: number): string {
+  return fmtMoedaExata(-Math.abs(v))
+}
 const fmtK = fmtCompacto
 
+/**
+ * Cores e fonte vindas dos tokens CSS, resolvidas para valores concretos.
+ *
+ * Não dá para passar uma referência de token ao Chart.js: o canvas descarta a string como
+ * cor inválida. A tabela de duplas dark/light que havia aqui também saiu — era
+ * uma terceira cópia da paleta, que não acompanhava mudança de token.
+ */
 function chartColors() {
-  const dark = document.documentElement.getAttribute('data-theme') !== 'light'
+  const c = coresGrafico()
   return {
-    grid:          dark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.06)',
-    tick:          dark ? '#4a6070' : '#8fa3b4',
-    label:         dark ? '#7a90a8' : '#4a6070',
-    bg:            dark ? '#080c12' : '#fff',
-    tooltip:       dark ? 'rgba(13,21,32,0.97)' : 'rgba(255,255,255,0.97)',
-    tooltipBorder: dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)',
-    tooltipText:   dark ? '#e2eaf4' : '#0f1c2e',
+    ...c,
+    grid:          c.grade,
+    label:         c.rotulo,
+    bg:            c.fundo,
+    tooltip:       c.tooltipFundo,
+    tooltipBorder: c.tooltipBorda,
+    tooltipText:   c.tooltipTexto,
   }
 }
 
@@ -537,21 +561,21 @@ function buildChartRecDesp() {
         {
           label: 'Receita', type: 'bar',
           data: ms.map(m => m.receita),
-          backgroundColor: 'rgba(34,197,94,0.25)',
-          borderColor: '#22c55e', borderWidth: 1.5, borderRadius: 4, order: 2,
+          backgroundColor: comAlfa(c.receita, 0.25),
+          borderColor: c.receita, borderWidth: 1.5, borderRadius: 4, order: 2,
         },
         {
           label: 'Despesa', type: 'bar',
           data: ms.map(m => m.despesa),
-          backgroundColor: 'rgba(239,68,68,0.2)',
-          borderColor: '#ef4444', borderWidth: 1.5, borderRadius: 4, order: 2,
+          backgroundColor: comAlfa(c.despesa, 0.2),
+          borderColor: c.despesa, borderWidth: 1.5, borderRadius: 4, order: 2,
         },
         {
           label: 'Resultado', type: 'line',
           data: ms.map(m => m.resultado_mes),
-          borderColor: '#00e5ff', borderWidth: 2.5,
-          backgroundColor: 'rgba(0,229,255,0.06)', fill: true, tension: 0.4,
-          pointRadius: 4, pointBackgroundColor: '#00e5ff',
+          borderColor: c.linha, borderWidth: 2.5,
+          backgroundColor: comAlfa(c.linha, 0.12), fill: true, tension: 0.4,
+          pointRadius: 4, pointBackgroundColor: c.linha,
           pointBorderColor: c.bg, pointBorderWidth: 2, order: 1,
         },
       ],
@@ -567,14 +591,14 @@ function buildChartRecDesp() {
         },
         datalabels: {
           display: (ctx) => (ctx.parsed?.y ?? 0) !== 0,
-          font: { family: 'var(--mono)', size: 9, weight: 'bold' },
+          font: { family: c.fonte, size: 9, weight: 'bold' },
           formatter: (v: number) => fmtK(v),
           anchor: 'end',
           align:  'top',
           color:  (ctx) => {
-            if (ctx.dataset.label === 'Receita')   return '#22c55e'
-            if (ctx.dataset.label === 'Despesa')   return '#ef4444'
-            if (ctx.dataset.label === 'Resultado') return '#00e5ff'
+            if (ctx.dataset.label === 'Receita')   return c.receita
+            if (ctx.dataset.label === 'Despesa')   return c.despesa
+            if (ctx.dataset.label === 'Resultado') return c.linha
             return c.label
           },
           offset: 2,
@@ -583,12 +607,12 @@ function buildChartRecDesp() {
       scales: {
         x: {
           grid: { display: false },
-          ticks: { color: c.tick, font: { family: 'var(--mono)', size: 10 } },
+          ticks: { color: c.tick, font: { family: c.fonte, size: 10 } },
           border: { display: false },
         },
         y: {
           grid: { color: c.grid },
-          ticks: { color: c.tick, font: { family: 'var(--mono)', size: 10 }, callback: v => fmtK(Number(v)) },
+          ticks: { color: c.tick, font: { family: c.fonte, size: 10 }, callback: v => fmtK(Number(v)) },
           border: { display: false },
         },
       },
@@ -611,16 +635,16 @@ function buildChartAcum() {
         {
           label: 'Resultado mês', type: 'bar',
           data: ac.map(m => m.resultado_mes),
-          backgroundColor: ac.map(m => m.resultado_mes >= 0 ? 'rgba(34,197,94,0.7)' : 'rgba(239,68,68,0.7)'),
-          borderColor:     ac.map(m => m.resultado_mes >= 0 ? '#22c55e' : '#ef4444'),
+          backgroundColor: ac.map(m => comAlfa(m.resultado_mes >= 0 ? c.receita : c.despesa, 0.7)),
+          borderColor:     ac.map(m => m.resultado_mes >= 0 ? c.receita : c.despesa),
           borderWidth: 1.5, borderRadius: 4, order: 2,
         },
         {
           label: 'Acumulado', type: 'line',
           data: ac.map(m => m.acumulado),
-          borderColor: '#00e5ff', borderWidth: 2.5,
-          backgroundColor: 'rgba(0,229,255,0.06)', fill: true, tension: 0.4,
-          pointRadius: 4, pointBackgroundColor: '#00e5ff',
+          borderColor: c.linha, borderWidth: 2.5,
+          backgroundColor: comAlfa(c.linha, 0.12), fill: true, tension: 0.4,
+          pointRadius: 4, pointBackgroundColor: c.linha,
           pointBorderColor: c.bg, pointBorderWidth: 2, order: 1,
         },
       ],
@@ -636,13 +660,13 @@ function buildChartAcum() {
         },
         datalabels: {
           display: (ctx) => (ctx.parsed?.y ?? 0) !== 0,
-          font: { family: 'var(--mono)', size: 9, weight: 'bold' },
+          font: { family: c.fonte, size: 9, weight: 'bold' },
           formatter: (v: number) => fmtK(v),
           anchor: 'end',
           align:  (ctx) => ctx.dataset.label === 'Acumulado' ? 'top' : ((ctx.parsed?.y ?? 0) >= 0 ? 'top' : 'bottom'),
           color: (ctx) => {
-            if (ctx.dataset.label === 'Acumulado') return '#00e5ff'
-            return (ctx.parsed?.y ?? 0) >= 0 ? '#22c55e' : '#ef4444'
+            if (ctx.dataset.label === 'Acumulado') return c.linha
+            return (ctx.parsed?.y ?? 0) >= 0 ? c.receita : c.despesa
           },
           offset: 2,
         },
@@ -650,12 +674,12 @@ function buildChartAcum() {
       scales: {
         x: {
           grid: { display: false },
-          ticks: { color: c.tick, font: { family: 'var(--mono)', size: 10 } },
+          ticks: { color: c.tick, font: { family: c.fonte, size: 10 } },
           border: { display: false },
         },
         y: {
           grid: { color: c.grid },
-          ticks: { color: c.tick, font: { family: 'var(--mono)', size: 10 }, callback: v => fmtK(Number(v)) },
+          ticks: { color: c.tick, font: { family: c.fonte, size: 10 }, callback: v => fmtK(Number(v)) },
           border: { display: false },
         },
       },
@@ -679,10 +703,15 @@ watch(dados, () => {
   }, 50)
 }, { flush: 'post' })
 
-// Reconstrói ao trocar tema
+// Reconstrói ao trocar tema.
+//
+// Observa ui.theme, não document.documentElement.getAttribute('data-theme'):
+// getAttribute não tem dependência reativa, então o watcher anterior NUNCA
+// disparava e os gráficos mantinham as cores do tema antigo até a próxima
+// recarga. Só apareceu quando fomos medir.
 watch(
-  () => document.documentElement.getAttribute('data-theme'),
-  () => { if (dados.value) { buildChartRecDesp(); buildChartAcum() } }
+  () => ui.theme,
+  () => { if (dados.value) { nextTick(() => { buildChartRecDesp(); buildChartAcum() }) } }
 )
 
 // Reconstrói ao voltar da aba Resultado.
@@ -833,44 +862,56 @@ onBeforeUnmount(() => {
 /* ── Filtros na topbar (via Teleport) ──────────────────────────────────── */
 .tf-inner {
   display: flex;
-  align-items: flex-end;
-  gap: 8px;
+  align-items: center;
+  gap: var(--sp-2);
   flex-wrap: nowrap;
-  overflow: hidden;   /* clip horizontal — dropdowns usam position:fixed e escapam disso */
-  padding: 0 8px;
+  /* Rola em vez de recortar: na faixa própria há largura de sobra, e com clip
+     os últimos filtros ficavam inalcançáveis em tela estreita. Os dropdowns
+     usam position:fixed e escapam deste contêiner de qualquer forma. */
+  overflow-x: auto;
+  scrollbar-width: thin;
+  padding: 10px 0;
   flex: 1;
 }
 
-.fi { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
-.fi--grow { flex: 1; min-width: 120px; }
+/* Chip com o rótulo INLINE, não empilhado acima do controle: numa faixa fixa a
+   altura é o recurso caro, e o rótulo em cima custava ~22px por filtro. */
+.fi {
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 34px; padding: 0 11px; flex-shrink: 0;
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  background: var(--surface);
+  transition: border-color var(--transition), background var(--transition);
+}
+.fi:hover { border-color: var(--primary); background: var(--surface-2); }
+.fi--grow { flex: 1; min-width: 150px; }
 
 .fi-label {
-  font-family: var(--mono);
-  font-size: 8px;
-  letter-spacing: 1.5px;
-  color: var(--text3);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: .06em;
+  color: var(--text-dim);
   text-transform: uppercase;
   white-space: nowrap;
 }
 
 .fi-select,
 .fi-input {
-  font-family: var(--mono);
-  font-size: 10px;
-  padding: 4px 8px;
-  border-radius: 6px;
-  border: 1px solid var(--border2);
-  background: var(--bg3);
-  color: var(--text2);
+  font-size: var(--fs-sm);
+  padding: 0;
+  border-radius: 0;
+  border: none;
+  background: transparent;
+  color: var(--text);
   outline: none;
   cursor: pointer;
-  transition: border-color 0.2s;
   appearance: none;
-  height: 28px;
+  height: auto;
   white-space: nowrap;
+  min-width: 0;
 }
-.fi-select:focus, .fi-input:focus { border-color: rgba(0,229,255,0.4); }
-.fi-input::placeholder { color: var(--text3); }
+.fi-select:focus, .fi-input:focus { border-color: var(--primary); }
+.fi-input::placeholder { color: var(--text-dim); }
 
 .fi-multi { position: relative; }
 
@@ -882,7 +923,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
   text-align: left;
 }
-.chv { font-size: 9px; color: var(--text3); margin-left: 4px; }
+.chv { font-size: var(--fs-xs); color: var(--text-dim); margin-left: 4px; }
 
 /* Dropdown fixo — Teleportado para body, escapa de qualquer overflow:hidden */
 .fd-fixed {
@@ -891,8 +932,8 @@ onBeforeUnmount(() => {
   max-width: 320px;
   max-height: 260px;
   overflow-y: auto;
-  background: var(--card);
-  border: 1px solid var(--border2);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
   box-shadow: 0 8px 32px rgba(0,0,0,0.4);
   z-index: 9999;
@@ -902,19 +943,19 @@ onBeforeUnmount(() => {
 .fd-acoes {
   display: flex; gap: 6px;
   padding: 6px 8px;
-  border-bottom: 1px solid var(--border2);
+  border-bottom: 1px solid var(--border-strong);
   position: sticky; top: 0;
-  background: var(--card);
+  background: var(--surface);
 }
 .fd-acao {
   flex: 1;
-  background: var(--bg3); color: var(--text2);
-  border: 1px solid var(--border2); border-radius: 6px;
+  background: var(--surface-2); color: var(--text-muted);
+  border: 1px solid var(--border-strong); border-radius: 6px;
   padding: 4px 8px;
-  font-family: var(--mono); font-size: 9px; letter-spacing: 0.5px;
-  cursor: pointer; transition: var(--trans); white-space: nowrap;
+  font-family: var(--font-display); font-size: var(--fs-xs); letter-spacing: 0.5px;
+  cursor: pointer; transition: var(--transition); white-space: nowrap;
 }
-.fd-acao:hover { border-color: var(--accent); color: var(--accent); }
+.fd-acao:hover { border-color: var(--primary); color: var(--primary); }
 
 /* Cabeçalho de grupo de contas correntes. */
 .fd-grupo {
@@ -924,77 +965,81 @@ onBeforeUnmount(() => {
 }
 .fd-grupo:first-child { border-top: none; }
 .fd-grupo-rot {
-  font-family: var(--mono); font-size: 9px; letter-spacing: 1px;
-  color: var(--text3); font-weight: 600; white-space: nowrap;
+  font-family: var(--font-display); font-size: var(--fs-xs); letter-spacing: 1px;
+  color: var(--text-dim); font-weight: 600; white-space: nowrap;
 }
 .fd-grupo-acoes { display: flex; gap: 4px; }
-.fd-grupo-acoes .fd-acao { flex: 0 0 auto; padding: 3px 7px; font-size: 8px; }
+.fd-grupo-acoes .fd-acao { flex: 0 0 auto; padding: 3px 7px; font-size: var(--fs-xs); }
 
 .chk-item {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 6px 12px;
-  font-size: 11px;
-  color: var(--text2);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
   cursor: pointer;
   transition: background 0.15s;
 }
-.chk-item:hover { background: var(--bg3); }
-.chk-item input { accent-color: var(--accent); cursor: pointer; flex-shrink: 0; }
+.chk-item:hover { background: var(--surface-2); }
+.chk-item input { accent-color: var(--primary); cursor: pointer; flex-shrink: 0; }
 .chk-item--click { user-select: none; }
-.chk-item--click:hover { background: var(--bg3); color: var(--accent); }
+.chk-item--click:hover { background: var(--surface-2); color: var(--primary); }
 
 .fi-clear {
   padding: 4px 8px;
   height: 28px;
   border-radius: 6px;
-  border: 1px solid var(--border2);
-  background: var(--bg3);
-  color: var(--text3);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--text-dim);
   cursor: pointer;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   align-self: flex-end;
   flex-shrink: 0;
-  transition: var(--trans);
+  transition: var(--transition);
 }
-.fi-clear:hover { border-color: var(--red); color: var(--red); }
+.fi-clear:hover { border-color: var(--danger); color: var(--danger); }
 
 /* ── Estados ───────────────────────────────────────────────────────────── */
 .state-msg {
   display: flex; align-items: center; gap: 10px;
   justify-content: center; padding: 60px 24px;
-  font-family: var(--mono); font-size: 12px; color: var(--text3);
+  font-family: var(--font-display); font-size: var(--fs-xs); color: var(--text-dim);
 }
-.state-msg--erro { color: var(--red); }
+.state-msg--erro { color: var(--danger); }
 
 /* ── Conteúdo ──────────────────────────────────────────────────────────── */
 .dash-content { display: flex; flex-direction: column; gap: 20px; }
 
+/* As abas vivem na faixa fixa do cabeçalho (Teleport para #appbar-tabs). Sem
+   borda inferior nem margem próprias: quem desenha a separação é o .appbar. */
 .dash-tabs {
-  display: flex; gap: 4px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 18px;
+  display: flex; gap: var(--sp-1);
+  overflow-x: auto;
+  scrollbar-width: none;
 }
+.dash-tabs::-webkit-scrollbar { display: none; }
 .dash-tab {
   background: none; border: none;
   border-bottom: 2px solid transparent;
-  padding: 9px 16px; margin-bottom: -1px;
-  font-family: var(--mono); font-size: 10px; letter-spacing: 1.2px;
-  color: var(--text3); cursor: pointer; transition: var(--trans);
+  padding: 10px var(--sp-4); flex-shrink: 0;
+  font-size: var(--fs-sm); font-weight: 600; letter-spacing: .02em;
+  color: var(--text-muted); cursor: pointer; transition: var(--transition);
+  white-space: nowrap;
 }
-.dash-tab:hover { color: var(--text2); }
-.dash-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.dash-tab:hover { color: var(--text); }
+.dash-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
 
 .section-title {
   display: flex; align-items: center; gap: 8px;
-  font-family: var(--mono); font-size: 10px;
-  color: var(--text3); letter-spacing: 2px; text-transform: uppercase;
+  font-family: var(--font-display); font-size: var(--fs-xs);
+  color: var(--text-dim); letter-spacing: 2px; text-transform: uppercase;
   margin-bottom: 4px;
 }
 .section-title::before {
   content: ''; width: 18px; height: 1.5px;
-  background: var(--accent); opacity: 0.7;
+  background: var(--primary); opacity: 0.7;
 }
 
 /* ── Cards KPI ─────────────────────────────────────────────────────────── */
@@ -1007,33 +1052,47 @@ onBeforeUnmount(() => {
 @media (max-width: 560px)  { .cards-row { grid-template-columns: 1fr; } }
 
 .kpi-card {
-  background: var(--card); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 18px 20px;
-  position: relative; overflow: hidden; transition: var(--trans);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 18px 20px;
+  position: relative; overflow: hidden; transition: var(--transition);
+  /* Altura fixa e nao min-height: os quatro cards ficam lado a lado e um deles
+     com valor mais longo esticava so a propria coluna, desalinhando a linha. */
+  height: 133px;
+  display: flex; flex-direction: column;
 }
 .kpi-card::before {
   content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
 }
-.kpi-receita::before   { background: var(--green); }
-.kpi-despesa::before   { background: var(--red); }
-.kpi-resultado::before { background: var(--accent); }
-.kpi-saldo::before     { background: var(--yellow); }
-.kpi-card:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+.kpi-receita::before   { background: var(--success); }
+.kpi-despesa::before   { background: var(--danger); }
+.kpi-resultado::before { background: var(--primary); }
+.kpi-saldo::before     { background: var(--warning); }
+.kpi-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
 
 .kpi-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 12px; }
-.kpi-label  { font-family: var(--mono); font-size: 10px; font-weight: 500; color: var(--text3); letter-spacing: 1.5px; text-transform: uppercase; }
+.kpi-label  { font-family: var(--font-display); font-size: var(--fs-xs); font-weight: 500; color: var(--text-dim); letter-spacing: 1.5px; text-transform: uppercase; }
 
-.kpi-icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 15px; }
-.kpi-icon--green  { background: rgba(34,197,94,0.1);  color: var(--green); }
-.kpi-icon--red    { background: rgba(239,68,68,0.1);  color: var(--red); }
-.kpi-icon--accent { background: rgba(0,229,255,0.1);  color: var(--accent); }
-.kpi-icon--yellow { background: rgba(245,158,11,0.1); color: var(--yellow); }
+.kpi-icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: var(--fs-md); }
+.kpi-icon--green  { background: var(--success-weak);  color: var(--success); }
+.kpi-icon--red    { background: var(--danger-weak);  color: var(--danger); }
+.kpi-icon--accent { background: var(--primary-weak);  color: var(--primary); }
+.kpi-icon--yellow { background: var(--warning-weak); color: var(--warning); }
 
-.kpi-value { font-size: 22px; font-weight: 800; line-height: 1; margin-bottom: 6px; letter-spacing: -0.5px; }
-.kpi-value--green  { color: var(--green); }
-.kpi-value--red    { color: var(--red); }
-.kpi-value--yellow { color: var(--yellow); }
-.kpi-sub { font-family: var(--mono); font-size: 10px; color: var(--text3); }
+/* Valor cheio, com centavos. `tnum` porque a Space Grotesk e proporcional: sem
+   isso os digitos mudam de largura e as quatro colunas deixam de alinhar.
+   O clamp encolhe a fonte quando o numero e longo demais para a largura do card,
+   em vez de deixar o texto vazar ou quebrar em duas linhas. */
+.kpi-value {
+  font-family: var(--font-display);
+  font-feature-settings: "tnum" 1;
+  font-size: clamp(1.05rem, 1.9vw, var(--fs-lg));
+  font-weight: 800; line-height: 1.1; margin-bottom: 6px; letter-spacing: -0.5px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.kpi-value--green  { color: var(--success); }
+.kpi-value--red    { color: var(--danger); }
+.kpi-value--yellow { color: var(--warning); }
+.kpi-sub { font-family: var(--font-display); font-size: var(--fs-xs); color: var(--text-dim); margin-top: auto; }
 
 /* ── Gráficos ──────────────────────────────────────────────────────────── */
 .charts-row {
@@ -1044,19 +1103,19 @@ onBeforeUnmount(() => {
 @media (max-width: 1100px) { .charts-row { grid-template-columns: 1fr; } }
 
 .chart-card {
-  background: var(--card); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 20px 22px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 20px 22px;
 }
 .chart-header {
   display: flex; align-items: flex-start; justify-content: space-between;
   margin-bottom: 16px; flex-wrap: wrap; gap: 8px;
 }
-.chart-title { font-size: 14px; font-weight: 700; }
-.chart-sub   { font-family: var(--mono); font-size: 10px; color: var(--text3); margin-top: 2px; }
+.chart-title { font-size: var(--fs-base); font-weight: 700; }
+.chart-sub   { font-family: var(--font-display); font-size: var(--fs-xs); color: var(--text-dim); margin-top: 2px; }
 
 .chart-legend {
   display: flex; align-items: center; gap: 10px;
-  font-family: var(--mono); font-size: 10px; color: var(--text2); flex-wrap: wrap;
+  font-family: var(--font-display); font-size: var(--fs-xs); color: var(--text-muted); flex-wrap: wrap;
 }
 .leg-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 3px; }
 

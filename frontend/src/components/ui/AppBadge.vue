@@ -12,8 +12,8 @@ withDefaults(defineProps<{
 
 <style scoped>
 .badge {
-  font-family: var(--mono);
-  font-size: 10px;
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
   padding: 3px 9px;
   border-radius: 20px;
   font-weight: 500;
@@ -22,11 +22,13 @@ withDefaults(defineProps<{
   gap: 4px;
   white-space: nowrap;
 }
-.badge-green  { background: rgba(34,197,94,0.12);  color: #22c55e; border: 1px solid rgba(34,197,94,0.22); }
-.badge-red    { background: rgba(239,68,68,0.12);  color: #ef4444; border: 1px solid rgba(239,68,68,0.22); }
-.badge-blue   { background: rgba(0,229,255,0.10);  color: #00e5ff; border: 1px solid rgba(0,229,255,0.20); }
-.badge-orange { background: rgba(255,107,53,0.12); color: #ff6b35; border: 1px solid rgba(255,107,53,0.20); }
-.badge-gray   { background: rgba(255,255,255,0.06);color: var(--text3); border: 1px solid var(--border); }
-.badge-purple { background: rgba(124,58,237,0.12); color: #7c3aed; border: 1px solid rgba(124,58,237,0.22); }
-.badge-yellow { background: rgba(245,158,11,0.12); color: #f59e0b; border: 1px solid rgba(245,158,11,0.22); }
+.badge-green  { background: var(--success-weak); color: var(--success); border: 1px solid var(--success-weak); }
+.badge-red    { background: var(--danger-weak);  color: var(--danger);  border: 1px solid var(--danger-weak); }
+.badge-blue   { background: var(--info-weak);    color: var(--info);    border: 1px solid var(--info-weak); }
+/* Sem token proprio para laranja: warning cobre o mesmo papel semantico e ja
+   tem par claro/escuro, ao contrario do var(--warning) que estava fixo aqui. */
+.badge-orange { background: var(--warning-weak); color: var(--warning); border: 1px solid var(--warning-weak); }
+.badge-gray   { background: var(--surface-2);    color: var(--text-dim);   border: 1px solid var(--border); }
+.badge-purple { background: var(--primary-weak); color: var(--primary); border: 1px solid var(--primary-weak); }
+.badge-yellow { background: var(--warning-weak); color: var(--warning); border: 1px solid var(--warning-weak); }
 </style>

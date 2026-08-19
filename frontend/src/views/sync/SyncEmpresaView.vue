@@ -412,18 +412,18 @@ onUnmounted(() => {
 }
 
 .btn-back {
-  background: var(--bg3);
-  border: 1px solid var(--border2);
-  color: var(--text2);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  color: var(--text-muted);
   border-radius: 6px;
   padding: 6px 14px;
-  font-family: var(--mono);
-  font-size: 11px;
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
   cursor: pointer;
-  transition: var(--trans);
+  transition: var(--transition);
   white-space: nowrap;
 }
-.btn-back:hover { border-color: var(--accent); color: var(--accent); }
+.btn-back:hover { border-color: var(--primary); color: var(--primary); }
 
 .breadcrumb {
   display: flex;
@@ -432,29 +432,29 @@ onUnmounted(() => {
   flex: 1;
   min-width: 0;
 }
-.bc-root { font-family: var(--mono); font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 1px; }
-.bc-sep { color: var(--border2); }
-.bc-current { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bc-root { font-family: var(--font-display); font-size: var(--fs-xs); color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; }
+.bc-sep { color: var(--border-strong); }
+.bc-current { font-family: var(--font-display); font-size: var(--fs-sm); font-weight: 700; color: var(--primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .header-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 
 .btn-action {
-  background: var(--bg3);
-  border: 1px solid var(--border2);
-  color: var(--text2);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  color: var(--text-muted);
   border-radius: 6px;
   padding: 6px 16px;
-  font-family: var(--mono);
-  font-size: 10px;
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
   font-weight: 700;
   cursor: pointer;
-  transition: var(--trans);
+  transition: var(--transition);
   display: flex;
   align-items: center;
   gap: 6px;
 }
-.btn-action:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); background: rgba(0,229,255,0.05); }
-.btn-action-warn:hover:not(:disabled) { border-color: #f59e0b; color: #f59e0b; background: rgba(245,158,11,0.05); }
+.btn-action:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); background: var(--primary-weak); }
+.btn-action-warn:hover:not(:disabled) { border-color: var(--warning); color: var(--warning); background: var(--warning-weak); }
 .btn-action:disabled { opacity: 0.3; cursor: not-allowed; }
 
 /* Tabs */
@@ -469,21 +469,21 @@ onUnmounted(() => {
   border: none;
   border-bottom: 2px solid transparent;
   padding: 10px 20px;
-  font-family: var(--mono);
-  font-size: 10px;
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
   font-weight: 700;
-  color: var(--text3);
+  color: var(--text-dim);
   cursor: pointer;
-  transition: var(--trans);
+  transition: var(--transition);
   letter-spacing: 0.5px;
   margin-bottom: -1px;
 }
 .tab:hover { color: var(--text); }
-.tab--active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab--active { color: var(--primary); border-bottom-color: var(--primary); }
 
 /* Corpo */
 .tab-body {
-  background: var(--card);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-top: none;
   border-radius: 0 0 12px 12px;
@@ -492,10 +492,10 @@ onUnmounted(() => {
 
 /* Badges */
 .badge-running {
-  font-family: var(--mono);
-  font-size: 9px;
-  color: var(--accent);
-  background: rgba(0, 229, 255, 0.1);
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  color: var(--primary);
+  background: var(--primary-weak);
   padding: 4px 12px;
   border-radius: 20px;
   text-transform: uppercase;
@@ -510,7 +510,7 @@ onUnmounted(() => {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background-color: var(--accent);
+  background-color: var(--primary);
   display: inline-block;
   flex-shrink: 0;
 }
@@ -521,7 +521,7 @@ onUnmounted(() => {
   transform: translate(-50%, -50%);
   width: 6px; height: 6px;
   border-radius: 50%;
-  border: 1px solid var(--accent);
+  border: 1px solid var(--primary);
   animation: pulse-ring 1.5s cubic-bezier(0.455, 0.03, 0.515, 0.955) infinite;
 }
 @keyframes pulse-ring {
@@ -531,8 +531,8 @@ onUnmounted(() => {
 
 .spinner-small {
   width: 12px; height: 12px;
-  border: 1.5px solid var(--border2);
-  border-top-color: var(--accent);
+  border: 1.5px solid var(--border-strong);
+  border-top-color: var(--primary);
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
   display: inline-block;

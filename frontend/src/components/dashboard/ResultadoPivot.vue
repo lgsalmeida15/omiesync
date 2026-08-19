@@ -196,33 +196,33 @@ watch(() => [props.grupoId, props.filtros], carregar, { deep: true, immediate: t
 
 .pv-state {
   padding: 48px; text-align: center;
-  font-family: var(--mono); font-size: 12px; color: var(--text3);
+  font-family: var(--font-display); font-size: var(--fs-xs); color: var(--text-dim);
   display: flex; align-items: center; justify-content: center; gap: 10px;
 }
-.pv-state--erro { color: var(--red); }
+.pv-state--erro { color: var(--danger); }
 
 .pv-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .pv-btn {
-  background: var(--bg3); color: var(--text2);
-  border: 1px solid var(--border2); border-radius: 7px;
-  padding: 5px 11px; font-family: var(--mono); font-size: 10px;
-  letter-spacing: 0.5px; cursor: pointer; transition: var(--trans);
+  background: var(--surface-2); color: var(--text-muted);
+  border: 1px solid var(--border-strong); border-radius: 7px;
+  padding: 5px 11px; font-family: var(--font-display); font-size: var(--fs-xs);
+  letter-spacing: 0.5px; cursor: pointer; transition: var(--transition);
 }
-.pv-btn:hover { border-color: var(--accent); color: var(--accent); }
+.pv-btn:hover { border-color: var(--primary); color: var(--primary); }
 
 .pv-legenda {
   margin-left: auto; display: flex; align-items: center; gap: 6px;
-  font-family: var(--mono); font-size: 10px; color: var(--text3);
+  font-family: var(--font-display); font-size: var(--fs-xs); color: var(--text-dim);
 }
 .pv-chip-prev {
   width: 10px; height: 10px; border-radius: 3px;
-  background: rgba(245,158,11,0.16); border: 1px solid rgba(245,158,11,0.35);
+  background: var(--warning-weak); border: 1px solid var(--warning);
 }
 
 /* A tabela rola dentro do próprio container — a página nunca rola na horizontal. */
 .pv-scroll {
   overflow-x: auto;
-  background: var(--card);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 12px;
 }
@@ -230,62 +230,62 @@ watch(() => [props.grupoId, props.filtros], carregar, { deep: true, immediate: t
 
 .pv-table th {
   position: sticky; top: 0; z-index: 2;
-  background: var(--card);
-  font-family: var(--mono); font-size: 9px; letter-spacing: 1px;
-  color: var(--text3); font-weight: 600;
-  padding: 10px 12px; border-bottom: 1px solid var(--border2);
+  background: var(--surface);
+  font-family: var(--font-display); font-size: var(--fs-xs); letter-spacing: 1px;
+  color: var(--text-dim); font-weight: 600;
+  padding: 10px 12px; border-bottom: 1px solid var(--border-strong);
   white-space: nowrap;
 }
 .pv-th-dim   { text-align: left; min-width: 280px; }
 .pv-th-mes   { text-align: right; }
-.pv-th-total { text-align: right; border-left: 1px solid var(--border2); }
+.pv-th-total { text-align: right; border-left: 1px solid var(--border-strong); }
 
 .pv-td-dim {
-  padding: 7px 12px; font-size: 12px; color: var(--text);
+  padding: 7px 12px; font-size: var(--fs-xs); color: var(--text);
   white-space: nowrap; display: flex; align-items: center; gap: 6px;
 }
 .pv-td-num, .pv-td-total {
   padding: 7px 12px; text-align: right;
-  font-family: var(--mono); font-size: 11px; color: var(--text2);
+  font-family: var(--font-display); font-size: var(--fs-xs); color: var(--text-muted);
   white-space: nowrap;
 }
 .pv-td-total { border-left: 1px solid var(--border); font-weight: 600; color: var(--text); }
-.pv-zero { color: var(--text3); opacity: 0.45; }
+.pv-zero { color: var(--text-dim); opacity: 0.45; }
 /* Negativo em vermelho, somado aos parênteses da notação contábil. !important
    porque .pv-td-total define cor própria e a especificidade empata. */
-.pv-neg { color: var(--red) !important; }
-.pv-previsto { background: rgba(245,158,11,0.055); }
+.pv-neg { color: var(--danger) !important; }
+.pv-previsto { background: var(--warning-weak); }
 
 .pv-tr { border-bottom: 1px solid var(--border); }
-.pv-tr:hover td { background: rgba(255,255,255,0.025); }
+.pv-tr:hover td { background: var(--surface-2); }
 .pv-nivel-1 .pv-td-dim { font-weight: 700; letter-spacing: 0.5px; }
-.pv-nivel-1 td { background: rgba(255,255,255,0.03); }
+.pv-nivel-1 td { background: var(--surface-2); }
 .pv-nivel-2 .pv-td-dim { font-weight: 600; }
-.pv-tr-folha .pv-td-dim { color: var(--text2); }
+.pv-tr-folha .pv-td-dim { color: var(--text-muted); }
 
 .pv-toggle {
   width: 16px; height: 16px; flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;
-  background: var(--bg3); border: 1px solid var(--border2); border-radius: 4px;
-  color: var(--text2); font-family: var(--mono); font-size: 11px; line-height: 1;
-  cursor: pointer; transition: var(--trans); padding: 0;
+  background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 4px;
+  color: var(--text-muted); font-family: var(--font-display); font-size: var(--fs-xs); line-height: 1;
+  cursor: pointer; transition: var(--transition); padding: 0;
 }
-.pv-toggle:hover { border-color: var(--accent); color: var(--accent); }
+.pv-toggle:hover { border-color: var(--primary); color: var(--primary); }
 .pv-toggle--vazio { background: none; border: none; cursor: default; }
 
 .pv-rotulo { overflow: hidden; text-overflow: ellipsis; }
 
 .pv-tfoot td {
   position: sticky; bottom: 0;
-  background: var(--card); border-top: 1px solid var(--border2);
+  background: var(--surface); border-top: 1px solid var(--border-strong);
   font-weight: 700; color: var(--text);
-  font-family: var(--mono); font-size: 11px; padding: 10px 12px;
+  font-family: var(--font-display); font-size: var(--fs-xs); padding: 10px 12px;
 }
-.pv-tfoot .pv-td-dim { font-size: 10px; letter-spacing: 1px; }
+.pv-tfoot .pv-td-dim { font-size: var(--fs-xs); letter-spacing: 1px; }
 .pv-nota {
   display: inline-flex; align-items: center; justify-content: center;
   width: 13px; height: 13px; margin-left: 6px;
-  border: 1px solid var(--border2); border-radius: 50%;
-  font-size: 9px; color: var(--text3); cursor: help; font-weight: 400;
+  border: 1px solid var(--border-strong); border-radius: 50%;
+  font-size: var(--fs-xs); color: var(--text-dim); cursor: help; font-weight: 400;
 }
 </style>

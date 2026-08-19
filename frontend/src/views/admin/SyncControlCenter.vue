@@ -219,19 +219,19 @@ onUnmounted(() => {
 <template>
   <div class="p-6">
     <div class="flex justify-between items-center mb-6">
-      <h1 class="text-2xl font-bold text-gray-800">Sync Control Center</h1>
+      <h1 class="text-2xl font-bold text-text-main">Sync Control Center</h1>
       <div class="flex gap-2">
         <button 
           @click="runRecovery" 
           :disabled="recoveryLoading"
-          class="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 disabled:opacity-50 flex items-center gap-2"
+          class="px-4 py-2 bg-warning text-oncolor rounded hover:bg-warning-fill disabled:opacity-50 flex items-center gap-2"
         >
           <span v-if="recoveryLoading" class="animate-spin">↻</span>
           Recovery Manual
         </button>
         <button 
           @click="() => { fetchOverview(); fetchJobsAtivos(); fetchDLQ(); }" 
-          class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          class="px-4 py-2 bg-primary text-oncolor rounded hover:bg-primary-hover"
         >
           Atualizar
         </button>
@@ -240,32 +240,32 @@ onUnmounted(() => {
 
     <!-- Cards de Resumo -->
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-      <div class="bg-white p-4 rounded-lg shadow border-l-4 border-blue-500">
-        <div class="text-sm text-gray-500 font-medium uppercase">Rodando</div>
-        <div class="text-2xl font-bold text-gray-800">{{ overview.rodando || 0 }}</div>
+      <div class="bg-surface p-4 rounded-lg shadow border-l-4 border-primary">
+        <div class="text-sm text-text-dim font-medium uppercase">Rodando</div>
+        <div class="text-2xl font-bold text-text-main">{{ overview.rodando || 0 }}</div>
       </div>
-      <div class="bg-white p-4 rounded-lg shadow border-l-4 border-yellow-500">
-        <div class="text-sm text-gray-500 font-medium uppercase">Pendente</div>
-        <div class="text-2xl font-bold text-gray-800">{{ overview.pendente || 0 }}</div>
+      <div class="bg-surface p-4 rounded-lg shadow border-l-4 border-warning">
+        <div class="text-sm text-text-dim font-medium uppercase">Pendente</div>
+        <div class="text-2xl font-bold text-text-main">{{ overview.pendente || 0 }}</div>
       </div>
-      <div class="bg-white p-4 rounded-lg shadow border-l-4 border-red-500">
-        <div class="text-sm text-gray-500 font-medium uppercase">Erros Ativos</div>
-        <div class="text-2xl font-bold text-gray-800">{{ overview.erro || 0 }}</div>
+      <div class="bg-surface p-4 rounded-lg shadow border-l-4 border-danger">
+        <div class="text-sm text-text-dim font-medium uppercase">Erros Ativos</div>
+        <div class="text-2xl font-bold text-text-main">{{ overview.erro || 0 }}</div>
       </div>
-      <div class="bg-white p-4 rounded-lg shadow border-l-4 border-orange-500">
-        <div class="text-sm text-gray-500 font-medium uppercase">Zumbis</div>
-        <div class="text-2xl font-bold text-gray-800">{{ zumbiCount }}</div>
+      <div class="bg-surface p-4 rounded-lg shadow border-l-4 border-warning">
+        <div class="text-sm text-text-dim font-medium uppercase">Zumbis</div>
+        <div class="text-2xl font-bold text-text-main">{{ zumbiCount }}</div>
       </div>
     </div>
 
     <!-- Jobs Ativos -->
-    <div class="bg-white rounded-lg shadow mb-8">
+    <div class="bg-surface rounded-lg shadow mb-8">
       <div class="p-4 border-b">
-        <h2 class="text-lg font-semibold text-gray-700">Jobs Ativos</h2>
+        <h2 class="text-lg font-semibold text-text-main">Jobs Ativos</h2>
       </div>
       <div class="overflow-x-auto">
         <table class="w-full text-left">
-          <thead class="bg-gray-50 text-gray-600 text-sm uppercase font-medium">
+          <thead class="bg-surface-2 text-text-muted text-sm uppercase font-medium">
             <tr>
               <th class="px-6 py-3">Empresa / Grupo</th>
               <th class="px-6 py-3">Tipo</th>
@@ -275,42 +275,42 @@ onUnmounted(() => {
               <th class="px-6 py-3 text-right">Ação</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-gray-100 text-sm">
+          <tbody class="divide-y divide-border-token text-sm">
             <tr v-if="jobsAtivos.length === 0">
-              <td colspan="6" class="px-6 py-8 text-center text-gray-500">Nenhum job ativo no momento</td>
+              <td colspan="6" class="px-6 py-8 text-center text-text-dim">Nenhum job ativo no momento</td>
             </tr>
-            <tr v-for="job in jobsAtivos" :key="job.id" class="hover:bg-gray-50">
+            <tr v-for="job in jobsAtivos" :key="job.id" class="hover:bg-surface-2">
               <td class="px-6 py-4">
-                <div class="font-medium text-gray-800">{{ job.empresa_nome }}</div>
-                <div class="text-xs text-gray-500">{{ job.grupo_nome }}</div>
+                <div class="font-medium text-text-main">{{ job.empresa_nome }}</div>
+                <div class="text-xs text-text-dim">{{ job.grupo_nome }}</div>
               </td>
               <td class="px-6 py-4">
-                <span class="px-2 py-1 bg-gray-100 rounded text-xs text-gray-600 font-medium uppercase">
+                <span class="px-2 py-1 bg-surface-2 rounded text-xs text-text-muted font-medium uppercase">
                   {{ job.tipo }}
                 </span>
               </td>
-              <td class="px-6 py-4 text-gray-600">
+              <td class="px-6 py-4 text-text-muted">
                 {{ formatDateTime(job.iniciado_at) }}
               </td>
               <td class="px-6 py-4">
-                <span :class="job.is_zumbi ? 'text-red-600 font-bold' : 'text-gray-600'">
+                <span :class="job.is_zumbi ? 'text-danger font-bold' : 'text-text-muted'">
                   {{ formatHeartbeat(job.ultimo_heartbeat_at) }}
                 </span>
               </td>
               <td class="px-6 py-4">
                 <div class="flex items-center gap-2">
-                  <span v-if="job.is_zumbi" class="px-2 py-0.5 bg-red-100 text-red-700 text-[10px] font-bold rounded uppercase">
+                  <span v-if="job.is_zumbi" class="px-2 py-0.5 bg-danger-weak text-danger text-xs font-bold rounded uppercase">
                     ZUMBI
                   </span>
-                  <span v-else class="flex h-2 w-2 rounded-full bg-blue-500 animate-pulse"></span>
-                  <span class="capitalize text-gray-700">{{ job.status }}</span>
+                  <span v-else class="flex h-2 w-2 rounded-full bg-primary animate-pulse"></span>
+                  <span class="capitalize text-text-main">{{ job.status }}</span>
                 </div>
               </td>
               <td class="px-6 py-4 text-right">
                 <button 
                   @click="cancelarJob(job)"
                   :disabled="cancelingJobId === job.id"
-                  class="text-red-600 hover:text-red-800 font-medium disabled:opacity-50"
+                  class="text-danger hover:text-danger-fill font-medium disabled:opacity-50"
                 >
                   {{ cancelingJobId === job.id ? 'Cancelando...' : 'Cancelar' }}
                 </button>
@@ -322,16 +322,16 @@ onUnmounted(() => {
     </div>
 
     <!-- Dead Letter Queue -->
-    <div class="bg-white rounded-lg shadow">
+    <div class="bg-surface rounded-lg shadow">
       <div class="p-4 border-b">
-        <h2 class="text-lg font-semibold text-gray-700">Dead Letter Queue</h2>
+        <h2 class="text-lg font-semibold text-text-main">Dead Letter Queue</h2>
       </div>
-      <div v-if="dlqPages.length === 0" class="p-8 text-center text-gray-500">
+      <div v-if="dlqPages.length === 0" class="p-8 text-center text-text-dim">
         Nenhum item na DLQ
       </div>
       <div v-else class="overflow-x-auto">
         <table class="w-full text-left">
-          <thead class="bg-gray-50 text-gray-600 text-sm uppercase font-medium">
+          <thead class="bg-surface-2 text-text-muted text-sm uppercase font-medium">
             <tr>
               <th class="px-6 py-3">Empresa / Grupo</th>
               <th class="px-6 py-3">Módulo</th>
@@ -341,25 +341,25 @@ onUnmounted(() => {
               <th class="px-6 py-3 text-right">Ação</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-gray-100 text-sm">
-            <tr v-for="page in dlqPages" :key="page.id" class="hover:bg-gray-50">
+          <tbody class="divide-y divide-border-token text-sm">
+            <tr v-for="page in dlqPages" :key="page.id" class="hover:bg-surface-2">
               <td class="px-6 py-4">
-                <div class="font-medium text-gray-800">{{ page.empresa_nome }}</div>
-                <div class="text-xs text-gray-500">{{ page.grupo_nome }}</div>
+                <div class="font-medium text-text-main">{{ page.empresa_nome }}</div>
+                <div class="text-xs text-text-dim">{{ page.grupo_nome }}</div>
               </td>
               <td class="px-6 py-4">
-                <span class="px-2 py-1 bg-gray-100 rounded text-xs text-gray-600 font-medium uppercase">
+                <span class="px-2 py-1 bg-surface-2 rounded text-xs text-text-muted font-medium uppercase">
                   {{ page.modulo }}
                 </span>
               </td>
-              <td class="px-6 py-4 text-gray-600">
+              <td class="px-6 py-4 text-text-muted">
                 Pg {{ page.pagina }} / {{ page.total_paginas }}
               </td>
-              <td class="px-6 py-4 text-gray-600">
+              <td class="px-6 py-4 text-text-muted">
                 {{ page.tentativas }} / {{ page.max_tentativas }}
               </td>
               <td class="px-6 py-4">
-                <div class="text-red-600 max-w-xs truncate" :title="page.erro || ''">
+                <div class="text-danger max-w-xs truncate" :title="page.erro || ''">
                   {{ formatErro(page.erro) || 'Erro desconhecido' }}
                 </div>
               </td>
@@ -367,7 +367,7 @@ onUnmounted(() => {
                 <button 
                   @click="retryPage(page)"
                   :disabled="retryingPageId === page.id"
-                  class="text-blue-600 hover:text-blue-800 font-medium disabled:opacity-50"
+                  class="text-primary hover:text-primary-hover font-medium disabled:opacity-50"
                 >
                   {{ retryingPageId === page.id ? 'Agendando...' : 'Retry' }}
                 </button>
@@ -379,7 +379,7 @@ onUnmounted(() => {
     </div>
 
     <!-- Manutenção operacional de banco -->
-    <div class="bg-white rounded-lg shadow mt-6">
+    <div class="bg-surface rounded-lg shadow mt-6">
       <div class="px-6 py-4 border-b flex items-center justify-between flex-wrap gap-3">
         <h2 class="text-lg font-semibold">Manutenção de banco</h2>
         <div class="flex items-center gap-2">
@@ -389,23 +389,23 @@ onUnmounted(() => {
           <button
             @click="refreshViews"
             :disabled="refreshLoading || !grupoRefresh"
-            class="bg-blue-600 text-white px-3 py-1.5 rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+            class="bg-primary text-oncolor px-3 py-1.5 rounded text-sm font-medium hover:bg-primary-hover disabled:opacity-50"
           >
             {{ refreshLoading ? 'Atualizando...' : 'Atualizar views gerenciais' }}
           </button>
         </div>
       </div>
 
-      <div v-if="refreshResultado" class="px-6 py-3 border-b bg-gray-50 text-sm space-y-1">
+      <div v-if="refreshResultado" class="px-6 py-3 border-b bg-surface-2 text-sm space-y-1">
         <div v-for="r in refreshResultado" :key="r.view" class="flex items-center gap-2">
           <span class="font-mono text-xs">{{ r.view }}</span>
-          <span v-if="r.erro" class="text-red-600">falhou: {{ r.erro }}</span>
+          <span v-if="r.erro" class="text-danger">falhou: {{ r.erro }}</span>
           <template v-else>
-            <span class="text-gray-600">{{ fmtDuracao(r.duracao_seg) }}</span>
-            <span v-if="r.concorrente" class="text-green-700 text-xs">
+            <span class="text-text-muted">{{ fmtDuracao(r.duracao_seg) }}</span>
+            <span v-if="r.concorrente" class="text-success text-xs">
               concorrente — dashboard permaneceu disponível
             </span>
-            <span v-else class="text-amber-700 text-xs">
+            <span v-else class="text-warning text-xs">
               bloqueante — a view ainda não estava populada
             </span>
           </template>
@@ -414,21 +414,21 @@ onUnmounted(() => {
 
       <div class="px-6 py-4">
         <div class="flex items-center justify-between mb-3">
-          <h3 class="text-sm font-semibold text-gray-700">
+          <h3 class="text-sm font-semibold text-text-main">
             Consultas em execução há mais de 5s
           </h3>
           <button @click="fetchConsultas" :disabled="consultasLoading"
-                  class="text-sm text-blue-600 hover:text-blue-800 disabled:opacity-50">
+                  class="text-sm text-primary hover:text-primary-hover disabled:opacity-50">
             {{ consultasLoading ? 'Carregando...' : 'Atualizar lista' }}
           </button>
         </div>
 
-        <p v-if="!consultas.length" class="text-sm text-gray-500">
+        <p v-if="!consultas.length" class="text-sm text-text-dim">
           Nenhuma consulta longa em andamento.
         </p>
 
         <table v-else class="w-full text-sm">
-          <thead class="bg-gray-50 text-xs uppercase text-gray-500">
+          <thead class="bg-surface-2 text-xs uppercase text-text-dim">
             <tr>
               <th class="px-3 py-2 text-left">PID</th>
               <th class="px-3 py-2 text-left">Duração</th>
@@ -440,18 +440,18 @@ onUnmounted(() => {
           <tbody class="divide-y">
             <tr v-for="c in consultas" :key="c.pid">
               <td class="px-3 py-2 font-mono text-xs">{{ c.pid }}</td>
-              <td class="px-3 py-2" :class="c.duracao_seg > 60 ? 'text-red-600 font-medium' : ''">
+              <td class="px-3 py-2" :class="c.duracao_seg > 60 ? 'text-danger font-medium' : ''">
                 {{ fmtDuracao(c.duracao_seg) }}
               </td>
               <td class="px-3 py-2 text-xs">
                 {{ c.esperando_por ? `esperando: ${c.esperando_por}` : c.estado }}
               </td>
-              <td class="px-3 py-2 font-mono text-xs text-gray-600 truncate max-w-md" :title="c.query">
+              <td class="px-3 py-2 font-mono text-xs text-text-muted truncate max-w-md" :title="c.query">
                 {{ c.query }}
               </td>
               <td class="px-3 py-2 text-right">
                 <button @click="cancelarConsulta(c)" :disabled="cancelandoPid === c.pid"
-                        class="text-red-600 hover:text-red-800 font-medium disabled:opacity-50">
+                        class="text-danger hover:text-danger-fill font-medium disabled:opacity-50">
                   {{ cancelandoPid === c.pid ? 'Cancelando...' : 'Cancelar' }}
                 </button>
               </td>

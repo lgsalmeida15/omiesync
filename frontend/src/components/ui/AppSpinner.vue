@@ -23,14 +23,14 @@ const sizeStyle = computed(() => ({ width: sizes[props.size], height: sizes[prop
 <style scoped>
 .spinner-overlay {
   position: fixed; inset: 0; z-index: 9999;
-  background: rgba(8,12,18,0.7);
+  background: var(--overlay);
   display: flex; align-items: center; justify-content: center;
   backdrop-filter: blur(4px);
 }
 
 .spinner-ring {
-  border: 2px solid var(--border2);
-  border-top-color: var(--accent);
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--primary);
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
   flex-shrink: 0;

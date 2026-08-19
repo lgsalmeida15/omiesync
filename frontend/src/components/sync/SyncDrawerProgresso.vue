@@ -64,7 +64,7 @@
           <!-- Fila de Páginas (Sub-jobs) -->
           <div v-if="expandedExecutor === p.executor" class="page-queue-wrap">
             <div v-if="loadingPages" class="p-4 text-center"><div class="spinner-small"></div></div>
-            <div v-else-if="pages.length === 0" class="p-4 text-center text-gray-500 text-xs">Nenhuma página encontrada.</div>
+            <div v-else-if="pages.length === 0" class="p-4 text-center text-text-dim text-xs">Nenhuma página encontrada.</div>
             <table v-else class="page-table">
               <thead>
                 <tr>
@@ -214,11 +214,11 @@ const statusCls = computed(() => {
 
 function moduleStatusCls(s: string) {
   switch (s) {
-    case 'concluido': return 'text-green'
-    case 'erro': return 'text-red'
-    case 'rodando': return 'text-blue'
-    case 'pulado': return 'text-gray'
-    default: return 'text-gray'
+    case 'concluido': return 'st-ok'
+    case 'erro': return 'st-erro'
+    case 'rodando': return 'st-ativo'
+    case 'pulado': return 'st-neutro'
+    default: return 'st-neutro'
   }
 }
 
@@ -230,78 +230,81 @@ function formatErro(erro: string | null | undefined): string {
 
 <style scoped>
 .drawer-tab-content { padding: 24px; }
-.empty-state { padding: 48px 24px; text-align: center; color: var(--text3); font-size: 12px; }
+.empty-state { padding: 48px 24px; text-align: center; color: var(--text-dim); font-size: var(--fs-xs); }
 
 .job-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
 .job-info { display: flex; flex-direction: column; gap: 4px; }
-.job-title { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--text); }
-.job-id { font-size: 10px; color: var(--text3); }
+.job-title { font-family: var(--font-display); font-size: var(--fs-sm); font-weight: 700; color: var(--text); }
+.job-id { font-size: var(--fs-xs); color: var(--text-dim); }
 .job-status { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
-.job-time { font-size: 11px; color: var(--text2); }
+.job-time { font-size: var(--fs-xs); color: var(--text-muted); }
 
-.error-banner { background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); border-radius: 8px; padding: 12px 16px; margin-bottom: 24px; }
-.error-title { font-family: var(--mono); font-size: 9px; font-weight: 700; color: var(--red); margin-bottom: 4px; }
-.error-msg { font-size: 12px; color: var(--text); line-height: 1.4; }
+.error-banner { background: var(--danger-weak); border: 1px solid var(--danger-weak); border-radius: 8px; padding: 12px 16px; margin-bottom: 24px; }
+.error-title { font-family: var(--font-display); font-size: var(--fs-xs); font-weight: 700; color: var(--danger); margin-bottom: 4px; }
+.error-msg { font-size: var(--fs-xs); color: var(--text); line-height: 1.4; }
 
 .progress-list { display: flex; flex-direction: column; gap: 16px; }
-.progress-item { background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: var(--space-md); margin-bottom: var(--space-sm); }
+.progress-item { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-sm); padding: var(--sp-4); margin-bottom: var(--sp-2); }
 
 .progress-main { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-.executor-name { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--accent); }
+.executor-name { font-family: var(--font-display); font-size: var(--fs-xs); font-weight: 600; color: var(--primary); }
 
 .progress-details { display: flex; align-items: center; gap: 16px; }
 .progress-bar-wrap { flex: 1; display: flex; flex-direction: column; gap: 6px; }
 
-.progress-container { width: 100%; height: 6px; background: var(--surface-tertiary); border-radius: 999px; overflow: hidden; }
-.progress-bar { height: 100%; background: var(--brand-primary); border-radius: 999px; transition: width 0.3s ease; }
-.progress-stats { display: flex; justify-content: space-between; font-size: 10px; color: var(--text3); }
+.progress-container { width: 100%; height: 6px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+.progress-bar { height: 100%; background: var(--primary); border-radius: 999px; transition: width 0.3s ease; }
+.progress-stats { display: flex; justify-content: space-between; font-size: var(--fs-xs); color: var(--text-dim); }
 
-.btn-inspect { background: var(--bg3); border: 1px solid var(--border2); color: var(--text2); border-radius: 4px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: var(--trans); font-size: 10px; }
-.btn-inspect:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.btn-inspect { background: var(--surface-2); border: 1px solid var(--border-strong); color: var(--text-muted); border-radius: 4px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: var(--transition); font-size: var(--fs-xs); }
+.btn-inspect:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
 .btn-inspect:disabled { opacity: 0.3; cursor: not-allowed; }
 
-.executor-error { margin-top: 12px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.05); font-size: 10px; color: var(--red); }
+.executor-error { margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--surface-2); font-size: var(--fs-xs); color: var(--danger); }
 
-.td-mono { font-family: var(--mono); }
-.pill { display: inline-flex; padding: 2px 9px; border-radius: 20px; font-family: var(--mono); font-size: 10px; font-weight: 600; }
-.pill-green { background: rgba(34,197,94,0.12); color: #22c55e; }
-.pill-red { background: rgba(239,68,68,0.12); color: #ef4444; }
-.pill-blue { background: rgba(0,229,255,0.1); color: #00e5ff; }
-.pill-gray { background: rgba(255,255,255,0.06); color: var(--text3); }
+.td-mono { font-family: var(--font-display); }
+.pill { display: inline-flex; padding: 2px 9px; border-radius: 20px; font-family: var(--font-display); font-size: var(--fs-xs); font-weight: 600; }
+.pill-green { background: var(--success-weak); color: var(--success); }
+.pill-red { background: var(--danger-weak); color: var(--danger); }
+.pill-blue { background: var(--primary-weak); color: var(--info); }
+.pill-gray { background: var(--surface-2); color: var(--text-dim); }
 
-.pill-small { font-family: var(--mono); font-size: 9px; text-transform: uppercase; font-weight: 700; }
-.text-green { color: #22c55e; }
-.text-red { color: #ef4444; }
-.text-blue { color: #00e5ff; }
-.text-gray { color: var(--text3); }
+.pill-small { font-family: var(--font-display); font-size: var(--fs-xs); text-transform: uppercase; font-weight: 700; }
+/* Classes locais, nao utilitarias do Tailwind: os nomes coincidem, mas quem as
+   aplica e o switch de status logo acima. O azul usava o ciano da identidade
+   anterior; agora acompanha a primaria. */
+.st-ok { color: var(--success); }
+.st-erro { color: var(--danger); }
+.st-ativo { color: var(--info); }
+.st-neutro { color: var(--text-dim); }
 
 /* Fila de Páginas */
 .page-queue-wrap {
   margin-top: 12px;
   padding: 12px;
-  background: rgba(0,0,0,0.2);
+  background: var(--surface-2);
   border-radius: 6px;
-  border: 1px solid rgba(255,255,255,0.05);
+  border: 1px solid var(--surface-2);
 }
 
 .page-table {
   width: 100%;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   border-collapse: collapse;
 }
 
 .page-table th {
   text-align: left;
-  color: var(--text3);
-  font-family: var(--mono);
+  color: var(--text-dim);
+  font-family: var(--font-display);
   padding: 4px 8px;
-  border-bottom: 1px solid rgba(255,255,255,0.1);
+  border-bottom: 1px solid var(--surface-2);
 }
 
 .page-table td {
   padding: 6px 8px;
-  color: var(--text2);
-  border-bottom: 1px solid rgba(255,255,255,0.03);
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--surface-2);
 }
 
 .status-dot {
@@ -312,11 +315,11 @@ function formatErro(erro: string | null | undefined): string {
   margin-right: 4px;
 }
 
-.status-dot.pendente { background: #94a3b8; }
-.status-dot.rodando { background: #00e5ff; animation: pulse 1.5s infinite; }
-.status-dot.concluido { background: #22c55e; }
-.status-dot.erro { background: #ef4444; }
-.status-dot.cancelado { background: #64748b; }
+.status-dot.pendente { background: var(--text-dim); }
+.status-dot.rodando { background: var(--info); animation: pulse 1.5s infinite; }
+.status-dot.concluido { background: var(--success); }
+.status-dot.erro { background: var(--danger); }
+.status-dot.cancelado { background: var(--text-muted); }
 
 @keyframes pulse {
   0% { opacity: 1; }
@@ -327,8 +330,8 @@ function formatErro(erro: string | null | undefined): string {
 .spinner-small {
   width: 12px;
   height: 12px;
-  border: 2px solid rgba(255,255,255,0.1);
-  border-top-color: var(--accent);
+  border: 2px solid var(--surface-2);
+  border-top-color: var(--primary);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
   margin: 0 auto;

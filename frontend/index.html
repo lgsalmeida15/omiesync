@@ -4,9 +4,30 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Omie Sync</title>
+
+  <!--
+    Anti-FOUC. Aplica o tema salvo ANTES da primeira pintura.
+    Sem isto o data-theme fica no "dark" fixo deste arquivo até o onMounted do
+    App.vue rodar, e quem usa o tema claro vê um flash escuro a cada carga.
+    Inline e sem defer de propósito: precisa executar antes do CSS.
+  -->
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('theme');
+        document.documentElement.setAttribute('data-theme', t === 'light' ? 'light' : 'dark');
+      } catch (e) { /* localStorage bloqueado: segue no padrão do atributo */ }
+    })();
+  </script>
+
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+  <!--
+    Inter (corpo) + Space Grotesk (números e títulos), carregados aqui e não por
+    @import dentro do CSS: o @import bloqueia a renderização da folha de estilo
+    inteira até a fonte resolver.
+  -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
 </head>
 <body>
   <div id="app"></div>

@@ -176,7 +176,7 @@ function handleInspecionar(item: SyncJobProgress) {
 
 .drawer-header {
   padding: 24px 24px 0 24px;
-  background: rgba(255,255,255,0.01);
+  background: var(--surface-2);
   border-bottom: 1px solid var(--border);
 }
 
@@ -188,23 +188,23 @@ function handleInspecionar(item: SyncJobProgress) {
 }
 
 .company-label {
-  font-family: var(--mono);
-  font-size: 9px;
-  color: var(--text3);
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  color: var(--text-dim);
   letter-spacing: 1px;
 }
 
 .company-name {
   margin: 4px 0 0 0;
-  font-size: 18px;
+  font-size: var(--fs-lg);
   font-weight: 700;
-  color: var(--accent);
+  color: var(--primary);
 }
 
 .btn-close {
-  background: var(--bg3);
-  border: 1px solid var(--border2);
-  color: var(--text2);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  color: var(--text-muted);
   border-radius: 6px;
   width: 32px;
   height: 32px;
@@ -212,11 +212,11 @@ function handleInspecionar(item: SyncJobProgress) {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: var(--trans);
+  transition: var(--transition);
 }
 .btn-close:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--primary);
+  color: var(--primary);
 }
 
 .drawer-tabs {
@@ -228,13 +228,13 @@ function handleInspecionar(item: SyncJobProgress) {
   background: transparent;
   border: none;
   padding: 0 0 12px 0;
-  font-family: var(--mono);
-  font-size: 11px;
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
   font-weight: 700;
-  color: var(--text3);
+  color: var(--text-dim);
   cursor: pointer;
   position: relative;
-  transition: var(--trans);
+  transition: var(--transition);
 }
 
 .tab-item:hover {
@@ -242,7 +242,7 @@ function handleInspecionar(item: SyncJobProgress) {
 }
 
 .tab-item.active {
-  color: var(--accent);
+  color: var(--primary);
 }
 
 .tab-item.active::after {
@@ -252,7 +252,7 @@ function handleInspecionar(item: SyncJobProgress) {
   left: 0;
   right: 0;
   height: 2px;
-  background: var(--accent);
+  background: var(--primary);
 }
 
 .drawer-body {

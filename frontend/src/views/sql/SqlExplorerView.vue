@@ -7,7 +7,7 @@
 
       <!-- Seletor de grupo (admin_global) -->
       <div v-if="auth.isAdminGlobal" style="display:flex;align-items:center;gap:8px">
-        <span style="font-family:var(--mono);font-size:11px;color:var(--text3)">GRUPO</span>
+        <span style="font-family:var(--font-display);font-size: var(--fs-xs);color:var(--text-dim)">GRUPO</span>
         <select
           v-model="selectedGrupoId"
           class="select-input"
@@ -17,7 +17,7 @@
           <option v-for="g in grupos" :key="g.id" :value="g.id">{{ g.nome }}</option>
         </select>
       </div>
-      <div v-else style="font-family:var(--mono);font-size:11px;color:var(--text3)">
+      <div v-else style="font-family:var(--font-display);font-size: var(--fs-xs);color:var(--text-dim)">
         {{ grupoNome }}
       </div>
     </div>
@@ -25,7 +25,7 @@
     <!-- Aviso sem grupo selecionado -->
     <div
       v-if="!activeGrupoId"
-      style="padding:48px;text-align:center;font-family:var(--mono);font-size:11px;color:var(--text3)"
+      style="padding:48px;text-align:center;font-family:var(--font-display);font-size: var(--fs-xs);color:var(--text-dim)"
     >
       Selecione um grupo para começar.
     </div>
@@ -43,7 +43,7 @@
             @click="insertTableQuery(t)"
             :title="`SELECT * FROM ${t} LIMIT 100`"
           >
-            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" style="width:13px;height:13px;flex-shrink:0;color:var(--accent)">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" style="width:13px;height:13px;flex-shrink:0;color:var(--primary)">
               <rect x="2" y="4" width="16" height="3" rx="1"/>
               <rect x="2" y="9" width="16" height="3" rx="1"/>
               <rect x="2" y="14" width="16" height="3" rx="1"/>
@@ -69,12 +69,12 @@
               @keydown="onKeydown"
             />
             <div class="editor-footer">
-              <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">
+              <span style="font-family:var(--font-display);font-size: var(--fs-xs);color:var(--text-dim)">
                 Ctrl+Enter para executar
               </span>
               <button
                 class="btn-primary"
-                style="padding:6px 18px;font-size:12px"
+                style="padding:6px 18px;font-size: var(--fs-xs)"
                 :disabled="executing || !sql.trim()"
                 @click="runQuery"
               >
@@ -87,7 +87,7 @@
           <!-- Estado de erro da API -->
           <div
             v-if="queryError"
-            style="margin-top:12px;padding:12px 14px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.22);border-radius:8px;font-family:var(--mono);font-size:11px;color:var(--red)"
+            style="margin-top:12px;padding:12px 14px;background:var(--danger-weak);border:1px solid var(--danger-weak);border-radius:8px;font-family:var(--font-display);font-size: var(--fs-xs);color:var(--danger)"
           >
             {{ queryError }}
           </div>
@@ -95,20 +95,20 @@
           <!-- Resultado -->
           <div v-if="result" class="result-panel">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
-              <span style="font-family:var(--mono);font-size:11px;color:var(--text3)">
+              <span style="font-family:var(--font-display);font-size: var(--fs-xs);color:var(--text-dim)">
                 {{ result.row_count }} {{ result.row_count === 1 ? 'linha' : 'linhas' }}
                 &nbsp;·&nbsp;
                 {{ elapsed }}ms
               </span>
               <span
                 v-if="result.truncated"
-                style="font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(245,158,11,0.12);color:var(--yellow);border:1px solid rgba(245,158,11,0.25)"
+                style="font-family:var(--font-display);font-size: var(--fs-xs);padding:2px 8px;border-radius:4px;background:var(--warning-weak);color:var(--warning);border:1px solid var(--warning-weak)"
               >
                 Truncado em 1000 linhas
               </span>
             </div>
 
-            <div v-if="result.columns.length === 0" style="font-family:var(--mono);font-size:11px;color:var(--text3);padding:24px 0;text-align:center">
+            <div v-if="result.columns.length === 0" style="font-family:var(--font-display);font-size: var(--fs-xs);color:var(--text-dim);padding:24px 0;text-align:center">
               Nenhum resultado.
             </div>
 
@@ -131,7 +131,7 @@
           <!-- Estado vazio inicial -->
           <div
             v-else-if="!executing && !queryError"
-            style="padding:48px;text-align:center;font-family:var(--mono);font-size:11px;color:var(--text3)"
+            style="padding:48px;text-align:center;font-family:var(--font-display);font-size: var(--fs-xs);color:var(--text-dim)"
           >
             Execute uma query para ver os resultados.
           </div>
@@ -261,7 +261,7 @@ onMounted(loadGrupos)
 .tables-sidebar {
   width: 200px;
   flex-shrink: 0;
-  background: var(--card);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 12px;
   overflow: hidden;
@@ -270,10 +270,10 @@ onMounted(loadGrupos)
 }
 
 .tables-sidebar-header {
-  font-family: var(--mono);
-  font-size: 9px;
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
   letter-spacing: 2px;
-  color: var(--text3);
+  color: var(--text-dim);
   padding: 10px 12px 6px;
   border-bottom: 1px solid var(--border);
 }
@@ -283,18 +283,18 @@ onMounted(loadGrupos)
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--text2);
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
   cursor: pointer;
-  transition: var(--trans);
+  transition: var(--transition);
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .table-item:last-child { border-bottom: none; }
-.table-item:hover { background: var(--bg3); color: var(--accent); }
+.table-item:hover { background: var(--surface-2); color: var(--primary); }
 
 /* ── Painel principal ── */
 .main-panel {
@@ -304,7 +304,7 @@ onMounted(loadGrupos)
 
 /* ── Editor SQL ── */
 .editor-wrapper {
-  background: var(--card);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 12px;
   overflow: hidden;
@@ -316,16 +316,16 @@ onMounted(loadGrupos)
   padding: 16px;
   background: transparent;
   color: var(--text);
-  font-family: var(--mono);
-  font-size: 13px;
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
   line-height: 1.7;
   border: none;
   outline: none;
   resize: vertical;
   box-sizing: border-box;
-  caret-color: var(--accent);
+  caret-color: var(--primary);
 }
-.sql-editor::placeholder { color: var(--text3); }
+.sql-editor::placeholder { color: var(--text-dim); }
 
 .editor-footer {
   display: flex;
@@ -333,27 +333,27 @@ onMounted(loadGrupos)
   justify-content: space-between;
   padding: 8px 12px;
   border-top: 1px solid var(--border);
-  background: var(--bg3);
+  background: var(--surface-2);
 }
 
 /* ── Seletor de grupo ── */
 .select-input {
-  background: var(--card);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
   color: var(--text);
-  font-family: var(--mono);
-  font-size: 12px;
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
   padding: 6px 10px;
   outline: none;
-  transition: var(--trans);
+  transition: var(--transition);
 }
-.select-input:focus { border-color: var(--accent); }
+.select-input:focus { border-color: var(--primary); }
 
 /* ── Resultado ── */
 .result-panel {
   margin-top: 16px;
-  background: var(--card);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 16px;
@@ -362,19 +362,19 @@ onMounted(loadGrupos)
 .result-table {
   width: 100%;
   border-collapse: collapse;
-  font-family: var(--mono);
-  font-size: 12px;
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
 }
 
 .result-table th {
   text-align: left;
   padding: 8px 12px;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   letter-spacing: 1px;
-  color: var(--text3);
+  color: var(--text-dim);
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
-  background: var(--bg3);
+  background: var(--surface-2);
 }
 
 .result-table td {
@@ -387,8 +387,8 @@ onMounted(loadGrupos)
   white-space: nowrap;
 }
 
-.result-table tbody tr:nth-child(even) td { background: var(--bg3); }
-.result-table tbody tr:hover td { background: rgba(0,229,255,0.04); }
+.result-table tbody tr:nth-child(even) td { background: var(--surface-2); }
+.result-table tbody tr:hover td { background: var(--primary-weak); }
 
 @media (max-width: 640px) {
   .explorer-layout { flex-direction: column; }

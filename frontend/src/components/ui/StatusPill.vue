@@ -39,16 +39,16 @@ const label   = computed(() => entry.value.label)
   gap: 5px;
   padding: 3px 9px;
   border-radius: 20px;
-  font-family: var(--mono);
-  font-size: 10px;
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
   font-weight: 600;
   white-space: nowrap;
 }
-.pill-green  { background: rgba(34,197,94,0.12);  color: #22c55e; }
-.pill-red    { background: rgba(239,68,68,0.12);   color: #ef4444; }
-.pill-blue   { background: rgba(0,229,255,0.10);   color: #00e5ff; }
-.pill-yellow { background: rgba(245,158,11,0.12);  color: #f59e0b; }
-.pill-gray   { background: rgba(255,255,255,0.06); color: var(--text3); }
+.pill-green  { background: var(--success-weak); color: var(--success); }
+.pill-red    { background: var(--danger-weak);  color: var(--danger); }
+.pill-blue   { background: var(--info-weak);    color: var(--info); }
+.pill-yellow { background: var(--warning-weak); color: var(--warning); }
+.pill-gray   { background: var(--surface-2);    color: var(--text-dim); }
 
 .status-dot {
   width: 5px; height: 5px;

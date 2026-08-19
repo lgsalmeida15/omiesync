@@ -63,10 +63,10 @@ const currentType  = computed(() => props.type === 'password' && showPassword.va
 .input-wrap { display: flex; flex-direction: column; gap: 6px; }
 
 .input-label {
-  font-family: var(--mono);
-  font-size: 11px;
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
   font-weight: 500;
-  color: var(--text3);
+  color: var(--text-dim);
   letter-spacing: 1px;
   text-transform: uppercase;
 }
@@ -74,15 +74,15 @@ const currentType  = computed(() => props.type === 'password' && showPassword.va
 .input-field {
   display: flex;
   align-items: center;
-  background: var(--bg3);
-  border: 1px solid var(--border2);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
   border-radius: 11px;
   transition: border-color 0.2s;
   overflow: hidden;
 }
 
-.input-field--focused { border-color: rgba(0,229,255,0.5); }
-.input-field--error   { border-color: rgba(239,68,68,0.5); }
+.input-field--focused { border-color: var(--primary); }
+.input-field--error   { border-color: var(--danger); }
 
 .input-el {
   flex: 1;
@@ -90,24 +90,24 @@ const currentType  = computed(() => props.type === 'password' && showPassword.va
   border: none;
   outline: none;
   padding: 11px 14px;
-  font-family: var(--font);
-  font-size: 13px;
+  font-family: var(--font-body);
+  font-size: var(--fs-sm);
   color: var(--text);
   width: 100%;
 }
-.input-el::placeholder { color: var(--text3); }
+.input-el::placeholder { color: var(--text-dim); }
 .input-el:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .input-eye {
   width: 36px; height: 36px;
   display: flex; align-items: center; justify-content: center;
   background: transparent; border: none; cursor: pointer;
-  color: var(--text3); flex-shrink: 0;
+  color: var(--text-dim); flex-shrink: 0;
   transition: color 0.2s;
 }
-.input-eye:hover { color: var(--text2); }
+.input-eye:hover { color: var(--text-muted); }
 .input-eye svg { width: 15px; height: 15px; }
 
-.input-error { font-family: var(--mono); font-size: 10px; color: var(--red); }
-.input-hint  { font-family: var(--mono); font-size: 10px; color: var(--text3); }
+.input-error { font-family: var(--font-display); font-size: var(--fs-xs); color: var(--danger); }
+.input-hint  { font-family: var(--font-display); font-size: var(--fs-xs); color: var(--text-dim); }
 </style>

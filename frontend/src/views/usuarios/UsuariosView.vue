@@ -1,6 +1,6 @@
 ﻿<template>
   <div style="padding:24px">
-    <div v-if="successMsg" style="margin-bottom:16px;padding:12px 16px;background:rgba(0,229,255,0.08);border:1px solid rgba(0,229,255,0.25);border-radius:8px;font-size:13px;color:var(--accent)">
+    <div v-if="successMsg" style="margin-bottom:16px;padding:12px 16px;background:var(--primary-weak);border:1px solid var(--primary);border-radius:8px;font-size: var(--fs-sm);color:var(--primary)">
       {{ successMsg }}
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
@@ -11,27 +11,27 @@
       
     <!-- Seletor de grupo para admin_global -->
     <div v-if="auth.isAdminGlobal && grupos.length > 0" style="margin-bottom:16px">
-      <label style="font-family:var(--mono);font-size:10px;color:var(--text3);letter-spacing:1.5px;text-transform:uppercase;display:block;margin-bottom:6px">GRUPO</label>
+      <label style="font-family:var(--font-display);font-size: var(--fs-xs);color:var(--text-dim);letter-spacing:1.5px;text-transform:uppercase;display:block;margin-bottom:6px">GRUPO</label>
       <select v-model="grupoId" class="input-el" style="max-width:320px" @change="load">
         <option value="">Selecione um grupo...</option>
         <option v-for="g in grupos" :key="g.id" :value="g.id">{{ g.nome }}</option>
       </select>
     </div>
 <div v-if="loading" style="padding:48px;text-align:center"><div class="spinner"></div></div>
-      <div v-else-if="error" style="padding:32px;text-align:center;font-family:var(--mono);font-size:11px;color:var(--red)">{{ error }}</div>
-      <div v-else-if="usuarios.length===0" style="padding:48px;text-align:center;font-family:var(--mono);font-size:11px;color:var(--text3)">Nenhum usuario cadastrado.</div>
+      <div v-else-if="error" style="padding:32px;text-align:center;font-family:var(--font-display);font-size: var(--fs-xs);color:var(--danger)">{{ error }}</div>
+      <div v-else-if="usuarios.length===0" style="padding:48px;text-align:center;font-family:var(--font-display);font-size: var(--fs-xs);color:var(--text-dim)">Nenhum usuario cadastrado.</div>
       <div v-else style="overflow-x:auto">
         <table>
           <thead><tr><th>NOME</th><th>EMAIL</th><th>ROLE</th><th>ATIVO</th><th>CRIADO EM</th><th style="text-align:right">ACOES</th></tr></thead>
           <tbody>
             <tr v-for="u in usuarios" :key="u.id">
               <td style="font-weight:600">{{ u.nome }}</td>
-              <td style="font-family:var(--mono);font-size:11px;color:var(--text3)">{{ u.email }}</td>
+              <td style="font-family:var(--font-display);font-size: var(--fs-xs);color:var(--text-dim)">{{ u.email }}</td>
               <td><span :class="['pill', roleCls(u.role)]">{{ u.role }}</span></td>
               <td><span :class="['pill', u.ativo?'pill-green':'pill-gray']">{{ u.ativo?"Ativo":"Inativo" }}</span></td>
-              <td style="font-family:var(--mono);font-size:11px;color:var(--text3)">{{ fmt(u.created_at) }}</td>
+              <td style="font-family:var(--font-display);font-size: var(--fs-xs);color:var(--text-dim)">{{ fmt(u.created_at) }}</td>
               <td style="text-align:right;white-space:nowrap">
-                <button class="btn-ghost" @click="openPwd(u)" style="margin-right:6px;font-size:11px">Senha</button>
+                <button class="btn-ghost" @click="openPwd(u)" style="margin-right:6px;font-size: var(--fs-xs)">Senha</button>
                 <button class="btn-ghost" @click="openEdit(u)" style="margin-right:6px">Editar</button>
                 <button class="btn-danger" @click="confirmDel(u)">Excluir</button>
               </td>
@@ -44,7 +44,7 @@
     <!-- Modal criar/editar -->
     <div v-if="showModal" class="modal-overlay" @mousedown.self="showModal=false">
       <div class="modal-box">
-        <div class="modal-header"><span style="font-size:15px;font-weight:700">{{ editing?"Editar Usuario":"Novo Usuario" }}</span><button @click="showModal=false" class="btn-close">x</button></div>
+        <div class="modal-header"><span style="font-size: var(--fs-md);font-weight:700">{{ editing?"Editar Usuario":"Novo Usuario" }}</span><button @click="showModal=false" class="btn-close">x</button></div>
         <div class="modal-body">
           <div class="field"><label>NOME</label><input v-model="form.nome" class="input-el" placeholder="Nome completo" /><p v-if="fe.nome" class="err">{{ fe.nome }}</p></div>
           <div v-if="!editing" class="field"><label>EMAIL</label><input v-model="form.email" class="input-el" placeholder="email@empresa.com" /><p v-if="fe.email" class="err">{{ fe.email }}</p></div>
@@ -56,8 +56,8 @@
             </select>
           </div>
           <div v-if="editing" class="field" style="flex-direction:row;align-items:center;gap:10px">
-            <input type="checkbox" v-model="form.ativo" id="ativo" style="width:16px;height:16px;accent-color:var(--accent)" />
-            <label for="ativo" style="text-transform:none;letter-spacing:0;font-size:13px;color:var(--text2)">Usuario ativo</label>
+            <input type="checkbox" v-model="form.ativo" id="ativo" style="width:16px;height:16px;accent-color:var(--primary)" />
+            <label for="ativo" style="text-transform:none;letter-spacing:0;font-size: var(--fs-sm);color:var(--text-muted)">Usuario ativo</label>
           </div>
           <p v-if="saveErr" class="err-box">{{ saveErr }}</p>
         </div>
@@ -68,7 +68,7 @@
     <!-- Modal senha -->
     <div v-if="showPwd" class="modal-overlay" @mousedown.self="showPwd=false">
       <div class="modal-box" style="max-width:420px">
-        <div class="modal-header"><span style="font-size:15px;font-weight:700">Alterar Senha</span><button @click="showPwd=false" class="btn-close">x</button></div>
+        <div class="modal-header"><span style="font-size: var(--fs-md);font-weight:700">Alterar Senha</span><button @click="showPwd=false" class="btn-close">x</button></div>
         <div class="modal-body">
           <div class="field"><label>NOVA SENHA</label><input v-model="pwd.p1" type="password" class="input-el" placeholder="Minimo 8 caracteres" /></div>
           <div class="field"><label>CONFIRMAR SENHA</label><input v-model="pwd.p2" type="password" class="input-el" placeholder="Repita a senha" /></div>
@@ -81,9 +81,9 @@
     <!-- Confirm delete -->
     <div v-if="showConfirm" class="modal-overlay" @mousedown.self="showConfirm=false">
       <div class="modal-box" style="max-width:420px">
-        <div class="modal-header"><span style="font-size:15px;font-weight:700">Confirmar exclusao</span><button @click="showConfirm=false" class="btn-close">x</button></div>
+        <div class="modal-header"><span style="font-size: var(--fs-md);font-weight:700">Confirmar exclusao</span><button @click="showConfirm=false" class="btn-close">x</button></div>
         <div class="modal-body">
-          <p style="font-size:13px;color:var(--text2)">Excluir usuario <strong style="color:var(--text)">{{ delTarget?.nome }}</strong>?</p>
+          <p style="font-size: var(--fs-sm);color:var(--text-muted)">Excluir usuario <strong style="color:var(--text)">{{ delTarget?.nome }}</strong>?</p>
           <p v-if="delErr" class="err-box" style="margin-top:10px">{{ delErr }}</p>
         </div>
         <div class="modal-footer"><button class="btn-ghost" @click="showConfirm=false">Cancelar</button><button class="btn-danger" :disabled="deleting" @click="doDelete">{{ deleting?"...":"Excluir" }}</button></div>
@@ -172,33 +172,33 @@ onMounted(()=>{ loadGrupos(); if(grupoId.value) load() })
 </script>
 
 <style scoped>
-.table-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.table-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
 table{width:100%;border-collapse:collapse}
-th{font-family:var(--mono);font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);padding:11px 18px;text-align:left;background:rgba(255,255,255,0.02);border-bottom:1px solid var(--border)}
-td{padding:10px 18px;font-size:13px;color:var(--text);border-bottom:1px solid var(--border)}
-tr:last-child td{border-bottom:none}tr:hover td{background:rgba(255,255,255,0.02)}
-.pill{display:inline-flex;padding:2px 9px;border-radius:20px;font-family:var(--mono);font-size:10px;font-weight:600}
-.pill-green{background:rgba(34,197,94,0.12);color:#22c55e}.pill-gray{background:rgba(255,255,255,0.06);color:var(--text3)}.pill-blue{background:rgba(0,229,255,0.1);color:#00e5ff}.pill-accent{background:rgba(124,58,237,0.12);color:#7c3aed}
-.btn-primary{background:var(--accent);color:#080c12;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;transition:var(--trans)}
-.btn-primary:hover:not(:disabled){background:rgba(0,229,255,0.85)}.btn-primary:disabled{opacity:0.5;cursor:not-allowed}
-.btn-danger{background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.3);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer}
-.btn-danger:hover:not(:disabled){background:rgba(239,68,68,0.2)}.btn-danger:disabled{opacity:0.5;cursor:not-allowed}
-.btn-ghost{background:var(--bg3);color:var(--text2);border:1px solid var(--border2);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;transition:var(--trans)}
-.btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
-.btn-close{background:var(--bg3);color:var(--text3);border:1px solid var(--border2);border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center}
-.btn-close:hover{border-color:var(--red);color:var(--red)}
+th{font-family:var(--font-display);font-size: var(--fs-xs);letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);padding:11px 18px;text-align:left;background:var(--surface-2);border-bottom:1px solid var(--border)}
+td{padding:10px 18px;font-size: var(--fs-sm);color:var(--text);border-bottom:1px solid var(--border)}
+tr:last-child td{border-bottom:none}tr:hover td{background:var(--surface-2)}
+.pill{display:inline-flex;padding:2px 9px;border-radius:20px;font-family:var(--font-display);font-size: var(--fs-xs);font-weight:600}
+.pill-green{background:var(--success-weak);color:var(--success)}.pill-gray{background:var(--surface-2);color:var(--text-dim)}.pill-blue{background:var(--primary-weak);color:var(--info)}.pill-accent{background:var(--primary-weak);color:var(--primary)}
+.btn-primary{background:var(--primary);color:var(--text-oncolor);border:none;border-radius:8px;padding:8px 16px;font-size: var(--fs-sm);font-weight:600;cursor:pointer;transition:var(--transition)}
+.btn-primary:hover:not(:disabled){background:var(--primary-hover)}.btn-primary:disabled{opacity:0.5;cursor:not-allowed}
+.btn-danger{background:var(--danger-weak);color:var(--danger);border:1px solid var(--danger-weak);border-radius:8px;padding:6px 12px;font-size: var(--fs-xs);font-weight:600;cursor:pointer}
+.btn-danger:hover:not(:disabled){background:var(--danger-weak)}.btn-danger:disabled{opacity:0.5;cursor:not-allowed}
+.btn-ghost{background:var(--surface-2);color:var(--text-muted);border:1px solid var(--border-strong);border-radius:8px;padding:6px 12px;font-size: var(--fs-xs);font-weight:600;cursor:pointer;transition:var(--transition)}
+.btn-ghost:hover{border-color:var(--primary);color:var(--primary)}
+.btn-close{background:var(--surface-2);color:var(--text-dim);border:1px solid var(--border-strong);border-radius:6px;width:28px;height:28px;cursor:pointer;font-size: var(--fs-base);display:flex;align-items:center;justify-content:center}
+.btn-close:hover{border-color:var(--danger);color:var(--danger)}
 .modal-overlay{position:fixed;inset:0;z-index:1000;background:var(--overlay);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:24px}
-.modal-box{background:var(--card);border:1px solid var(--border2);border-radius:12px;box-shadow:var(--shadow);width:100%;max-width:520px;display:flex;flex-direction:column;max-height:calc(100vh - 48px);overflow:hidden}
+.modal-box{background:var(--surface);border:1px solid var(--border-strong);border-radius:12px;box-shadow:var(--shadow-md);width:100%;max-width:520px;display:flex;flex-direction:column;max-height:calc(100vh - 48px);overflow:hidden}
 .modal-header{display:flex;align-items:center;justify-content:space-between;padding:18px 24px;border-bottom:1px solid var(--border);flex-shrink:0}
 .modal-body{padding:24px;display:flex;flex-direction:column;gap:16px;overflow-y:auto}
 .modal-footer{padding:16px 24px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;flex-shrink:0}
 .field{display:flex;flex-direction:column;gap:6px}
-label{font-family:var(--mono);font-size:10px;color:var(--text3);letter-spacing:1.5px;text-transform:uppercase}
-.input-el{background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:9px 12px;font-size:13px;color:var(--text);outline:none;transition:border-color 0.2s}
-.input-el:focus{border-color:rgba(0,229,255,0.5)}
-.err{font-family:var(--mono);font-size:10px;color:var(--red)}
-.err-box{font-family:var(--mono);font-size:11px;color:var(--red);background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:7px;padding:9px 12px}
-.spinner{width:24px;height:24px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin 0.7s linear infinite;margin:0 auto}
+label{font-family:var(--font-display);font-size: var(--fs-xs);color:var(--text-dim);letter-spacing:1.5px;text-transform:uppercase}
+.input-el{background:var(--surface-2);border:1px solid var(--border-strong);border-radius:8px;padding:9px 12px;font-size: var(--fs-sm);color:var(--text);outline:none;transition:border-color 0.2s}
+.input-el:focus{border-color:var(--primary)}
+.err{font-family:var(--font-display);font-size: var(--fs-xs);color:var(--danger)}
+.err-box{font-family:var(--font-display);font-size: var(--fs-xs);color:var(--danger);background:var(--danger-weak);border:1px solid var(--danger-weak);border-radius:7px;padding:9px 12px}
+.spinner{width:24px;height:24px;border:2px solid var(--border-strong);border-top-color:var(--primary);border-radius:50%;animation:spin 0.7s linear infinite;margin:0 auto}
 @keyframes spin{to{transform:rotate(360deg)}}
 </style>
 

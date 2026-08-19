@@ -9,8 +9,8 @@
       <div v-if="loading" style="padding:48px;text-align:center">
         <div class="spinner"></div>
       </div>
-      <div v-else-if="error" style="padding:32px;text-align:center;font-family:var(--mono);font-size:11px;color:var(--red)">{{ error }}</div>
-      <div v-else-if="grupos.length === 0" style="padding:48px;text-align:center;font-family:var(--mono);font-size:11px;color:var(--text3)">Nenhum grupo cadastrado.</div>
+      <div v-else-if="error" style="padding:32px;text-align:center;font-family:var(--font-display);font-size: var(--fs-xs);color:var(--danger)">{{ error }}</div>
+      <div v-else-if="grupos.length === 0" style="padding:48px;text-align:center;font-family:var(--font-display);font-size: var(--fs-xs);color:var(--text-dim)">Nenhum grupo cadastrado.</div>
       <div v-else style="overflow-x:auto">
         <table>
           <thead><tr>
@@ -19,10 +19,10 @@
           <tbody>
             <tr v-for="g in grupos" :key="g.id">
               <td style="font-weight:600">{{ g.nome }}</td>
-              <td style="font-family:var(--mono);font-size:11px;color:var(--text3)">{{ g.slug }}</td>
-              <td style="font-family:var(--mono);font-size:11px;color:var(--text3)">{{ g.schema_name }}</td>
+              <td style="font-family:var(--font-display);font-size: var(--fs-xs);color:var(--text-dim)">{{ g.slug }}</td>
+              <td style="font-family:var(--font-display);font-size: var(--fs-xs);color:var(--text-dim)">{{ g.schema_name }}</td>
               <td><span :class="['pill', g.status === 'ativo' ? 'pill-green' : 'pill-gray']">{{ g.status }}</span></td>
-              <td style="font-family:var(--mono);font-size:11px;color:var(--text3)">{{ fmtDate(g.created_at) }}</td>
+              <td style="font-family:var(--font-display);font-size: var(--fs-xs);color:var(--text-dim)">{{ fmtDate(g.created_at) }}</td>
               <td style="text-align:right">
                 <button class="btn-ghost" @click="openEdit(g)" style="margin-right:6px">Editar</button>
                 <button class="btn-danger" @click="confirmDelete(g)">Excluir</button>
@@ -145,8 +145,8 @@
       title="Confirmar exclusão"
       size="sm"
     >
-      <p style="font-size:13px;color:var(--text2)">Deseja excluir o grupo <strong style="color:var(--text)">{{ delTarget?.nome }}</strong>?</p>
-      <p style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-top:8px">Todas as empresas devem estar inativas para prosseguir.</p>
+      <p style="font-size: var(--fs-sm);color:var(--text-muted)">Deseja excluir o grupo <strong style="color:var(--text)">{{ delTarget?.nome }}</strong>?</p>
+      <p style="font-family:var(--font-display);font-size: var(--fs-xs);color:var(--text-dim);margin-top:8px">Todas as empresas devem estar inativas para prosseguir.</p>
       <p v-if="deleteErr" class="err-box" style="margin-top:10px">{{ deleteErr }}</p>
 
       <template #footer>
@@ -364,33 +364,33 @@ onMounted(load)
 </script>
 
 <style scoped>
-.table-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.table-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
 table{width:100%;border-collapse:collapse}
-th{font-family:var(--mono);font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);padding:11px 18px;text-align:left;background:rgba(255,255,255,0.02);border-bottom:1px solid var(--border)}
-td{padding:10px 18px;font-size:13px;color:var(--text);border-bottom:1px solid var(--border)}
+th{font-family:var(--font-display);font-size: var(--fs-xs);letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);padding:11px 18px;text-align:left;background:var(--surface-2);border-bottom:1px solid var(--border)}
+td{padding:10px 18px;font-size: var(--fs-sm);color:var(--text);border-bottom:1px solid var(--border)}
 tr:last-child td{border-bottom:none}
-tr:hover td{background:rgba(255,255,255,0.02)}
-.pill{display:inline-flex;align-items:center;padding:2px 9px;border-radius:20px;font-family:var(--mono);font-size:10px;font-weight:600}
-.pill-green{background:rgba(34,197,94,0.12);color:#22c55e}
-.pill-gray{background:rgba(255,255,255,0.06);color:var(--text3)}
+tr:hover td{background:var(--surface-2)}
+.pill{display:inline-flex;align-items:center;padding:2px 9px;border-radius:20px;font-family:var(--font-display);font-size: var(--fs-xs);font-weight:600}
+.pill-green{background:var(--success-weak);color:var(--success)}
+.pill-gray{background:var(--surface-2);color:var(--text-dim)}
 
-.btn-primary{background:var(--accent);color:#080c12;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;transition:var(--trans)}
-.btn-primary:hover:not(:disabled){background:rgba(0,229,255,0.85)}
+.btn-primary{background:var(--primary);color:var(--text-oncolor);border:none;border-radius:8px;padding:8px 16px;font-size: var(--fs-sm);font-weight:600;cursor:pointer;transition:var(--transition)}
+.btn-primary:hover:not(:disabled){background:var(--primary-hover)}
 
-.btn-danger{background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.3);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;transition:var(--trans)}
-.btn-danger:hover:not(:disabled){background:rgba(239,68,68,0.2)}
+.btn-danger{background:var(--danger-weak);color:var(--danger);border:1px solid var(--danger-weak);border-radius:8px;padding:6px 12px;font-size: var(--fs-xs);font-weight:600;cursor:pointer;transition:var(--transition)}
+.btn-danger:hover:not(:disabled){background:var(--danger-weak)}
 
-.btn-ghost{background:var(--bg3);color:var(--text2);border:1px solid var(--border2);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;transition:var(--trans)}
-.btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
+.btn-ghost{background:var(--surface-2);color:var(--text-muted);border:1px solid var(--border-strong);border-radius:8px;padding:6px 12px;font-size: var(--fs-xs);font-weight:600;cursor:pointer;transition:var(--transition)}
+.btn-ghost:hover{border-color:var(--primary);color:var(--primary)}
 
 .wizard-step { display: flex; flex-direction: column; gap: 16px; }
 .step-info { margin-bottom: 8px; }
-.step-title { font-size: 14px; font-weight: 700; color: var(--text); }
-.step-sub { font-size: 12px; color: var(--text3); margin-top: 2px; }
+.step-title { font-size: var(--fs-base); font-weight: 700; color: var(--text); }
+.step-sub { font-size: var(--fs-xs); color: var(--text-dim); margin-top: 2px; }
 
 .err-box {
-  font-family: var(--mono); font-size: 10px; color: var(--red);
-  background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2);
+  font-family: var(--font-display); font-size: var(--fs-xs); color: var(--danger);
+  background: var(--danger-weak); border: 1px solid var(--danger-weak);
   border-radius: 7px; padding: 9px 12px; margin-top: 8px;
 }
 </style>

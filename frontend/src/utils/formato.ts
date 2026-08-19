@@ -20,6 +20,23 @@ export function fmtMoeda(v: number): string {
   return v < 0 ? `(${s})` : s
 }
 
+/**
+ * Moeda com centavos, para os cards de KPI. Ex: (R$ 490.000,97)
+ *
+ * Separado de fmtMoeda porque os dois têm públicos diferentes: no gráfico e no
+ * tooltip o centavo é ruído, no card de topo ele é o número que o usuário
+ * confere contra o extrato.
+ */
+export function fmtMoedaExata(v: number): string {
+  const s = new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Math.abs(v))
+  return v < 0 ? `(${s})` : s
+}
+
 /** Número com dois decimais, sem símbolo de moeda. Para a tabela do Resultado. */
 export function fmtNumero(v: number): string {
   const s = Math.abs(v).toLocaleString('pt-BR', {

@@ -119,7 +119,7 @@ function cancelar() {
 .card {
   width: 100%;
   max-width: 440px;
-  background: var(--bg2);
+  background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 16px;
   padding: 40px 32px;
@@ -136,28 +136,28 @@ function cancelar() {
 
 .logo-icon {
   width: 36px; height: 36px; border-radius: 10px;
-  background: linear-gradient(135deg, var(--accent), var(--accent3));
+  background: linear-gradient(135deg, var(--primary), var(--primary-line));
   display: flex; align-items: center; justify-content: center;
-  font-size: 17px; font-weight: 800; color: #080c12;
+  font-size: var(--fs-lg); font-weight: 800; color: var(--text-oncolor);
 }
 
 .logo-text {
-  font-size: 18px; font-weight: 800; color: var(--text);
+  font-size: var(--fs-lg); font-weight: 800; color: var(--text);
 }
-.logo-text span { color: var(--accent); }
+.logo-text span { color: var(--primary); }
 
 .title {
-  font-size: 20px; font-weight: 700; color: var(--text);
+  font-size: var(--fs-lg); font-weight: 700; color: var(--text);
   margin: 0;
 }
 
 .subtitle {
-  font-size: 13px; color: var(--text2);
+  font-size: var(--fs-sm); color: var(--text-muted);
   margin: 0; line-height: 1.5;
 }
 
 .loading, .empty {
-  color: var(--text3); font-size: 13px; text-align: center; padding: 16px 0;
+  color: var(--text-dim); font-size: var(--fs-sm); text-align: center; padding: 16px 0;
 }
 
 .grupos-list {
@@ -173,22 +173,22 @@ function cancelar() {
   padding: 14px 16px;
   border-radius: 10px;
   border: 1px solid var(--border);
-  background: var(--bg3);
+  background: var(--surface-2);
   cursor: pointer;
   color: var(--text);
   text-align: left;
-  transition: var(--trans);
+  transition: var(--transition);
   position: relative;
 }
 
 .grupo-btn:hover:not(:disabled) {
-  border-color: var(--accent);
-  background: rgba(0,229,255,0.06);
+  border-color: var(--primary);
+  background: var(--primary-weak);
 }
 
 .grupo-btn.selected {
-  border-color: var(--accent);
-  background: rgba(0,229,255,0.09);
+  border-color: var(--primary);
+  background: var(--primary-weak);
 }
 
 .grupo-btn:disabled {
@@ -198,36 +198,36 @@ function cancelar() {
 
 .grupo-icon {
   width: 36px; height: 36px; border-radius: 8px;
-  background: linear-gradient(135deg, var(--accent2), var(--accent3));
+  background: linear-gradient(135deg, var(--warning), var(--primary-line));
   display: flex; align-items: center; justify-content: center;
-  font-size: 15px; font-weight: 800; color: #080c12;
+  font-size: var(--fs-md); font-weight: 800; color: var(--text-oncolor);
   flex-shrink: 0;
 }
 
 .grupo-info { flex: 1; min-width: 0; }
 
 .grupo-nome {
-  font-size: 14px; font-weight: 600; color: var(--text);
+  font-size: var(--fs-base); font-weight: 600; color: var(--text);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
 .grupo-slug {
-  font-family: var(--mono); font-size: 10px; color: var(--text3); margin-top: 2px;
+  font-family: var(--font-display); font-size: var(--fs-xs); color: var(--text-dim); margin-top: 2px;
 }
 
 .spinner {
   width: 16px; height: 16px; border-radius: 50%;
-  border: 2px solid var(--border2);
-  border-top-color: var(--accent);
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--primary);
   animation: spin 0.7s linear infinite;
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .error {
-  font-size: 13px; color: var(--red);
-  background: rgba(239,68,68,0.08);
-  border: 1px solid rgba(239,68,68,0.2);
+  font-size: var(--fs-sm); color: var(--danger);
+  background: var(--danger-weak);
+  border: 1px solid var(--danger-weak);
   border-radius: 8px;
   padding: 10px 14px;
 }
@@ -236,11 +236,11 @@ function cancelar() {
   background: transparent;
   border: 1px solid var(--border);
   border-radius: 8px;
-  color: var(--text2);
+  color: var(--text-muted);
   padding: 10px;
   cursor: pointer;
-  font-size: 13px;
-  transition: var(--trans);
+  font-size: var(--fs-sm);
+  transition: var(--transition);
 }
-.cancel-btn:hover { background: var(--bg3); color: var(--text); }
+.cancel-btn:hover { background: var(--surface-2); color: var(--text); }
 </style>

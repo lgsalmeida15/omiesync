@@ -3,7 +3,20 @@
     <AppSidebar :mobile-open="mobileOpen" @close="mobileOpen = false" />
 
     <main class="main-content">
-      <AppTopbar @toggle-sidebar="toggleSidebar" />
+      <!--
+        Cabeçalho fixo com as três faixas empilhadas. Sticky em UM contêiner e
+        não em cada faixa: a barra de filtros muda de altura ao quebrar linha, e
+        um `top` fixo por faixa sairia do lugar.
+
+        Os dois divs abaixo são alvos de Teleport preenchidos pelas views. Ficam
+        vazios nas rotas sem filtros ou abas, e a regra :empty os retira do fluxo
+        para não deixarem faixa em branco.
+      -->
+      <div class="appbar">
+        <AppTopbar @toggle-sidebar="toggleSidebar" />
+        <div v-show="ui.filtrosAbertos" id="topbar-filters" class="appbar-filtros"></div>
+        <div id="appbar-tabs" class="appbar-abas"></div>
+      </div>
 
       <div class="page-content">
         <RouterView v-slot="{ Component }">
@@ -20,7 +33,9 @@
 import { ref } from 'vue'
 import AppSidebar from './AppSidebar.vue'
 import AppTopbar  from './AppTopbar.vue'
+import { useUiStore } from '@/stores/ui'
 
+const ui = useUiStore()
 const mobileOpen = ref(false)
 
 function toggleSidebar() {
@@ -44,9 +59,28 @@ function toggleSidebar() {
   .main-content { margin-left: 0 !important; }
 }
 
-.page-content { padding: var(--space-xl); }
-@media (max-width: 1023px) { .page-content { padding: var(--space-lg); } }
-@media (max-width: 767px)  { .page-content { padding: var(--space-md); } }
+/* ── Cabeçalho fixo ── */
+.appbar {
+  position: sticky; top: 0; z-index: 50;
+  background: var(--topbar-bg);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+}
+.appbar-filtros,
+.appbar-abas {
+  padding: 0 var(--sp-6);
+  border-top: 1px solid var(--border);
+}
+/* Alvo de Teleport vazio não deve ocupar altura nem desenhar borda. */
+.appbar-filtros:empty,
+.appbar-abas:empty { display: none; }
+
+@media (max-width: 1023px) { .appbar-filtros, .appbar-abas { padding: 0 var(--sp-5); } }
+@media (max-width: 767px)  { .appbar-filtros, .appbar-abas { padding: 0 var(--sp-4); } }
+
+.page-content { padding: var(--sp-6); }
+@media (max-width: 1023px) { .page-content { padding: var(--sp-5); } }
+@media (max-width: 767px)  { .page-content { padding: var(--sp-4); } }
 
 .fade-page-enter-active, .fade-page-leave-active { transition: opacity 0.18s ease, transform 0.18s ease; }
 .fade-page-enter-from { opacity: 0; transform: translateY(6px); }

@@ -57,10 +57,10 @@ function onBackdrop() {
 }
 
 .modal-box {
-  background: var(--card);
-  border: 1px solid var(--border2);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-md);
   display: flex; flex-direction: column;
   max-height: calc(100vh - 48px);
   width: 100%;
@@ -78,17 +78,17 @@ function onBackdrop() {
   flex-shrink: 0;
 }
 
-.modal-title    { font-size: 15px; font-weight: 700; color: var(--text); }
-.modal-subtitle { font-family: var(--mono); font-size: 10px; color: var(--text3); margin-top: 3px; }
+.modal-title    { font-size: var(--fs-md); font-weight: 700; color: var(--text); }
+.modal-subtitle { font-family: var(--font-display); font-size: var(--fs-xs); color: var(--text-dim); margin-top: 3px; }
 
 .modal-close {
   width: 28px; height: 28px;
-  border-radius: 7px; border: 1px solid var(--border2);
-  background: var(--bg3); color: var(--text3); cursor: pointer;
+  border-radius: 7px; border: 1px solid var(--border-strong);
+  background: var(--surface-2); color: var(--text-dim); cursor: pointer;
   display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0; transition: var(--trans);
+  flex-shrink: 0; transition: var(--transition);
 }
-.modal-close:hover { border-color: var(--red); color: var(--red); }
+.modal-close:hover { border-color: var(--danger); color: var(--danger); }
 .modal-close svg  { width: 13px; height: 13px; }
 
 .modal-body {

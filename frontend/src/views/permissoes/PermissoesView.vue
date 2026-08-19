@@ -4,14 +4,14 @@
     <div style="display:grid;grid-template-columns:280px 1fr;gap:20px;align-items:start" class="perm-grid">
       <!-- Lista de usuarios -->
       <div class="table-card" style="padding:0">
-        <div style="padding:14px 16px;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:10px;color:var(--text3);letter-spacing:1.5px">USUARIOS</div>
+        <div style="padding:14px 16px;border-bottom:1px solid var(--border);font-family:var(--font-display);font-size: var(--fs-xs);color:var(--text-dim);letter-spacing:1.5px">USUARIOS</div>
         <div v-if="loadingU" style="padding:32px;text-align:center"><div class="spinner"></div></div>
         <div v-else>
           <div v-for="u in usuarios" :key="u.id" :class="['user-row', {active: selectedUser?.id===u.id}]" @click="selectUser(u)">
             <div class="u-avatar">{{ initials(u.nome) }}</div>
             <div style="min-width:0">
-              <p style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ u.nome }}</p>
-              <p style="font-family:var(--mono);font-size:9px;color:var(--text3)">{{ u.role }}</p>
+              <p style="font-size: var(--fs-sm);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ u.nome }}</p>
+              <p style="font-family:var(--font-display);font-size: var(--fs-xs);color:var(--text-dim)">{{ u.role }}</p>
             </div>
           </div>
         </div>
@@ -19,26 +19,26 @@
 
       <!-- Permissoes do usuario selecionado -->
       <div>
-        <div v-if="!selectedUser" style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:48px;text-align:center;font-family:var(--mono);font-size:11px;color:var(--text3)">
+        <div v-if="!selectedUser" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:48px;text-align:center;font-family:var(--font-display);font-size: var(--fs-xs);color:var(--text-dim)">
           Selecione um usuario para gerenciar as permissoes.
         </div>
         <template v-else>
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-            <p style="font-size:14px;font-weight:700">{{ selectedUser.nome }}</p>
-            <button class="btn-primary" style="font-size:12px" @click="showGrant=true">+ Conceder</button>
+            <p style="font-size: var(--fs-base);font-weight:700">{{ selectedUser.nome }}</p>
+            <button class="btn-primary" style="font-size: var(--fs-xs)" @click="showGrant=true">+ Conceder</button>
           </div>
           <div class="table-card">
             <div v-if="loadingP" style="padding:32px;text-align:center"><div class="spinner"></div></div>
-            <div v-else-if="permissoes.length===0" style="padding:32px;text-align:center;font-family:var(--mono);font-size:11px;color:var(--text3)">Nenhuma permissao concedida.</div>
+            <div v-else-if="permissoes.length===0" style="padding:32px;text-align:center;font-family:var(--font-display);font-size: var(--fs-xs);color:var(--text-dim)">Nenhuma permissao concedida.</div>
             <div v-else style="overflow-x:auto">
               <table>
                 <thead><tr><th>EMPRESA</th><th>RECURSO</th><th>ACAO</th><th>CONCEDIDO EM</th><th style="text-align:right">REVOGAR</th></tr></thead>
                 <tbody>
                   <tr v-for="p in permissoes" :key="p.id">
-                    <td style="font-family:var(--mono);font-size:11px;color:var(--text3)">{{ empresaName(p.empresa_id) }}</td>
+                    <td style="font-family:var(--font-display);font-size: var(--fs-xs);color:var(--text-dim)">{{ empresaName(p.empresa_id) }}</td>
                     <td><span class="pill pill-blue">{{ p.recurso }}</span></td>
                     <td><span class="pill pill-gray">{{ p.acao }}</span></td>
-                    <td style="font-family:var(--mono);font-size:11px;color:var(--text3)">{{ fmt(p.created_at) }}</td>
+                    <td style="font-family:var(--font-display);font-size: var(--fs-xs);color:var(--text-dim)">{{ fmt(p.created_at) }}</td>
                     <td style="text-align:right"><button class="btn-danger" @click="revoke(p)">Revogar</button></td>
                   </tr>
                 </tbody>
@@ -52,7 +52,7 @@
     <!-- Modal grant -->
     <div v-if="showGrant" class="modal-overlay" @mousedown.self="showGrant=false">
       <div class="modal-box" style="max-width:440px">
-        <div class="modal-header"><span style="font-size:15px;font-weight:700">Conceder Permissao</span><button @click="showGrant=false" class="btn-close">x</button></div>
+        <div class="modal-header"><span style="font-size: var(--fs-md);font-weight:700">Conceder Permissao</span><button @click="showGrant=false" class="btn-close">x</button></div>
         <div class="modal-body">
           <div class="field"><label>EMPRESA</label>
             <select v-model="gForm.empresa_id" class="input-el">
@@ -137,35 +137,35 @@ onMounted(()=>{ loadUsuarios(); loadEmpresas() })
 <style scoped>
 .perm-grid{ }
 @media(max-width:900px){.perm-grid{grid-template-columns:1fr!important}}
-.table-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.table-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
 table{width:100%;border-collapse:collapse}
-th{font-family:var(--mono);font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);padding:11px 18px;text-align:left;background:rgba(255,255,255,0.02);border-bottom:1px solid var(--border)}
-td{padding:10px 18px;font-size:13px;color:var(--text);border-bottom:1px solid var(--border)}
-tr:last-child td{border-bottom:none}tr:hover td{background:rgba(255,255,255,0.02)}
-.user-row{display:flex;align-items:center;gap:10px;padding:11px 16px;cursor:pointer;border-bottom:1px solid var(--border);transition:var(--trans)}
+th{font-family:var(--font-display);font-size: var(--fs-xs);letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);padding:11px 18px;text-align:left;background:var(--surface-2);border-bottom:1px solid var(--border)}
+td{padding:10px 18px;font-size: var(--fs-sm);color:var(--text);border-bottom:1px solid var(--border)}
+tr:last-child td{border-bottom:none}tr:hover td{background:var(--surface-2)}
+.user-row{display:flex;align-items:center;gap:10px;padding:11px 16px;cursor:pointer;border-bottom:1px solid var(--border);transition:var(--transition)}
 .user-row:last-child{border-bottom:none}
-.user-row:hover{background:var(--bg3)}
-.user-row.active{background:rgba(0,229,255,0.07);border-left:2px solid var(--accent)}
-.u-avatar{width:28px;height:28px;border-radius:7px;background:linear-gradient(135deg,var(--accent),var(--accent3));display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#080c12;flex-shrink:0}
-.pill{display:inline-flex;padding:2px 9px;border-radius:20px;font-family:var(--mono);font-size:10px;font-weight:600}
-.pill-blue{background:rgba(0,229,255,0.1);color:#00e5ff}.pill-gray{background:rgba(255,255,255,0.06);color:var(--text3)}
-.btn-primary{background:var(--accent);color:#080c12;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer}
-.btn-primary:hover:not(:disabled){background:rgba(0,229,255,0.85)}.btn-primary:disabled{opacity:0.5;cursor:not-allowed}
-.btn-danger{background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.3);border-radius:6px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer}
-.btn-ghost{background:var(--bg3);color:var(--text2);border:1px solid var(--border2);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer}
-.btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
-.btn-close{background:var(--bg3);color:var(--text3);border:1px solid var(--border2);border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center}
-.btn-close:hover{border-color:var(--red);color:var(--red)}
+.user-row:hover{background:var(--surface-2)}
+.user-row.active{background:var(--primary-weak);border-left:2px solid var(--primary)}
+.u-avatar{width:28px;height:28px;border-radius:7px;background:linear-gradient(135deg,var(--primary),var(--primary-line));display:flex;align-items:center;justify-content:center;font-size: var(--fs-xs);font-weight:800;color:var(--text-oncolor);flex-shrink:0}
+.pill{display:inline-flex;padding:2px 9px;border-radius:20px;font-family:var(--font-display);font-size: var(--fs-xs);font-weight:600}
+.pill-blue{background:var(--primary-weak);color:var(--info)}.pill-gray{background:var(--surface-2);color:var(--text-dim)}
+.btn-primary{background:var(--primary);color:var(--text-oncolor);border:none;border-radius:8px;padding:8px 16px;font-size: var(--fs-sm);font-weight:600;cursor:pointer}
+.btn-primary:hover:not(:disabled){background:var(--primary-hover)}.btn-primary:disabled{opacity:0.5;cursor:not-allowed}
+.btn-danger{background:var(--danger-weak);color:var(--danger);border:1px solid var(--danger-weak);border-radius:6px;padding:4px 10px;font-size: var(--fs-xs);font-weight:600;cursor:pointer}
+.btn-ghost{background:var(--surface-2);color:var(--text-muted);border:1px solid var(--border-strong);border-radius:8px;padding:6px 12px;font-size: var(--fs-xs);font-weight:600;cursor:pointer}
+.btn-ghost:hover{border-color:var(--primary);color:var(--primary)}
+.btn-close{background:var(--surface-2);color:var(--text-dim);border:1px solid var(--border-strong);border-radius:6px;width:28px;height:28px;cursor:pointer;font-size: var(--fs-base);display:flex;align-items:center;justify-content:center}
+.btn-close:hover{border-color:var(--danger);color:var(--danger)}
 .modal-overlay{position:fixed;inset:0;z-index:1000;background:var(--overlay);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:24px}
-.modal-box{background:var(--card);border:1px solid var(--border2);border-radius:12px;box-shadow:var(--shadow);width:100%;max-width:520px;display:flex;flex-direction:column}
+.modal-box{background:var(--surface);border:1px solid var(--border-strong);border-radius:12px;box-shadow:var(--shadow-md);width:100%;max-width:520px;display:flex;flex-direction:column}
 .modal-header{display:flex;align-items:center;justify-content:space-between;padding:18px 24px;border-bottom:1px solid var(--border)}
 .modal-body{padding:24px;display:flex;flex-direction:column;gap:16px}
 .modal-footer{padding:16px 24px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px}
 .field{display:flex;flex-direction:column;gap:6px}
-label{font-family:var(--mono);font-size:10px;color:var(--text3);letter-spacing:1.5px;text-transform:uppercase}
-.input-el{background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:9px 12px;font-size:13px;color:var(--text);outline:none}
-.input-el:focus{border-color:rgba(0,229,255,0.5)}
-.err-box{font-family:var(--mono);font-size:11px;color:var(--red);background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:7px;padding:9px 12px}
-.spinner{width:24px;height:24px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin 0.7s linear infinite;margin:0 auto}
+label{font-family:var(--font-display);font-size: var(--fs-xs);color:var(--text-dim);letter-spacing:1.5px;text-transform:uppercase}
+.input-el{background:var(--surface-2);border:1px solid var(--border-strong);border-radius:8px;padding:9px 12px;font-size: var(--fs-sm);color:var(--text);outline:none}
+.input-el:focus{border-color:var(--primary)}
+.err-box{font-family:var(--font-display);font-size: var(--fs-xs);color:var(--danger);background:var(--danger-weak);border:1px solid var(--danger-weak);border-radius:7px;padding:9px 12px}
+.spinner{width:24px;height:24px;border:2px solid var(--border-strong);border-top-color:var(--primary);border-radius:50%;animation:spin 0.7s linear infinite;margin:0 auto}
 @keyframes spin{to{transform:rotate(360deg)}}
 </style>

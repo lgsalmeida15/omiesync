@@ -30,55 +30,55 @@ withDefaults(defineProps<{
   gap: 7px;
   padding: 10px 18px;
   border-radius: 10px;
-  font-family: var(--font);
-  font-size: 13px;
+  font-family: var(--font-body);
+  font-size: var(--fs-sm);
   font-weight: 600;
   cursor: pointer;
-  transition: var(--trans);
+  transition: var(--transition);
   border: 1px solid transparent;
   white-space: nowrap;
   outline: none;
   min-height: 40px;
 }
 
-.app-btn--sm { padding: 6px 14px; font-size: 12px; min-height: 32px; border-radius: 8px; }
+.app-btn--sm { padding: 6px 14px; font-size: var(--fs-xs); min-height: 32px; border-radius: 8px; }
 
 .app-btn--primary {
-  background: var(--accent);
-  color: #080c12;
-  border-color: var(--accent);
+  background: var(--primary);
+  color: var(--text-oncolor);
+  border-color: var(--primary);
 }
 .app-btn--primary:hover:not(:disabled) {
-  background: rgba(0,229,255,0.85);
+  background: var(--primary-hover);
 }
 
 .app-btn--secondary {
-  background: var(--bg3);
+  background: var(--surface-2);
   color: var(--text);
-  border-color: var(--border2);
+  border-color: var(--border-strong);
 }
 .app-btn--secondary:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: rgba(0,229,255,0.06);
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--primary-weak);
 }
 
 .app-btn--danger {
-  background: rgba(239,68,68,0.1);
-  color: var(--red);
-  border-color: rgba(239,68,68,0.3);
+  background: var(--danger-weak);
+  color: var(--danger);
+  border-color: var(--danger);
 }
 .app-btn--danger:hover:not(:disabled) {
-  background: rgba(239,68,68,0.2);
-  border-color: var(--red);
+  background: var(--danger-weak);
+  border-color: var(--danger);
 }
 
 .app-btn--ghost {
   background: transparent;
-  color: var(--text2);
+  color: var(--text-muted);
   border-color: transparent;
 }
-.app-btn--ghost:hover:not(:disabled) { color: var(--text); background: var(--bg3); }
+.app-btn--ghost:hover:not(:disabled) { color: var(--text); background: var(--surface-2); }
 
 .app-btn:disabled,
 .app-btn--loading {

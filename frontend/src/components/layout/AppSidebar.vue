@@ -6,8 +6,20 @@
     @mouseenter="hovering = true"
     @mouseleave="hovering = false"
   >
+    <!-- Clique no logo fixa a sidebar aberta. O estado já existia no store
+         (ui.sidebarPinned, persistido) mas nenhum elemento o acionava — dava
+         para chegar nele só editando o localStorage à mão. -->
     <div class="sidebar-top">
-      <div class="logo-icon">O</div>
+      <div
+        class="logo-icon"
+        role="button"
+        tabindex="0"
+        :title="ui.sidebarPinned ? 'Desafixar menu' : 'Fixar menu aberto'"
+        :aria-pressed="ui.sidebarPinned"
+        @click="ui.toggleSidebarPin()"
+        @keydown.enter.prevent="ui.toggleSidebarPin()"
+        @keydown.space.prevent="ui.toggleSidebarPin()"
+      >O</div>
       <div class="logo-text">
         <div class="logo-name">Omie<span>Sync</span></div>
         <div class="logo-sub">ADMIN PANEL</div>
@@ -179,10 +191,14 @@ const navSections = computed(() => {
 
 .logo-icon {
   width: 34px; height: 34px; border-radius: 10px;
-  background: linear-gradient(135deg, var(--accent), var(--accent3));
+  background: linear-gradient(135deg, var(--primary-line), var(--accent-line));
   display: flex; align-items: center; justify-content: center;
-  font-size: 16px; font-weight: 800; color: #080c12; flex-shrink: 0;
-  box-shadow: 0 0 18px rgba(0,229,255,0.3);
+  font-family: var(--font-display);
+  /* #fff literal e proposital: o "O" fica sobre o gradiente violeta, que e o
+     mesmo nos dois temas. --text-oncolor viraria quase preto no tema claro. */
+  font-size: var(--fs-md); font-weight: 700; color: #fff; flex-shrink: 0;
+  box-shadow: 0 2px 10px var(--primary-weak);
+  cursor: pointer;
 }
 
 .logo-text {
@@ -193,16 +209,16 @@ const navSections = computed(() => {
 .sidebar--expanded .logo-text,
 .sidebar--mobile-open .logo-text { opacity: 1; transform: translateX(0); }
 
-.logo-name { font-size: 16px; font-weight: 800; color: var(--text); }
-.logo-name span { color: var(--accent); }
-.logo-sub { font-family: var(--mono); font-size: 9px; color: var(--text3); letter-spacing: 2px; margin-top: 1px; }
+.logo-name { font-size: var(--fs-md); font-weight: 800; color: var(--text); }
+.logo-name span { color: var(--primary); }
+.logo-sub { font-family: var(--font-display); font-size: var(--fs-xs); color: var(--text-dim); letter-spacing: 2px; margin-top: 1px; }
 
 .nav-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 10px 8px; }
 .nav-scroll::-webkit-scrollbar { width: 3px; }
-.nav-scroll::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+.nav-scroll::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
 
 .nav-label {
-  font-family: var(--mono); font-size: 9px; letter-spacing: 2px; color: var(--text3);
+  font-family: var(--font-display); font-size: var(--fs-xs); letter-spacing: 2px; color: var(--text-dim);
   padding: 8px 8px 4px; white-space: nowrap; overflow: hidden;
   opacity: 0; max-height: 0; transition: opacity 0.2s, max-height 0.2s;
 }
@@ -210,48 +226,56 @@ const navSections = computed(() => {
 .sidebar--mobile-open .nav-label { opacity: 1; max-height: 30px; }
 
 .nav-item {
+  position: relative;
   display: flex; align-items: center; padding: 0 8px; height: 42px;
-  border-radius: 8px; cursor: pointer; color: var(--text2);
-  transition: var(--trans); margin-bottom: 1px;
-  white-space: nowrap; overflow: hidden; border: 1px solid transparent;
+  border-radius: var(--r-sm); cursor: pointer; color: var(--text-muted);
+  transition: var(--transition); margin-bottom: 1px;
+  white-space: nowrap; overflow: hidden;
   text-decoration: none;
 }
-.nav-item:hover { background: var(--bg3); color: var(--text); }
-.nav-item.active { background: rgba(0,229,255,0.09); color: var(--accent); border-color: rgba(0,229,255,0.18); }
+.nav-item:hover { background: var(--surface-2); color: var(--text); }
+/* Ativo por barra lateral + fundo fraco, como no padrão visual. A borda de 1px
+   que havia antes some: com a sidebar colapsada em 64px ela virava um retângulo
+   fechado em volta do ícone, pesado demais para um estado de navegação. */
+.nav-item.active { background: var(--sidebar-active); color: var(--primary); font-weight: 600; }
+.nav-item.active::before {
+  content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+  width: 3px; height: 18px; border-radius: 0 3px 3px 0; background: var(--primary);
+}
 
 .nav-icon { width: 32px; height: 32px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border-radius: 8px; }
 .nav-icon :deep(svg) { width: 20px; height: 20px; }
 
-.nav-text { font-size: 13.5px; font-weight: 600; margin-left: 6px; opacity: 0; width: 0; transition: opacity 0.18s, width 0.18s; }
+.nav-text { font-size: var(--fs-sm); font-weight: 600; margin-left: 6px; opacity: 0; width: 0; transition: opacity 0.18s, width 0.18s; }
 .sidebar--expanded .nav-text,
 .sidebar--mobile-open .nav-text { opacity: 1; width: auto; }
 
 .sidebar-footer { padding: 16px 10px; border-top: 1px solid var(--border); flex-shrink: 0; }
 
-.user-card { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 10px; background: var(--bg3); overflow: hidden; }
+.user-card { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 10px; background: var(--surface-2); overflow: hidden; }
 
 .user-avatar {
   width: 30px; height: 30px; flex-shrink: 0; border-radius: 8px;
-  background: linear-gradient(135deg, var(--accent), var(--accent3));
+  background: linear-gradient(135deg, var(--primary), var(--primary-line));
   display: flex; align-items: center; justify-content: center;
-  font-size: 11px; font-weight: 800; color: #080c12;
+  font-size: var(--fs-xs); font-weight: 800; color: var(--text-oncolor);
 }
 
 .user-info { opacity: 0; width: 0; overflow: hidden; transition: opacity 0.18s, width 0.18s; }
 .sidebar--expanded .user-info,
 .sidebar--mobile-open .user-info { opacity: 1; width: auto; }
 
-.user-name { font-size: 12px; font-weight: 700; white-space: nowrap; }
-.user-role { font-family: var(--mono); font-size: 9px; color: var(--text3); }
+.user-name { font-size: var(--fs-xs); font-weight: 700; white-space: nowrap; }
+.user-role { font-family: var(--font-display); font-size: var(--fs-xs); color: var(--text-dim); }
 
 .logout-mini {
   background: transparent; border: none; cursor: pointer;
-  color: var(--text3); padding: 4px; border-radius: 6px;
+  color: var(--text-dim); padding: 4px; border-radius: 6px;
   display: flex; align-items: center; justify-content: center;
-  transition: var(--trans); opacity: 0; width: 0; overflow: hidden;
+  transition: var(--transition); opacity: 0; width: 0; overflow: hidden;
 }
 .sidebar--expanded .logout-mini,
 .sidebar--mobile-open .logout-mini { opacity: 1; width: 28px; margin-left: auto; }
-.logout-mini:hover { color: var(--red); background: rgba(239,68,68,0.1); }
+.logout-mini:hover { color: var(--danger); background: var(--danger-weak); }
 .logout-mini svg { width: 14px; height: 14px; }
 </style>

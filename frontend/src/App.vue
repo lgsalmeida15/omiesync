@@ -10,12 +10,14 @@ import { ref, onMounted } from 'vue'
 import { useUiStore }   from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
 
-const ui   = useUiStore()
+// O store aplica o tema no <html> por watcher com immediate, e o script inline do
+// index.html já cobriu a primeira pintura. Nada de setAttribute aqui.
+useUiStore()
+
 const auth = useAuthStore()
 const ready = ref(false)
 
 onMounted(async () => {
-  document.documentElement.setAttribute('data-theme', ui.theme)
   await auth.init()
   ready.value = true
 })
@@ -33,7 +35,7 @@ onMounted(async () => {
   display: inline-block;
   width: 8px; height: 8px;
   border-radius: 50%;
-  background: var(--accent, #00e5ff);
+  background: var(--accent, var(--info));
   animation: init-pulse 1.2s ease-in-out infinite;
 }
 .init-dot:nth-child(2) { animation-delay: 0.2s; }

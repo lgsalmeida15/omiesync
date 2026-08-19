@@ -320,9 +320,9 @@ watch(() => [props.grupoId, props.filtros, props.mes], carregar, { deep: true, i
 .fc-state {
   padding: 48px; text-align: center; gap: 10px;
   display: flex; align-items: center; justify-content: center;
-  font-family: var(--mono); font-size: 12px; color: var(--text3);
+  font-family: var(--font-display); font-size: var(--fs-xs); color: var(--text-dim);
 }
-.fc-state--erro { color: var(--red); }
+.fc-state--erro { color: var(--danger); }
 
 /* O calendário para de crescer em 760px para manter as células compactas; a
    sobra da largura vai para a coluna lateral, senão viraria vazio à direita. */
@@ -338,7 +338,7 @@ watch(() => [props.grupoId, props.filtros, props.mes], carregar, { deep: true, i
 .fc-card--venc { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
 .fc-card {
-  background: var(--card); border: 1px solid var(--border);
+  background: var(--surface); border: 1px solid var(--border);
   border-radius: 12px; padding: 16px;
 }
 .fc-card-head {
@@ -346,52 +346,52 @@ watch(() => [props.grupoId, props.filtros, props.mes], carregar, { deep: true, i
   gap: 12px; flex-wrap: wrap; margin-bottom: 12px;
 }
 .fc-card-title {
-  font-family: var(--mono); font-size: 10px; letter-spacing: 1.5px;
-  color: var(--text3); font-weight: 600;
+  font-family: var(--font-display); font-size: var(--fs-xs); letter-spacing: 1.5px;
+  color: var(--text-dim); font-weight: 600;
 }
-.fc-card-sub { font-size: 12px; color: var(--text2); margin-top: 2px; }
-.fc-vazio { font-family: var(--mono); font-size: 11px; color: var(--text3); padding: 16px 0; }
+.fc-card-sub { font-size: var(--fs-xs); color: var(--text-muted); margin-top: 2px; }
+.fc-vazio { font-family: var(--font-display); font-size: var(--fs-xs); color: var(--text-dim); padding: 16px 0; }
 
 .fc-btn, .fc-input, .fc-select {
-  background: var(--bg3); color: var(--text2);
-  border: 1px solid var(--border2); border-radius: 7px;
-  padding: 5px 10px; font-family: var(--mono); font-size: 10px; outline: none;
+  background: var(--surface-2); color: var(--text-muted);
+  border: 1px solid var(--border-strong); border-radius: 7px;
+  padding: 5px 10px; font-family: var(--font-display); font-size: var(--fs-xs); outline: none;
 }
-.fc-btn { cursor: pointer; transition: var(--trans); }
-.fc-btn:hover { border-color: var(--accent); color: var(--accent); }
+.fc-btn { cursor: pointer; transition: var(--transition); }
+.fc-btn:hover { border-color: var(--primary); color: var(--primary); }
 .fc-filtros { display: flex; gap: 6px; flex-wrap: wrap; }
 .fc-input { min-width: 200px; }
 
 /* ── Calendário ── */
 .cal-semana, .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
 .cal-semana {
-  margin-bottom: 4px; font-family: var(--mono); font-size: 10px;
-  color: var(--text3); text-align: center;
+  margin-bottom: 4px; font-family: var(--font-display); font-size: var(--fs-xs);
+  color: var(--text-dim); text-align: center;
 }
 .cal-vazio { aspect-ratio: 1 / 0.58; }
 .cal-dia {
   position: relative; aspect-ratio: 1 / 0.58;
   display: flex; flex-direction: column; align-items: flex-start; gap: 0;
   padding: 3px 6px; overflow: hidden;
-  background: var(--bg3); border: 1px solid var(--border2); border-radius: 7px;
-  cursor: pointer; transition: var(--trans); text-align: left;
+  background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 7px;
+  cursor: pointer; transition: var(--transition); text-align: left;
 }
-.cal-dia:hover:not(:disabled) { border-color: var(--accent); }
+.cal-dia:hover:not(:disabled) { border-color: var(--primary); }
 .cal-dia--vazio { opacity: 0.35; cursor: default; }
-.cal-dia--sel { border-color: var(--accent); background: rgba(0,229,255,0.08); }
-.cal-dia--hoje .cal-num { color: var(--accent); font-weight: 700; }
-.cal-num { font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--text2); line-height: 1.3; }
+.cal-dia--sel { border-color: var(--primary); background: var(--primary-weak); }
+.cal-dia--hoje .cal-num { color: var(--primary); font-weight: 700; }
+.cal-num { font-family: var(--font-display); font-size: var(--fs-sm); font-weight: 600; color: var(--text-muted); line-height: 1.3; }
 .cal-val {
-  font-family: var(--mono); font-size: 11px; line-height: 1.2;
+  font-family: var(--font-display); font-size: var(--fs-xs); line-height: 1.2;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
 }
-.cal-val--in  { color: var(--green); }
-.cal-val--out { color: var(--red); }
+.cal-val--in  { color: var(--success); }
+.cal-val--out { color: var(--danger); }
 /* Marca discreta de que o dia contém pendência, não só realizado. */
 .cal-prev {
   position: absolute; top: 5px; right: 5px;
   width: 6px; height: 6px; border-radius: 50%;
-  background: rgba(245,158,11,0.85);
+  background: var(--warning);
 }
 
 /* ── Resumo ── */
@@ -399,17 +399,17 @@ watch(() => [props.grupoId, props.filtros, props.mes], carregar, { deep: true, i
   display: flex; align-items: center; justify-content: space-between;
   padding: 7px 0; border-bottom: 1px solid var(--border);
 }
-.res-linha--total { border-bottom: none; border-top: 1px solid var(--border2); margin-top: 4px; padding-top: 10px; }
-.res-rot { font-size: 12px; color: var(--text2); display: flex; align-items: center; gap: 6px; }
+.res-linha--total { border-bottom: none; border-top: 1px solid var(--border-strong); margin-top: 4px; padding-top: 10px; }
+.res-rot { font-size: var(--fs-xs); color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
 .res-prev {
-  font-family: var(--mono); font-size: 8px; letter-spacing: 0.5px;
+  font-family: var(--font-display); font-size: var(--fs-xs); letter-spacing: 0.5px;
   padding: 1px 5px; border-radius: 10px;
-  background: rgba(245,158,11,0.14); color: #f59e0b;
+  background: var(--warning-weak); color: var(--warning);
 }
-.res-val { font-family: var(--mono); font-size: 12px; font-weight: 600; }
-.res-val--in  { color: var(--green); }
-.res-val--out { color: var(--red); }
-.res-linha--total .res-val { font-size: 14px; }
+.res-val { font-family: var(--font-display); font-size: var(--fs-xs); font-weight: 600; }
+.res-val--in  { color: var(--success); }
+.res-val--out { color: var(--danger); }
+.res-linha--total .res-val { font-size: var(--fs-base); }
 
 /* ── Próximos vencimentos ── */
 /* A lista rola em vez de esticar o card com o volume de títulos. A rolagem fica
@@ -423,39 +423,39 @@ watch(() => [props.grupoId, props.filtros, props.mes], carregar, { deep: true, i
   padding: 5px 0; border-bottom: 1px solid var(--border);
 }
 .venc-item:last-child { border-bottom: none; }
-.venc-data { font-family: var(--mono); font-size: 10px; color: var(--text3); }
+.venc-data { font-family: var(--font-display); font-size: var(--fs-xs); color: var(--text-dim); }
 .venc-desc { min-width: 0; display: flex; flex-direction: column; }
 .venc-nome {
-  font-size: 12px; line-height: 1.3; color: var(--text);
+  font-size: var(--fs-xs); line-height: 1.3; color: var(--text);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .venc-cat {
-  font-family: var(--mono); font-size: 9px; line-height: 1.3; color: var(--text3);
+  font-family: var(--font-display); font-size: var(--fs-xs); line-height: 1.3; color: var(--text-dim);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.venc-val { font-family: var(--mono); font-size: 11px; font-weight: 600; white-space: nowrap; }
+.venc-val { font-family: var(--font-display); font-size: var(--fs-xs); font-weight: 600; white-space: nowrap; }
 
 /* ── Tabela ── */
 .fc-scroll { overflow-x: auto; }
 .fc-table { width: 100%; border-collapse: collapse; min-width: 720px; }
 .fc-table th {
-  font-family: var(--mono); font-size: 9px; letter-spacing: 1px; color: var(--text3);
-  text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border2); white-space: nowrap;
+  font-family: var(--font-display); font-size: var(--fs-xs); letter-spacing: 1px; color: var(--text-dim);
+  text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border-strong); white-space: nowrap;
 }
 .fc-table td {
-  padding: 8px 12px; font-size: 12px; color: var(--text);
+  padding: 8px 12px; font-size: var(--fs-xs); color: var(--text);
   border-bottom: 1px solid var(--border);
 }
 .fc-table tr:last-child td { border-bottom: none; }
-.fc-table tr:hover td { background: rgba(255,255,255,0.025); }
+.fc-table tr:hover td { background: var(--surface-2); }
 .ta-r { text-align: right; }
-.mono { font-family: var(--mono); font-size: 11px; }
+.mono { font-family: var(--font-display); font-size: var(--fs-xs); }
 
 .pill {
   display: inline-flex; padding: 2px 8px; border-radius: 20px;
-  font-family: var(--mono); font-size: 9px; font-weight: 600; white-space: nowrap;
+  font-family: var(--font-display); font-size: var(--fs-xs); font-weight: 600; white-space: nowrap;
 }
-.pill--in  { background: rgba(34,197,94,0.12); color: var(--green); }
-.pill--out  { background: rgba(239,68,68,0.12); color: var(--red); }
-.pill--pend { background: rgba(245,158,11,0.14); color: #f59e0b; }
+.pill--in  { background: var(--success-weak); color: var(--success); }
+.pill--out  { background: var(--danger-weak); color: var(--danger); }
+.pill--pend { background: var(--warning-weak); color: var(--warning); }
 </style>

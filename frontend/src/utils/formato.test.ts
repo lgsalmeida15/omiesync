@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { fmtMoeda, fmtNumero, fmtCompacto } from './formato'
+import { fmtMoeda, fmtMoedaExata, fmtNumero, fmtCompacto } from './formato'
 
 // Intl usa espaço não separável (U+00A0) depois de "R$". Normaliza para comparar.
 const n = (s: string) => s.replace(/ /g, ' ')
@@ -21,6 +21,27 @@ describe('fmtMoeda', () => {
 
   it('valor grande mantém separador de milhar', () => {
     expect(n(fmtMoeda(-1234567))).toBe('(R$ 1.234.567)')
+  })
+})
+
+describe('fmtMoedaExata', () => {
+  it('mantém os centavos, que fmtMoeda descarta', () => {
+    expect(n(fmtMoedaExata(490000.97))).toBe('R$ 490.000,97')
+    expect(n(fmtMoeda(490000.97))).toBe('R$ 490.001')
+  })
+
+  it('negativo entre parênteses, sem sinal de menos', () => {
+    const r = n(fmtMoedaExata(-490000.97))
+    expect(r).toBe('(R$ 490.000,97)')
+    expect(r).not.toContain('-')
+  })
+
+  it('completa centavos ausentes', () => {
+    expect(n(fmtMoedaExata(1200))).toBe('R$ 1.200,00')
+  })
+
+  it('zero não é tratado como negativo', () => {
+    expect(n(fmtMoedaExata(0))).toBe('R$ 0,00')
   })
 })
 

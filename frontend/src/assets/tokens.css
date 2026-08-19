@@ -1,146 +1,184 @@
 /* ================================================================
-   DESIGN TOKENS — OmieSync Design System
-   Fonte da verdade visual. Não alterar sem aprovação do orquestrador.
+   DESIGN TOKENS — OTMIZTech / Omie Sync
+   Fonte da verdade visual. Nenhuma cor deve existir fora deste arquivo.
+
+   As fontes são carregadas por <link> no index.html, não por @import: o
+   @import bloqueia a renderização desta folha até a requisição resolver.
    ================================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@300;400;500&display=swap');
+/* ─────────────────────────────────────────────────────────────────
+   TEMA CLARO — também o padrão de :root
+   ───────────────────────────────────────────────────────────────── */
+:root, [data-theme="light"] {
+  color-scheme: light;
 
+  --bg:            #f6f6fb;
+  --surface:       #ffffff;
+  --surface-2:     #f0f0f7;
+  --sidebar-bg:    #ffffff;
+  --sidebar-active: rgba(124,77,220,.10);
+  --topbar-bg:     rgba(246,246,251,.80);
+  --overlay:       rgba(16,15,40,.35);
+
+  --border:        #e7e7f0;
+  --border-strong: #d9d9e6;
+
+  --text:          #191631;
+  --text-muted:    #6c6a85;
+  --text-dim:      #9a99ad;
+  --text-oncolor:  #ffffff;
+
+  --primary:       #7c4ddc;
+  --primary-hover: #6b3fd4;
+  --primary-weak:  rgba(124,77,220,.10);
+  --primary-line:  #8b5cf6;
+
+  --accent:        #0891b2;
+  --accent-line:   #22d3ee;
+  --accent-weak:   rgba(34,211,238,.12);
+
+  --success:       #059669;  --success-fill: #10b981;  --success-weak: rgba(16,185,129,.12);
+  --warning:       #b45309;  --warning-fill: #f59e0b;  --warning-weak: rgba(245,158,11,.14);
+  --danger:        #dc2626;  --danger-fill:  #ef4444;  --danger-weak:  rgba(239,68,68,.12);
+  --info:          #0e7490;  --info-fill:    #22d3ee;  --info-weak:    rgba(34,211,238,.12);
+
+  --chart-grid:    rgba(25,22,49,.07);
+  --chart-axis:    #9a99ad;
+
+  --shadow-sm: 0 1px 2px rgba(16,15,40,.06);
+  --shadow-md: 0 4px 16px rgba(16,15,40,.08);
+  --shadow-lg: 0 12px 32px rgba(16,15,40,.12);
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   TEMA ESCURO
+   ───────────────────────────────────────────────────────────────── */
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg:            #07091a;
+  --surface:       #0f1230;
+  --surface-2:     #171a3d;
+  --sidebar-bg:    #05061a;
+  --sidebar-active: rgba(139,92,246,.16);
+  --topbar-bg:     rgba(7,9,26,.75);
+  --overlay:       rgba(0,0,0,.55);
+
+  --border:        #22254a;
+  --border-strong: #2e3260;
+
+  --text:          #f0eeff;
+  --text-muted:    #a0a1c4;
+  --text-dim:      #6d6f96;
+  --text-oncolor:  #0b0620;
+
+  --primary:       #8b5cf6;
+  --primary-hover: #a78bfa;
+  --primary-weak:  rgba(139,92,246,.16);
+  --primary-line:  #a78bfa;
+
+  --accent:        #22d3ee;
+  --accent-line:   #22d3ee;
+  --accent-weak:   rgba(34,211,238,.14);
+
+  --success:       #34d399;  --success-fill: #10b981;  --success-weak: rgba(52,211,153,.16);
+  --warning:       #fbbf24;  --warning-fill: #f59e0b;  --warning-weak: rgba(251,191,36,.16);
+  --danger:        #f87171;  --danger-fill:  #ef4444;  --danger-weak:  rgba(248,113,113,.16);
+  --info:          #67e8f9;  --info-fill:    #22d3ee;  --info-weak:    rgba(34,211,238,.16);
+
+  --chart-grid:    rgba(160,161,196,.12);
+  --chart-axis:    #6d6f96;
+
+  --shadow-sm: none;
+  --shadow-md: 0 8px 24px rgba(0,0,0,.35);
+  --shadow-lg: 0 16px 40px rgba(0,0,0,.45);
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   GLOBAIS — tipografia, forma, espaço e medidas do shell
+   ───────────────────────────────────────────────────────────────── */
 :root {
-  --accent:  #00e5ff;
-  --accent2: #ff6b35;
-  --accent3: #7c3aed;
-  --green:   #22c55e;
-  --red:     #ef4444;
-  --yellow:  #f59e0b;
+  --font-body:    'Inter', system-ui, sans-serif;
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+
+  /* Escala em rem. O piso é --fs-xs = 12px: a base anterior tinha textos de
+     8px e 9px, pequenos demais para leitura. */
+  --fs-xs:   .75rem;    /* 12px */
+  --fs-sm:   .8125rem;  /* 13px */
+  --fs-base: .875rem;   /* 14px */
+  --fs-md:   1rem;      /* 16px */
+  --fs-lg:   1.25rem;   /* 20px */
+  --fs-xl:   1.75rem;   /* 28px */
+  --fs-2xl:  2.25rem;   /* 36px */
+
+  --r-sm:   8px;
+  --r:     12px;
+  --r-lg:  16px;
+  --r-pill: 999px;
+
+  --sp-1:  4px;  --sp-2:  8px;  --sp-3: 12px;  --sp-4: 16px;
+  --sp-5: 24px;  --sp-6: 32px;  --sp-7: 48px;
 
   --sidebar-w:          64px;
-  --sidebar-w-expanded: 280px;
-  --topbar-h:           58px;
-
-  /* Escala de radius */
-  --radius:    12px;
-  --radius-sm:  8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 20px;
-
-  /* Escala de espaçamento (múltiplos de 8) */
-  --space-xs:   4px;
-  --space-sm:   8px;
-  --space-md:  16px;
-  --space-lg:  24px;
-  --space-xl:  32px;
-  --space-xxl: 48px;
-
-  --font:  'Inter', 'Plus Jakarta Sans', sans-serif;
-  --mono:  'DM Mono', monospace;
-  --trans: all 0.22s ease;
+  --sidebar-w-expanded: 248px;
+  --topbar-h:           60px;
+  --transition: 160ms cubic-bezier(.4,0,.2,1);
 }
 
-/* ── DARK THEME (padrão) ── */
-[data-theme="dark"] {
-  --bg:       #080c12;
-  --bg2:      #0d1520;
-  --bg3:      #111d2e;
-  --card:     #0f1c2e;
-  --card2:    #162540;
-  --border:   rgba(255,255,255,0.06);
-  --border2:  rgba(255,255,255,0.13);
-  --text:     #e2eaf4;
-  --text2:    #7a90a8;
-  --text3:    #3d5468;
-  --topbar-bg:  rgba(8,12,18,0.92);
-  --sidebar-bg: rgba(10,16,26,0.97);
-  --overlay:  rgba(0,0,0,0.55);
-  --shadow:   0 4px 16px rgba(0,0,0,0.28);
-  --glow:     rgba(0,229,255,0.06);
-  --grid-line: rgba(0,229,255,0.03);
-
-  /* Tokens semânticos */
-  --surface-primary:   var(--card);
-  --surface-secondary: var(--bg2);
-  --surface-tertiary:  var(--bg3);
-  --text-primary:      var(--text);
-  --text-secondary:    var(--text2);
-  --text-muted:        var(--text3);
-  --border-default:    var(--border);
-  --border-subtle:     var(--border2);
-  --brand-primary:     var(--accent);
-}
-
-/* ── LIGHT THEME ── */
-[data-theme="light"] {
-  --bg:       #f0f4f9;
-  --bg2:      #e4eaf3;
-  --bg3:      #dde4ef;
-  --card:     #ffffff;
-  --card2:    #f5f8ff;
-  --border:   rgba(0,0,0,0.07);
-  --border2:  rgba(0,0,0,0.13);
-  --text:     #0f1c2e;
-  --text2:    #4a6070;
-  --text3:    #8fa3b4;
-  --topbar-bg:  rgba(240,244,249,0.94);
-  --sidebar-bg: rgba(255,255,255,0.98);
-  --overlay:  rgba(0,0,0,0.35);
-  --shadow:   0 2px 12px rgba(0,0,0,0.08);
-  --glow:     rgba(0,229,255,0.04);
-  --grid-line: rgba(0,0,0,0.04);
-
-  /* Tokens semânticos */
-  --surface-primary:   var(--card);
-  --surface-secondary: var(--bg2);
-  --surface-tertiary:  var(--bg3);
-  --text-primary:      var(--text);
-  --text-secondary:    var(--text2);
-  --text-muted:        var(--text3);
-  --border-default:    var(--border);
-  --border-subtle:     var(--border2);
-  --brand-primary:     var(--accent);
-}
-
-/* ── RESET ── */
-*, *::before, *::after {
-  margin: 0; padding: 0; box-sizing: border-box;
-}
+/* ─────────────────────────────────────────────────────────────────
+   BASE
+   ───────────────────────────────────────────────────────────────── */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
 html { scroll-behavior: smooth; }
 
 body {
-  font-family: var(--font);
+  font-family: var(--font-body);
+  font-size: var(--fs-base);
+  line-height: 1.5;
   background: var(--bg);
   color: var(--text);
   min-height: 100vh;
   overflow-x: hidden;
-  transition: background 0.3s, color 0.3s;
+  -webkit-font-smoothing: antialiased;
+  transition: background var(--transition), color var(--transition);
 }
 
-/* Grid pattern dark */
-[data-theme="dark"] body::before {
-  content: '';
-  position: fixed; inset: 0;
-  background-image:
-    linear-gradient(var(--grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
-  background-size: 48px 48px;
-  z-index: 0; pointer-events: none;
+::selection { background: var(--primary-weak); }
+:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 6px; }
+
+/* Números tabulares. Space Grotesk é proporcional, ao contrário da DM Mono que
+   usávamos antes — sem "tnum" as colunas de valores deixam de alinhar. */
+.num {
+  font-family: var(--font-display);
+  font-feature-settings: "tnum" 1;
+  letter-spacing: -.01em;
+}
+
+.eyebrow {
+  font-size: var(--fs-xs); font-weight: 600;
+  letter-spacing: .08em; text-transform: uppercase;
+  color: var(--text-dim);
 }
 
 /* ── SCROLLBAR ── */
-::-webkit-scrollbar { width: 5px; height: 5px; }
-::-webkit-scrollbar-track { background: var(--bg); }
-::-webkit-scrollbar-thumb { background: var(--bg3); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--border2); }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
 
-/* ── ANIMATIONS ── */
+/* ── ANIMAÇÕES ── */
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(14px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-
 @keyframes pulse {
   0%, 100% { opacity: 1; }
-  50%       { opacity: 0.4; }
+  50%      { opacity: 0.4; }
 }
-
 .fade-up { animation: fadeUp 0.4s ease both; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+  html { scroll-behavior: auto; }
+}

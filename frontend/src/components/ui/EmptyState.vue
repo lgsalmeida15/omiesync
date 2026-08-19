@@ -33,19 +33,19 @@ withDefaults(defineProps<{
 }
 .empty-icon {
   width: 48px; height: 48px;
-  color: var(--text3);
+  color: var(--text-dim);
   margin-bottom: 4px;
 }
 .empty-icon svg { width: 100%; height: 100%; }
 .empty-title {
-  font-size: 14px;
+  font-size: var(--fs-base);
   font-weight: 600;
-  color: var(--text2);
+  color: var(--text-muted);
 }
 .empty-desc {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--text3);
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  color: var(--text-dim);
   max-width: 320px;
 }
 </style>

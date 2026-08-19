@@ -1,7 +1,7 @@
 <template>
   <div class="modal-overlay" @click="$emit('close')">
     <div class="modal-card" @click.stop>
-      <div class="section-title" style="color:var(--accent)">SINCRONISMO EM ANDAMENTO</div>
+      <div class="section-title" style="color:var(--primary)">SINCRONISMO EM ANDAMENTO</div>
       
       <div class="info-box">
         <div class="info-row">
@@ -78,7 +78,7 @@ function fmtDate(d: string | null) {
 
 <style scoped>
 .modal-overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.8);
+  position: fixed; inset: 0; background: var(--overlay);
   backdrop-filter: blur(4px); z-index: 2000;
   display: flex; align-items: center; justify-content: center;
 }
@@ -87,7 +87,7 @@ function fmtDate(d: string | null) {
   border-radius: 12px; padding: 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.5);
 }
 .info-box {
-  background: rgba(255,255,255,0.03); border: 1px solid var(--border2);
+  background: var(--surface-2); border: 1px solid var(--border-strong);
   border-radius: 8px; padding: 16px; margin: 16px 0;
 }
 .info-row {
@@ -95,12 +95,12 @@ function fmtDate(d: string | null) {
   margin-bottom: 8px;
 }
 .info-row:last-child { margin-bottom: 0; }
-.label { font-family: var(--mono); font-size: 9px; color: var(--text3); }
-.value { font-size: 13px; color: var(--text); }
-.td-mono { font-family: var(--mono); font-size: 11px; }
+.label { font-family: var(--font-display); font-size: var(--fs-xs); color: var(--text-dim); }
+.value { font-size: var(--fs-sm); color: var(--text); }
+.td-mono { font-family: var(--font-display); font-size: var(--fs-xs); }
 
 .message {
-  font-size: 12px; color: var(--text2); line-height: 1.6;
+  font-size: var(--fs-xs); color: var(--text-muted); line-height: 1.6;
   margin-bottom: 24px;
 }
 
@@ -109,26 +109,26 @@ function fmtDate(d: string | null) {
 }
 
 .btn-primary {
-  background: var(--accent) !important;
+  background: var(--primary) !important;
   color: var(--bg) !important;
   font-weight: 700;
 }
 
-.pill { display: inline-flex; padding: 2px 9px; border-radius: 20px; font-family: var(--mono); font-size: 10px; font-weight: 600; }
-.pill-green { background: rgba(34,197,94,0.12); color: #22c55e; }
-.pill-red { background: rgba(239,68,68,0.12); color: #ef4444; }
-.pill-blue { background: rgba(0,229,255,0.1); color: #00e5ff; }
-.pill-gray { background: rgba(255,255,255,0.06); color: var(--text3); }
+.pill { display: inline-flex; padding: 2px 9px; border-radius: 20px; font-family: var(--font-display); font-size: var(--fs-xs); font-weight: 600; }
+.pill-green { background: var(--success-weak); color: var(--success); }
+.pill-red { background: var(--danger-weak); color: var(--danger); }
+.pill-blue { background: var(--primary-weak); color: var(--info); }
+.pill-gray { background: var(--surface-2); color: var(--text-dim); }
 
 .section-title {
-  font-family: var(--mono); font-size: 11px; letter-spacing: 1.5px;
+  font-family: var(--font-display); font-size: var(--fs-xs); letter-spacing: 1.5px;
   text-transform: uppercase; margin-bottom: 16px;
 }
 
 .btn-inline {
-  background: var(--bg3); border: 1px solid var(--border2);
+  background: var(--surface-2); border: 1px solid var(--border-strong);
   color: var(--text); border-radius: 4px; padding: 8px 16px;
-  font-size: 11px; cursor: pointer; transition: var(--trans);
+  font-size: var(--fs-xs); cursor: pointer; transition: var(--transition);
 }
-.btn-inline:hover { border-color: var(--accent); color: var(--accent); }
+.btn-inline:hover { border-color: var(--primary); color: var(--primary); }
 </style>

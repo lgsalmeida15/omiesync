@@ -116,7 +116,7 @@ onBeforeUnmount(() => chart?.destroy())
 
 <style scoped>
 .gr-card {
-  background: var(--card); border: 1px solid var(--border);
+  background: var(--surface); border: 1px solid var(--border);
   border-radius: 12px; padding: 16px;
 }
 .gr-head {
@@ -124,18 +124,18 @@ onBeforeUnmount(() => chart?.destroy())
   gap: 12px; margin-bottom: 12px;
 }
 .gr-title {
-  font-family: var(--mono); font-size: 10px; letter-spacing: 1.5px;
-  color: var(--text3); font-weight: 600;
+  font-family: var(--font-display); font-size: var(--fs-xs); letter-spacing: 1.5px;
+  color: var(--text-dim); font-weight: 600;
 }
-.gr-sub { font-size: 12px; color: var(--text2); margin-top: 2px; }
-.gr-vazio { font-family: var(--mono); font-size: 11px; color: var(--text3); padding: 24px 0; }
+.gr-sub { font-size: var(--fs-xs); color: var(--text-muted); margin-top: 2px; }
+.gr-vazio { font-family: var(--font-display); font-size: var(--fs-xs); color: var(--text-dim); padding: 24px 0; }
 .gr-acao {
-  background: var(--bg3); color: var(--text2);
-  border: 1px solid var(--border2); border-radius: 7px;
-  padding: 4px 9px; font-family: var(--mono); font-size: 9px;
-  cursor: pointer; transition: var(--trans); white-space: nowrap;
+  background: var(--surface-2); color: var(--text-muted);
+  border: 1px solid var(--border-strong); border-radius: 7px;
+  padding: 4px 9px; font-family: var(--font-display); font-size: var(--fs-xs);
+  cursor: pointer; transition: var(--transition); white-space: nowrap;
 }
-.gr-acao:hover { border-color: var(--accent); color: var(--accent); }
+.gr-acao:hover { border-color: var(--primary); color: var(--primary); }
 
 .gr-corpo { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 14px; align-items: center; }
 @media (max-width: 640px) { .gr-corpo { grid-template-columns: 1fr; } }
@@ -145,24 +145,24 @@ onBeforeUnmount(() => chart?.destroy())
   position: absolute; inset: 0; display: flex; flex-direction: column;
   align-items: center; justify-content: center; pointer-events: none;
 }
-.gr-centro-rot { font-family: var(--mono); font-size: 8px; letter-spacing: 1.5px; color: var(--text3); }
-.gr-centro-val { font-family: var(--mono); font-size: 17px; font-weight: 700; color: var(--text); }
+.gr-centro-rot { font-family: var(--font-display); font-size: var(--fs-xs); letter-spacing: 1.5px; color: var(--text-dim); }
+.gr-centro-val { font-family: var(--font-display); font-size: var(--fs-lg); font-weight: 700; color: var(--text); }
 
 .gr-legenda { display: flex; flex-direction: column; gap: 1px; max-height: 190px; overflow-y: auto; }
 .leg-item {
   display: grid; grid-template-columns: 10px minmax(0, 1fr) auto 44px;
   gap: 7px; align-items: center;
   background: none; border: none; padding: 4px 6px; border-radius: 6px;
-  cursor: pointer; text-align: left; transition: var(--trans);
+  cursor: pointer; text-align: left; transition: var(--transition);
 }
-.leg-item:hover { background: var(--bg3); }
+.leg-item:hover { background: var(--surface-2); }
 .leg-item--off { opacity: 0.4; }
 .leg-item--off .leg-rot { text-decoration: line-through; }
 .leg-cor { width: 10px; height: 10px; border-radius: 3px; }
 .leg-rot {
-  font-size: 11px; color: var(--text2);
+  font-size: var(--fs-xs); color: var(--text-muted);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.leg-val { font-family: var(--mono); font-size: 10px; color: var(--text); white-space: nowrap; }
-.leg-pct { font-family: var(--mono); font-size: 9px; color: var(--text3); text-align: right; }
+.leg-val { font-family: var(--font-display); font-size: var(--fs-xs); color: var(--text); white-space: nowrap; }
+.leg-pct { font-family: var(--font-display); font-size: var(--fs-xs); color: var(--text-dim); text-align: right; }
 </style>

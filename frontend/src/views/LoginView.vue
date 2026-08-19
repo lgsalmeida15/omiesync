@@ -88,11 +88,11 @@ async function submit() {
 
 .login-card {
   width: 100%; max-width: 420px;
-  background: var(--card);
-  border: 1px solid var(--border2);
-  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r);
   padding: 40px 36px;
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-md);
   position: relative; z-index: 1;
 }
 
@@ -103,33 +103,33 @@ async function submit() {
 
 .login-logo-icon {
   width: 44px; height: 44px; border-radius: 12px;
-  background: linear-gradient(135deg, var(--accent), var(--accent3));
+  background: linear-gradient(135deg, var(--primary), var(--primary-line));
   display: flex; align-items: center; justify-content: center;
-  font-size: 20px; font-weight: 800; color: #080c12; flex-shrink: 0;
-  box-shadow: 0 0 24px rgba(0,229,255,0.3);
+  font-size: var(--fs-lg); font-weight: 800; color: var(--text-oncolor); flex-shrink: 0;
+  box-shadow: 0 0 24px var(--primary-weak);
 }
 
-.login-logo-name { font-size: 22px; font-weight: 800; color: var(--text); }
-.login-logo-name span { color: var(--accent); }
-.login-logo-sub { font-family: var(--mono); font-size: 9px; color: var(--text3); letter-spacing: 2px; margin-top: 2px; }
+.login-logo-name { font-size: var(--fs-lg); font-weight: 800; color: var(--text); }
+.login-logo-name span { color: var(--primary); }
+.login-logo-sub { font-family: var(--font-display); font-size: var(--fs-xs); color: var(--text-dim); letter-spacing: 2px; margin-top: 2px; }
 
 .login-form { display: flex; flex-direction: column; gap: 18px; }
 
 .login-error {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--red);
-  background: rgba(239,68,68,0.08);
-  border: 1px solid rgba(239,68,68,0.2);
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  color: var(--danger);
+  background: var(--danger-weak);
+  border: 1px solid var(--danger-weak);
   border-radius: 7px;
   padding: 9px 12px;
 }
 
 .login-footer {
   text-align: center;
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--text3);
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  color: var(--text-dim);
   margin-top: 28px;
 }
 </style>
