@@ -177,42 +177,55 @@
     <!-- Conteúdo -->
     <div v-else-if="dados" class="dash-content">
 
-      <!-- Cards KPI -->
-      <div class="section-title">INDICADORES</div>
+      <!--
+        Cards KPI. Sem faixa "INDICADORES" acima: os quatro rótulos já dizem o
+        que cada número é, e o título só empurrava o conteúdo para baixo.
+
+        A altura não é fixada — vem do conteúdo, que difere por card: receita e
+        despesa levam sparkline, resultado leva a barra de margem e saldo a
+        contagem de contas. Fixar altura cortaria o mais alto ou deixaria folga
+        nos outros.
+      -->
       <div class="cards-row">
-        <div class="kpi-card kpi-receita">
+        <div class="kpi-card">
           <div class="kpi-header">
-            <span class="kpi-label">RECEITA TOTAL</span>
-            <span class="kpi-icon kpi-icon--green">↑</span>
+            <span class="kpi-label">Receita total</span>
+            <span class="kpi-icon kpi-icon--green"><IconArrowUpRight /></span>
           </div>
           <div class="kpi-value kpi-value--green">{{ fmtExato(dados.cards.receita_total) }}</div>
-          <div class="kpi-sub">Ano {{ filtros.ano }}</div>
+          <div class="spark-wrap"><canvas ref="canvasSparkRec" /></div>
         </div>
-        <div class="kpi-card kpi-despesa">
+
+        <div class="kpi-card">
           <div class="kpi-header">
-            <span class="kpi-label">DESPESA TOTAL</span>
-            <span class="kpi-icon kpi-icon--red">↓</span>
+            <span class="kpi-label">Despesa total</span>
+            <span class="kpi-icon kpi-icon--red"><IconArrowDownRight /></span>
           </div>
           <div class="kpi-value kpi-value--red">{{ fmtDespesa(dados.cards.despesa_total) }}</div>
-          <div class="kpi-sub">Ano {{ filtros.ano }}</div>
+          <div class="spark-wrap"><canvas ref="canvasSparkDesp" /></div>
         </div>
-        <div class="kpi-card kpi-resultado">
+
+        <div class="kpi-card">
           <div class="kpi-header">
-            <span class="kpi-label">RESULTADO</span>
-            <span class="kpi-icon kpi-icon--accent">◈</span>
+            <span class="kpi-label">Resultado</span>
+            <span class="kpi-icon kpi-icon--accent"><IconLineChart /></span>
           </div>
           <div class="kpi-value" :class="dados.cards.resultado >= 0 ? 'kpi-value--green' : 'kpi-value--red'">
             {{ fmtExato(dados.cards.resultado) }}
           </div>
-          <div class="kpi-sub">Receita − Despesa + Saldo CC</div>
+          <div class="progress"><i :style="{ width: margemBarra }" /></div>
+          <div class="kpi-foot">{{ margemTexto }}</div>
         </div>
-        <div class="kpi-card kpi-saldo">
+
+        <div class="kpi-card">
           <div class="kpi-header">
-            <span class="kpi-label">SALDO CONTAS</span>
-            <span class="kpi-icon kpi-icon--yellow">⬡</span>
+            <span class="kpi-label">Saldo em contas</span>
+            <span class="kpi-icon kpi-icon--cyan"><IconCreditCard /></span>
           </div>
-          <div class="kpi-value kpi-value--yellow">{{ fmtExato(dados.cards.saldo_contas_correntes) }}</div>
-          <div class="kpi-sub">Saldo inicial cadastrado</div>
+          <div class="kpi-value">{{ fmtExato(dados.cards.saldo_contas_correntes) }}</div>
+          <div class="kpi-foot">
+            <span class="tag tag--ok">{{ contasNoFluxo }}</span> consideradas no fluxo
+          </div>
         </div>
       </div>
 
@@ -267,6 +280,9 @@ import { fetchDashboard, fetchFiltros, type DashboardData, type FiltrosDisponive
 import AppSpinner from '@/components/ui/AppSpinner.vue'
 import { fmtMoeda, fmtMoedaExata, fmtCompacto } from '@/utils/formato'
 import { coresGrafico, comAlfa } from '@/utils/tema'
+import {
+  IconArrowUpRight, IconArrowDownRight, IconLineChart, IconCreditCard,
+} from '@/components/ui/icons'
 import { agruparContas, aplicarGrupo, type GrupoContas } from '@/utils/contas'
 
 Chart.register(...registerables, ChartDataLabels)
@@ -508,10 +524,14 @@ const clienteSugestoes = computed(() => {
 })
 
 // ── Gráficos ───────────────────────────────────────────────────────────────
-const canvasRecDesp = ref<HTMLCanvasElement | null>(null)
-const canvasAcum    = ref<HTMLCanvasElement | null>(null)
-let chartRecDesp: Chart | null = null
-let chartAcum:    Chart | null = null
+const canvasRecDesp    = ref<HTMLCanvasElement | null>(null)
+const canvasAcum       = ref<HTMLCanvasElement | null>(null)
+const canvasSparkRec   = ref<HTMLCanvasElement | null>(null)
+const canvasSparkDesp  = ref<HTMLCanvasElement | null>(null)
+let chartRecDesp:   Chart | null = null
+let chartAcum:      Chart | null = null
+let chartSparkRec:  Chart | null = null
+let chartSparkDesp: Chart | null = null
 
 // Formatação contábil: negativo entre parênteses. Ver src/utils/formato.ts.
 const fmt  = fmtMoeda
@@ -621,6 +641,85 @@ function buildChartRecDesp() {
   })
 }
 
+/**
+ * Sparkline de um card: só a linha, sem eixo, grade, legenda ou rótulo.
+ *
+ * O contêiner `.spark-wrap` tem altura fixa e o canvas é absoluto dentro dele.
+ * Isso não é estética: com `responsive: true` o Chart.js dimensiona pelo pai, e
+ * num pai de altura automática o canvas realimenta o próprio tamanho e cresce
+ * sem limite — no mockup chegou a 431×2644px antes de eu fechar a caixa.
+ */
+function buildSpark(
+  canvas: HTMLCanvasElement | null,
+  serie: number[],
+  cor: string,
+): Chart | null {
+  if (!canvas || serie.length < 2) return null
+  return new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: serie.map((_, i) => i),
+      datasets: [{
+        data: serie,
+        borderColor: cor,
+        backgroundColor: comAlfa(cor, 0.14),
+        borderWidth: 1.75,
+        fill: true,
+        tension: 0.38,
+        pointRadius: 0,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      // Sem interação: a sparkline é ilustrativa e o número exato já está acima.
+      events: [],
+      plugins: { legend: { display: false }, tooltip: { enabled: false }, datalabels: { display: false } },
+      scales: { x: { display: false }, y: { display: false } },
+      layout: { padding: 0 },
+    },
+  })
+}
+
+function buildSparklines() {
+  if (!dados.value) return
+  chartSparkRec?.destroy()
+  chartSparkDesp?.destroy()
+  const c  = coresGrafico()
+  const ms = dados.value.grafico_mensal
+  chartSparkRec  = buildSpark(canvasSparkRec.value,  ms.map(m => m.receita), c.receita)
+  chartSparkDesp = buildSpark(canvasSparkDesp.value, ms.map(m => m.despesa), c.despesa)
+}
+
+/**
+ * Margem sobre a receita. Receita zero devolve 0 em vez de dividir: o período
+ * pode não ter faturamento e uma divisão por zero pintaria "NaN%" no card.
+ */
+const margemPct = computed(() => {
+  const r = dados.value?.cards.receita_total ?? 0
+  if (r <= 0) return 0
+  return (dados.value!.cards.resultado / r) * 100
+})
+
+// A barra é limitada a 0–100%: resultado acima da receita (por conta do saldo
+// somado) passaria de 100 e vazaria da caixa.
+const margemBarra = computed(() => `${Math.max(0, Math.min(100, margemPct.value))}%`)
+
+const margemTexto = computed(() => {
+  const r = dados.value?.cards.receita_total ?? 0
+  if (r <= 0) return 'Sem receita no período'
+  return `Margem de ${margemPct.value.toFixed(1).replace('.', ',')}% sobre a receita`
+})
+
+/**
+ * Contas marcadas como fluxo de caixa no Omie (cFluxoCaixa = 'S'), que são as
+ * que compõem o saldo do card. Conta vazia é a que o extrato ainda não trouxe;
+ * fica fora para o número não prometer mais do que o saldo representa.
+ */
+const contasNoFluxo = computed(() => {
+  const n = filtrosDisponiveis.contas_correntes.filter(c => c.fluxo_caixa === 'S').length
+  return `${n} ${n === 1 ? 'conta' : 'contas'}`
+})
+
 function buildChartAcum() {
   if (!canvasAcum.value || !dados.value) return
   chartAcum?.destroy()
@@ -700,6 +799,7 @@ watch(dados, () => {
   setTimeout(() => {
     buildChartRecDesp()
     buildChartAcum()
+    buildSparklines()
   }, 50)
 }, { flush: 'post' })
 
@@ -711,7 +811,7 @@ watch(dados, () => {
 // recarga. Só apareceu quando fomos medir.
 watch(
   () => ui.theme,
-  () => { if (dados.value) { nextTick(() => { buildChartRecDesp(); buildChartAcum() }) } }
+  () => { if (dados.value) { nextTick(() => { buildChartRecDesp(); buildChartAcum(); buildSparklines() }) } }
 )
 
 // Reconstrói ao voltar da aba Resultado.
@@ -728,6 +828,7 @@ watch(aba, novaAba => {
   nextTick(() => {
     buildChartRecDesp()
     buildChartAcum()
+    buildSparklines()
   })
 })
 
@@ -851,6 +952,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   chartRecDesp?.destroy()
   chartAcum?.destroy()
+  chartSparkRec?.destroy()
+  chartSparkDesp?.destroy()
   clearTimeout(debounceTimer)
   document.removeEventListener('click', closeDropdown)
 })
@@ -1053,46 +1156,70 @@ onBeforeUnmount(() => {
 
 .kpi-card {
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--r); padding: 18px 20px;
-  position: relative; overflow: hidden; transition: var(--transition);
-  /* Altura fixa e nao min-height: os quatro cards ficam lado a lado e um deles
-     com valor mais longo esticava so a propria coluna, desalinhando a linha. */
-  height: 133px;
-  display: flex; flex-direction: column;
+  border-radius: var(--r); padding: 13px var(--sp-4);
+  box-shadow: var(--shadow-sm);
+  transition: background var(--transition), border-color var(--transition);
 }
-.kpi-card::before {
-  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+/* Sem faixa colorida de 2px no topo: com o icone ja marcando a cor de cada
+   indicador, a faixa repetia a mesma informacao. Sem hover com translateY
+   tambem -- o card nao e clicavel, e o movimento sugeria que fosse. */
+
+.kpi-header { display: flex; align-items: center; gap: var(--sp-2); margin-bottom: var(--sp-2); }
+.kpi-label {
+  margin-right: auto;
+  font-size: var(--fs-xs); font-weight: 600;
+  letter-spacing: .06em; text-transform: uppercase; color: var(--text-dim);
 }
-.kpi-receita::before   { background: var(--success); }
-.kpi-despesa::before   { background: var(--danger); }
-.kpi-resultado::before { background: var(--primary); }
-.kpi-saldo::before     { background: var(--warning); }
-.kpi-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
 
-.kpi-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 12px; }
-.kpi-label  { font-family: var(--font-display); font-size: var(--fs-xs); font-weight: 500; color: var(--text-dim); letter-spacing: 1.5px; text-transform: uppercase; }
-
-.kpi-icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: var(--fs-md); }
-.kpi-icon--green  { background: var(--success-weak);  color: var(--success); }
+.kpi-icon {
+  width: 28px; height: 28px; border-radius: 8px;
+  display: grid; place-items: center; flex-shrink: 0;
+}
+.kpi-icon :deep(svg) { width: 15px; height: 15px; stroke-width: 1.9; fill: none; }
+.kpi-icon--green  { background: var(--success-weak); color: var(--success); }
 .kpi-icon--red    { background: var(--danger-weak);  color: var(--danger); }
-.kpi-icon--accent { background: var(--primary-weak);  color: var(--primary); }
-.kpi-icon--yellow { background: var(--warning-weak); color: var(--warning); }
+.kpi-icon--accent { background: var(--primary-weak); color: var(--primary); }
+.kpi-icon--cyan   { background: var(--accent-weak);  color: var(--accent); }
 
 /* Valor cheio, com centavos. `tnum` porque a Space Grotesk e proporcional: sem
    isso os digitos mudam de largura e as quatro colunas deixam de alinhar.
-   O clamp encolhe a fonte quando o numero e longo demais para a largura do card,
-   em vez de deixar o texto vazar ou quebrar em duas linhas. */
+   fs-xl e nao fs-2xl: "R$ 1.171.900,00" tem 15 caracteres e a 36px nao caberia
+   na coluna do grid de 4 cards. */
 .kpi-value {
   font-family: var(--font-display);
   font-feature-settings: "tnum" 1;
-  font-size: clamp(1.05rem, 1.9vw, var(--fs-lg));
-  font-weight: 800; line-height: 1.1; margin-bottom: 6px; letter-spacing: -0.5px;
+  font-size: var(--fs-xl);
+  font-weight: 600; line-height: 1.15; letter-spacing: -.02em;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.kpi-value--green  { color: var(--success); }
-.kpi-value--red    { color: var(--danger); }
-.kpi-value--yellow { color: var(--warning); }
-.kpi-sub { font-family: var(--font-display); font-size: var(--fs-xs); color: var(--text-dim); margin-top: auto; }
+.kpi-value--green { color: var(--success); }
+.kpi-value--red   { color: var(--danger); }
+
+.kpi-foot {
+  display: flex; align-items: center; gap: var(--sp-2);
+  margin-top: 6px; font-size: var(--fs-xs); color: var(--text-muted);
+}
+
+/* O canvas precisa de um contêiner com altura definida: com responsive:true o
+   Chart.js dimensiona pelo pai, e sem essa caixa a sparkline cresce sem limite. */
+.spark-wrap { margin-top: 6px; height: 30px; position: relative; }
+.spark-wrap canvas { position: absolute; inset: 0; }
+
+.progress {
+  margin-top: 8px; height: 5px; border-radius: var(--r-pill);
+  background: var(--surface-2); overflow: hidden;
+}
+.progress i {
+  display: block; height: 100%; border-radius: var(--r-pill);
+  background: linear-gradient(90deg, var(--primary-line), var(--accent-line));
+}
+
+.tag {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: var(--fs-xs); font-weight: 600;
+  padding: 3px 9px; border-radius: var(--r-pill);
+}
+.tag--ok { background: var(--success-weak); color: var(--success); }
 
 /* ── Gráficos ──────────────────────────────────────────────────────────── */
 .charts-row {
