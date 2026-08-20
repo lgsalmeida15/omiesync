@@ -6,20 +6,17 @@
     @mouseenter="hovering = true"
     @mouseleave="hovering = false"
   >
-    <!-- Clique no logo fixa a sidebar aberta. O estado já existia no store
-         (ui.sidebarPinned, persistido) mas nenhum elemento o acionava — dava
-         para chegar nele só editando o localStorage à mão. -->
+    <!--
+      O logo é só a marca: não clica, não recebe foco, não fixa nada.
+
+      Ele já foi um botão que alternava ui.sidebarPinned, e isso era um defeito:
+      um clique num quadrado de 34px gravava o estado no localStorage e a barra
+      ficava aberta para sempre — inclusive após recarregar, sem pista de como
+      desfazer. Clicar num logo é gesto de "voltar ao início", não de fixar menu.
+      Havia ainda um caminho por teclado: com tabindex, espaço também fixava.
+    -->
     <div class="sidebar-top">
-      <div
-        class="logo-icon"
-        role="button"
-        tabindex="0"
-        :title="ui.sidebarPinned ? 'Desafixar menu' : 'Fixar menu aberto'"
-        :aria-pressed="ui.sidebarPinned"
-        @click="ui.toggleSidebarPin()"
-        @keydown.enter.prevent="ui.toggleSidebarPin()"
-        @keydown.space.prevent="ui.toggleSidebarPin()"
-      >
+      <div class="logo-icon">
         <span class="logo-marca" aria-hidden="true" />
         <span class="logo-letra" aria-hidden="true">V</span>
       </div>
@@ -74,7 +71,6 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { useUiStore } from '@/stores/ui'
 import {
   IconGrid, IconBuilding, IconFactory,
   IconUsers, IconKey, IconSync, IconUser, IconDatabase
@@ -88,7 +84,6 @@ defineProps<{ mobileOpen: boolean }>()
 defineEmits<{ close: [] }>()
 
 const auth     = useAuthStore()
-const ui       = useUiStore()
 const router   = useRouter()
 const hovering = ref(false)
 
@@ -99,7 +94,7 @@ async function handleLogout() {
   }
 }
 
-const isExpanded = computed(() => ui.sidebarPinned || hovering.value)
+const isExpanded = computed(() => hovering.value)
 
 const initials = computed(() => {
   const name = auth.user?.nome ?? ''
@@ -193,7 +188,7 @@ const navSections = computed(() => {
 }
 
 .logo-icon {
-  width: 34px; height: 34px; flex-shrink: 0; cursor: pointer;
+  width: 34px; height: 34px; flex-shrink: 0;
   display: grid; place-items: center;
 }
 .logo-icon .logo-marca { width: 34px; height: 34px; }

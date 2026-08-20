@@ -9,7 +9,14 @@ function temaSalvo(): Tema {
 
 export const useUiStore = defineStore('ui', () => {
   const theme         = ref<Tema>(temaSalvo())
-  const sidebarPinned = ref(localStorage.getItem('sidebar_pinned') === 'true')
+  /*
+   * Limpeza única de 'sidebar_pinned'. A chave existiu enquanto o clique no
+   * logo fixava a sidebar aberta — o que virou defeito: quem clicasse uma vez
+   * ficava com a barra aberta para sempre, inclusive após recarregar. O
+   * gatilho saiu, mas quem já clicou tem a chave gravada; sem remover, esses
+   * navegadores carregariam estado morto indefinidamente.
+   */
+  localStorage.removeItem('sidebar_pinned')
 
   /**
    * Barra de filtros recolhida por padrão: fechada o cabeçalho fixo devolve
@@ -40,10 +47,5 @@ export const useUiStore = defineStore('ui', () => {
     theme.value = theme.value === 'dark' ? 'light' : 'dark'
   }
 
-  function toggleSidebarPin() {
-    sidebarPinned.value = !sidebarPinned.value
-    localStorage.setItem('sidebar_pinned', String(sidebarPinned.value))
-  }
-
-  return { theme, sidebarPinned, filtrosAbertos, toggleTheme, toggleSidebarPin, toggleFiltros }
+  return { theme, filtrosAbertos, toggleTheme, toggleFiltros }
 })
