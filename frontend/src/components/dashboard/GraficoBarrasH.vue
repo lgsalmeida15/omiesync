@@ -79,17 +79,17 @@ function alternarTodos() {
 <style scoped>
 .gr-card {
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: 12px; padding: 16px;
+  border-radius: var(--r); padding: var(--sp-5);
 }
 .gr-head {
   display: flex; align-items: flex-start; justify-content: space-between;
-  gap: 12px; margin-bottom: 12px;
+  gap: var(--sp-4); margin-bottom: var(--sp-4); flex-wrap: wrap;
 }
 .gr-title {
-  font-family: var(--font-display); font-size: var(--fs-xs); letter-spacing: 1.5px;
-  color: var(--text-dim); font-weight: 600;
+  font-family: var(--font-display); font-size: var(--fs-md); font-weight: 600;
+  color: var(--text);
 }
-.gr-sub { font-size: var(--fs-xs); color: var(--text-muted); margin-top: 2px; }
+.gr-sub { font-size: var(--fs-xs); color: var(--text-dim); margin-top: 2px; }
 .gr-vazio { font-family: var(--font-display); font-size: var(--fs-xs); color: var(--text-dim); padding: 24px 0; }
 .gr-acao {
   background: var(--surface-2); color: var(--text-muted);
@@ -101,8 +101,8 @@ function alternarTodos() {
 
 .bar-lista { display: flex; flex-direction: column; gap: 3px; }
 .bar-item {
-  display: grid; grid-template-columns: minmax(0, 118px) minmax(0, 1fr) auto;
-  gap: 9px; align-items: center;
+  display: grid; grid-template-columns: minmax(0, 150px) minmax(0, 1fr) auto;
+  gap: var(--sp-3); align-items: center;
   background: none; border: none; padding: 3px 5px; border-radius: 6px;
   cursor: pointer; text-align: left; transition: var(--transition);
 }
@@ -110,14 +110,14 @@ function alternarTodos() {
 .bar-item--off { opacity: 0.4; }
 .bar-item--off .bar-nome { text-decoration: line-through; }
 .bar-nome {
-  font-size: var(--fs-xs); color: var(--text-muted);
+  font-size: var(--fs-sm); color: var(--text-muted);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .bar-trilho {
-  height: 13px; background: var(--surface-2); border-radius: 4px; overflow: hidden;
+  height: 14px; background: var(--surface-2); border-radius: 5px; overflow: hidden;
 }
 .bar-preenchimento {
-  display: block; height: 100%; border-radius: 4px;
+  display: block; height: 100%; border-radius: 5px;
   transition: width 0.25s ease;
 }
 .bar-valor {

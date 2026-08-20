@@ -8,7 +8,7 @@
     <template v-else-if="dados">
       <div class="fc-grid">
         <!-- Calendário -->
-        <section class="fc-card">
+        <section class="fc-card fc-card--cal">
           <div class="fc-card-head">
             <div>
               <div class="fc-card-title">{{ tituloCalendario }}</div>
@@ -45,7 +45,7 @@
         <!-- Lateral: resumo + próximos vencimentos -->
         <div class="fc-lateral">
           <section class="fc-card">
-            <div class="fc-card-title">{{ diaSelecionado ? `RESUMO — DIA ${diaSelecionado}` : 'RESUMO DO MÊS' }}</div>
+            <div class="fc-card-title">{{ diaSelecionado ? `Resumo — dia ${diaSelecionado}` : 'Resumo do mês' }}</div>
             <div class="fc-card-sub">{{ diaSelecionado ? 'Seleção atual' : 'Acumulado do período' }}</div>
 
             <template v-if="tipo !== 'despesa'">
@@ -77,7 +77,7 @@
           </section>
 
           <section class="fc-card fc-card--venc">
-            <div class="fc-card-title">PRÓXIMOS VENCIMENTOS</div>
+            <div class="fc-card-title">Próximos vencimentos</div>
             <div class="fc-card-sub">A partir de hoje, em qualquer mês</div>
             <p v-if="!dados.proximos_vencimentos.length" class="fc-vazio">Nada previsto adiante.</p>
             <div v-else class="venc-lista">
@@ -327,29 +327,35 @@ watch(() => [props.grupoId, props.filtros, props.mes], carregar, { deep: true, i
 /* O calendário para de crescer em 760px para manter as células compactas; a
    sobra da largura vai para a coluna lateral, senão viraria vazio à direita. */
 .fc-grid {
-  display: grid; grid-template-columns: minmax(0, 760px) minmax(320px, 1fr);
-  gap: 16px; align-items: stretch;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-4); align-items: stretch; margin-bottom: var(--sp-4);
 }
 @media (max-width: 1100px) { .fc-grid { grid-template-columns: 1fr; } }
 
 /* O card de vencimentos absorve a altura que sobra, então a coluna lateral
    termina na mesma linha do calendário em qualquer viewport. */
-.fc-lateral { display: flex; flex-direction: column; gap: 16px; }
-.fc-card--venc { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.fc-lateral { display: flex; flex-direction: column; gap: var(--sp-4); min-height: 0; }
+.fc-card--venc {
+  flex: 1 1 auto; min-height: 210px;
+  display: flex; flex-direction: column;
+}
 
 .fc-card {
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: 12px; padding: 16px;
+  border-radius: var(--r); padding: var(--sp-5);
 }
+/* O card do calendario e coluna flex para que .cal-grid possa usar flex:1 e
+   preencher a altura, em vez de a altura sair do aspect-ratio da celula. */
+.fc-card--cal { display: flex; flex-direction: column; }
 .fc-card-head {
   display: flex; align-items: flex-start; justify-content: space-between;
-  gap: 12px; flex-wrap: wrap; margin-bottom: 12px;
+  gap: var(--sp-4); flex-wrap: wrap; margin-bottom: var(--sp-4);
 }
 .fc-card-title {
-  font-family: var(--font-display); font-size: var(--fs-xs); letter-spacing: 1.5px;
-  color: var(--text-dim); font-weight: 600;
+  font-family: var(--font-display); font-size: var(--fs-md); font-weight: 600;
+  color: var(--text);
 }
-.fc-card-sub { font-size: var(--fs-xs); color: var(--text-muted); margin-top: 2px; }
+.fc-card-sub { font-size: var(--fs-xs); color: var(--text-dim); margin-top: 2px; }
 .fc-vazio { font-family: var(--font-display); font-size: var(--fs-xs); color: var(--text-dim); padding: 16px 0; }
 
 .fc-btn, .fc-input, .fc-select {
@@ -363,18 +369,23 @@ watch(() => [props.grupoId, props.filtros, props.mes], carregar, { deep: true, i
 .fc-input { min-width: 200px; }
 
 /* ── Calendário ── */
-.cal-semana, .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-semana, .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
 .cal-semana {
-  margin-bottom: 4px; font-family: var(--font-display); font-size: var(--fs-xs);
+  margin-bottom: 6px; font-family: var(--font-display); font-size: var(--fs-xs);
+  font-weight: 600; letter-spacing: .04em;
   color: var(--text-dim); text-align: center;
 }
-.cal-vazio { aspect-ratio: 1 / 0.58; }
+.cal-grid { flex: 1; grid-auto-rows: minmax(56px, 1fr); }
+.cal-vazio { min-height: 56px; }
 .cal-dia {
-  position: relative; aspect-ratio: 1 / 0.58;
+  position: relative; min-height: 56px;
   display: flex; flex-direction: column; align-items: flex-start; gap: 0;
-  padding: 3px 6px; overflow: hidden;
-  background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 7px;
-  cursor: pointer; transition: var(--transition); text-align: left;
+  padding: 6px 8px; overflow: hidden;
+  /* Borda transparente e nao --border-strong: com a celula colapsada em 64px de
+     largura a grade fechada pesava demais. A cor aparece no hover e na selecao. */
+  background: var(--surface-2); border: 1px solid transparent; border-radius: var(--r-sm);
+  cursor: pointer; transition: border-color var(--transition), background var(--transition);
+  text-align: left;
 }
 .cal-dia:hover:not(:disabled) { border-color: var(--primary); }
 .cal-dia--vazio { opacity: 0.35; cursor: default; }
@@ -417,7 +428,7 @@ watch(() => [props.grupoId, props.filtros, props.mes], carregar, { deep: true, i
 /* flex-basis 140px, não auto: é o basis que a grade usa para dimensionar a
    linha. Com basis auto a lista inteira entrava na conta e esticava o
    calendário junto. O grow faz a lista preencher a altura que sobrar. */
-.venc-lista { flex: 1 1 140px; min-height: 0; overflow-y: auto; padding-right: 6px; }
+.venc-lista { flex: 1 1 150px; min-height: 0; overflow-y: auto; padding-right: 6px; }
 .venc-item {
   display: grid; grid-template-columns: 38px 1fr auto; gap: 8px; align-items: center;
   padding: 5px 0; border-bottom: 1px solid var(--border);
