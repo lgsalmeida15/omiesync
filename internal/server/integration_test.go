@@ -278,6 +278,9 @@ func (r *nullSyncRepo) UpdateJobStatus(_ context.Context, _, _, _ string, _, _ *
 func (r *nullSyncRepo) GetControl(_ context.Context, _ string) (*syncsvc.SyncControl, error) {
 	return nil, nil
 }
+func (r *nullSyncRepo) UltimoSyncDoGrupo(_ context.Context, _ string) (*time.Time, error) {
+	return nil, nil
+}
 func (r *nullSyncRepo) UpsertControl(_ context.Context, _ string, _ bool, _, _ int, _, _ *time.Time) (*syncsvc.SyncControl, error) {
 	return nil, nil
 }

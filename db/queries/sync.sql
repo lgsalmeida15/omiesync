@@ -333,3 +333,18 @@ WHERE job_id = $1 AND executor = $2;
 UPDATE _etl.sync_job_progress
 SET status = 'pulado', erro = $3, updated_at = NOW()
 WHERE job_id = $1 AND executor = $2;
+
+-- Horario da ultima sincronizacao concluida entre as empresas ativas do grupo.
+-- Serve de indicador de frescor dos dados no cabecalho: o REFRESH das views
+-- gerenciais acontece imediatamente apos cada sync, entao este horario e um
+-- retrato fiel de quando o dashboard foi atualizado.
+--
+-- Ressalva: o refresh manual pela rota de manutencao nao mexe em ultimo_sync_at,
+-- entao nesse caso especifico o horario fica defasado.
+-- name: GetUltimoSyncDoGrupo :one
+SELECT MAX(sc.ultimo_sync_at)::timestamptz AS ultimo_sync_at
+FROM _etl.sync_control sc
+JOIN _etl.empresas e ON e.id = sc.empresa_id
+WHERE e.grupo_id = $1
+  AND e.deleted_at IS NULL
+  AND e.status = 'ativa';

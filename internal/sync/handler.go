@@ -39,6 +39,10 @@ func (h *Handler) Routes() http.Handler {
 		r.Use(auth.RequireAuth(h.jwtSvc))
 
 		// Status e jobs: viewer com permissão também pode ver
+		// Frescor dos dados do grupo. Um segmento só, então não colide com as
+		// rotas /{empresaID}/... que exigem dois.
+		r.Get("/ultima-atualizacao", h.UltimaAtualizacao)
+
 		r.Get("/{empresaID}/status", h.GetStatus)
 		r.Get("/{empresaID}/pages", h.GetPages)
 		r.Get("/{empresaID}/jobs", h.ListJobs)
@@ -60,6 +64,26 @@ func (h *Handler) Routes() http.Handler {
 }
 
 // GET /sync/{empresaID}/status
+// GET /sync/ultima-atualizacao
+//
+// O grupo vem das claims, não da query: aceitar grupo por parâmetro abriria
+// leitura do frescor de outro cliente.
+func (h *Handler) UltimaAtualizacao(w http.ResponseWriter, r *http.Request) {
+	claims, ok := auth.ClaimsFromContext(r.Context())
+	if !ok || claims.GrupoID == "" {
+		response.OK(w, &UltimaAtualizacao{})
+		return
+	}
+
+	res, err := h.svc.UltimaAtualizacao(r.Context(), claims.GrupoID)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "erro ao buscar última atualização", err)
+		return
+	}
+
+	response.OK(w, res)
+}
+
 func (h *Handler) GetStatus(w http.ResponseWriter, r *http.Request) {
 	empresaID := chi.URLParam(r, "empresaID")
 

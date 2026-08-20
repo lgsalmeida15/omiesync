@@ -47,6 +47,9 @@ func (m *mockSvc) Configurar(_ context.Context, _ string, _ ConfigurarRequest) (
 func (m *mockSvc) GetJobProgress(_ context.Context, _ string) ([]*SyncJobProgress, error) {
 	return m.progress, m.progressErr
 }
+func (m *mockSvc) UltimaAtualizacao(_ context.Context, _ string) (*UltimaAtualizacao, error) {
+	return &UltimaAtualizacao{}, nil
+}
 func (m *mockSvc) GetExecutorConfigs(_ context.Context, _ string) ([]*EmpresaExecutorConfig, error) {
 	return nil, nil
 }

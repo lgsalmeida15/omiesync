@@ -42,6 +42,9 @@ func (m *mockSyncRepo) UpdateJobStatus(_ context.Context, _ string, status, erro
 func (m *mockSyncRepo) GetControl(_ context.Context, _ string) (*syncsvc.SyncControl, error) {
 	return nil, nil
 }
+func (m *mockSyncRepo) UltimoSyncDoGrupo(_ context.Context, _ string) (*time.Time, error) {
+	return nil, nil
+}
 func (m *mockSyncRepo) UpsertControl(_ context.Context, _ string, _ bool, _, _ int, _, _ *time.Time) (*syncsvc.SyncControl, error) {
 	return nil, nil
 }

@@ -19,6 +19,8 @@ type Repository interface {
 	CountJobs(ctx context.Context, empresaID string) (int64, error)
 	UpdateJobStatus(ctx context.Context, id, status, erro string, iniciadoAt, concluidoAt *time.Time) (*SyncJob, error)
 	GetControl(ctx context.Context, empresaID string) (*SyncControl, error)
+	// Frescor dos dados do grupo, para o indicador no cabeçalho.
+	UltimoSyncDoGrupo(ctx context.Context, grupoID string) (*time.Time, error)
 
 	// Manutenção operacional (admin_global)
 	ConsultasAtivas(ctx context.Context) ([]ConsultaAtiva, error)
@@ -179,6 +181,25 @@ func (r *repository) GetControl(ctx context.Context, empresaID string) (*SyncCon
 	return toControlFromRow(row), nil
 }
 
+// UltimoSyncDoGrupo devolve nil quando nenhuma empresa do grupo sincronizou
+// ainda — MAX() sobre conjunto vazio traz NULL, que não é erro.
+func (r *repository) UltimoSyncDoGrupo(ctx context.Context, grupoID string) (*time.Time, error) {
+	q := sqlcgen.New(r.pool)
+	var uid pgtype.UUID
+	if err := uid.Scan(grupoID); err != nil {
+		return nil, fmt.Errorf("sync.repository.UltimoSyncDoGrupo scan uuid: %w", err)
+	}
+	ts, err := q.GetUltimoSyncDoGrupo(ctx, uid)
+	if err != nil {
+		return nil, fmt.Errorf("sync.repository.UltimoSyncDoGrupo: %w", err)
+	}
+	if !ts.Valid {
+		return nil, nil
+	}
+	t := ts.Time
+	return &t, nil
+}
+
 func (r *repository) UpsertControl(ctx context.Context, empresaID string, ativo bool, intervaloIncrementalMin, intervaloFullDias int, proximoSyncAt, proximoFullSyncAt *time.Time) (*SyncControl, error) {
 	q := sqlcgen.New(r.pool)
 	var uid pgtype.UUID
@@ -193,12 +214,12 @@ func (r *repository) UpsertControl(ctx context.Context, empresaID string, ativo 
 		_ = proxFull.Scan(*proximoFullSyncAt)
 	}
 	row, err := q.UpsertSyncControl(ctx, sqlcgen.UpsertSyncControlParams{
-		EmpresaID:              uid,
-		Ativo:                  ativo,
+		EmpresaID:               uid,
+		Ativo:                   ativo,
 		IntervaloIncrementalMin: int32(intervaloIncrementalMin),
-		IntervaloFullDias:      int32(intervaloFullDias),
-		ProximoSyncAt:          prox,
-		ProximoFullSyncAt:      proxFull,
+		IntervaloFullDias:       int32(intervaloFullDias),
+		ProximoSyncAt:           prox,
+		ProximoFullSyncAt:       proxFull,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("sync.repository.UpsertControl: %w", err)
@@ -362,12 +383,12 @@ func (r *repository) GetPendingPages(ctx context.Context, jobID string, limit in
 	result := make([]JobPage, len(rows))
 	for i, row := range rows {
 		result[i] = JobPage{
-			ID:           uuidToStr(row.ID),
-			JobID:        uuidToStr(row.JobID),
-			Modulo:       row.Modulo,
-			Pagina:       int(row.Pagina),
-			TotalPaginas: int(row.TotalPaginas),
-			Tentativas:   int(row.Tentativas),
+			ID:            uuidToStr(row.ID),
+			JobID:         uuidToStr(row.JobID),
+			Modulo:        row.Modulo,
+			Pagina:        int(row.Pagina),
+			TotalPaginas:  int(row.TotalPaginas),
+			Tentativas:    int(row.Tentativas),
 			MaxTentativas: int(row.MaxTentativas),
 		}
 		if row.ProximoRetryAt.Valid {
@@ -405,12 +426,12 @@ func (r *repository) ClaimPageForProcessing(ctx context.Context, pageID string) 
 		return nil, fmt.Errorf("syncRepository.ClaimPageForProcessing: %w", err)
 	}
 	return &JobPage{
-		ID:           uuidToStr(row.ID),
-		JobID:        uuidToStr(row.JobID),
-		Modulo:       row.Modulo,
-		Pagina:       int(row.Pagina),
-		TotalPaginas: int(row.TotalPaginas),
-		Tentativas:   int(row.Tentativas),
+		ID:            uuidToStr(row.ID),
+		JobID:         uuidToStr(row.JobID),
+		Modulo:        row.Modulo,
+		Pagina:        int(row.Pagina),
+		TotalPaginas:  int(row.TotalPaginas),
+		Tentativas:    int(row.Tentativas),
 		MaxTentativas: int(row.MaxTentativas),
 	}, nil
 }
@@ -474,14 +495,14 @@ func (r *repository) GetDLQPages(ctx context.Context) ([]DLQPageRow, error) {
 	result := make([]DLQPageRow, len(rows))
 	for i, row := range rows {
 		result[i] = DLQPageRow{
-			ID:           uuidToStr(row.ID),
-			JobID:        uuidToStr(row.JobID),
-			EmpresaNome:  row.EmpresaNome,
-			GrupoNome:    row.GrupoNome,
-			Modulo:       row.Modulo,
-			Pagina:       int(row.Pagina),
-			TotalPaginas: int(row.TotalPaginas),
-			Tentativas:   int(row.Tentativas),
+			ID:            uuidToStr(row.ID),
+			JobID:         uuidToStr(row.JobID),
+			EmpresaNome:   row.EmpresaNome,
+			GrupoNome:     row.GrupoNome,
+			Modulo:        row.Modulo,
+			Pagina:        int(row.Pagina),
+			TotalPaginas:  int(row.TotalPaginas),
+			Tentativas:    int(row.Tentativas),
 			MaxTentativas: int(row.MaxTentativas),
 		}
 		if row.Erro.Valid {
@@ -602,7 +623,7 @@ func (r *repository) UpsertExecutorConfig(ctx context.Context, empresaID, execut
 	if err := userUID.Scan(updatedBy); err != nil {
 		return nil, err
 	}
-	
+
 	var nText pgtype.Text
 	if notas != nil {
 		nText = pgtype.Text{String: *notas, Valid: true}
@@ -640,19 +661,19 @@ func (r *repository) GetEnabledExecutors(ctx context.Context, empresaID string) 
 	if err := uid.Scan(empresaID); err != nil {
 		return nil, err
 	}
-	
+
 	// Por padrão, todos são ativos. A query busca os que estão explicitamente desativados.
 	rows, err := q.GetEnabledExecutorsByEmpresa(ctx, uid)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Mapa de desativados
 	disabled := make(map[string]bool)
 	for _, row := range rows {
 		disabled[row] = true
 	}
-	
+
 	return disabled, nil
 }
 
@@ -717,13 +738,13 @@ func toJob(row sqlcgen.EtlSyncJob) *SyncJob {
 
 func toControl(row sqlcgen.EtlSyncControl) *SyncControl {
 	c := &SyncControl{
-		ID:                     uuidToStr(row.ID),
-		EmpresaID:              uuidToStr(row.EmpresaID),
-		Ativo:                  row.Ativo,
+		ID:                      uuidToStr(row.ID),
+		EmpresaID:               uuidToStr(row.EmpresaID),
+		Ativo:                   row.Ativo,
 		IntervaloIncrementalMin: int(row.IntervaloIncrementalMin),
-		IntervaloFullDias:      int(row.IntervaloFullDias),
-		CreatedAt:              row.CreatedAt.Time,
-		UpdatedAt:              row.UpdatedAt.Time,
+		IntervaloFullDias:       int(row.IntervaloFullDias),
+		CreatedAt:               row.CreatedAt.Time,
+		UpdatedAt:               row.UpdatedAt.Time,
 	}
 	if row.UltimoSyncAt.Valid {
 		t := row.UltimoSyncAt.Time
@@ -746,13 +767,13 @@ func toControl(row sqlcgen.EtlSyncControl) *SyncControl {
 
 func toControlFromRow(row sqlcgen.GetSyncControlRow) *SyncControl {
 	c := &SyncControl{
-		ID:                     uuidToStr(row.ID),
-		EmpresaID:              uuidToStr(row.EmpresaID),
-		Ativo:                  row.Ativo,
+		ID:                      uuidToStr(row.ID),
+		EmpresaID:               uuidToStr(row.EmpresaID),
+		Ativo:                   row.Ativo,
 		IntervaloIncrementalMin: int(row.IntervaloIncrementalMin),
-		IntervaloFullDias:      int(row.IntervaloFullDias),
-		CreatedAt:              row.CreatedAt.Time,
-		UpdatedAt:              row.UpdatedAt.Time,
+		IntervaloFullDias:       int(row.IntervaloFullDias),
+		CreatedAt:               row.CreatedAt.Time,
+		UpdatedAt:               row.UpdatedAt.Time,
 	}
 	if row.UltimoSyncAt.Valid {
 		t := row.UltimoSyncAt.Time

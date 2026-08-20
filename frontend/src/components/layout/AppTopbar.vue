@@ -20,11 +20,13 @@
 
     <!-- Direita -->
     <div class="topbar-right">
-      <!-- Live indicator -->
-      <div class="live-wrap">
-        <span class="live-dot" />
-        <span class="live-label">AO VIVO</span>
-      </div>
+      <!-- Frescor dos dados. Substitui o "AO VIVO", que dava a impressão de
+           tempo real: os dados vêm de views materializadas atualizadas a cada
+           sync, então o que importa é QUANDO foi a última. Discreto de propósito
+           — é informação de apoio, não estado de sistema. -->
+      <span v-if="ultimaAtualizacao" class="sync-info" :title="tituloSync">
+        {{ ultimaAtualizacao }}
+      </span>
 
       <!-- Filtros: rotulado, não só ícone. É o controle mais usado do dashboard
            e um ícone solitário não comunica que há uma barra recolhida ali. -->
@@ -57,10 +59,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUiStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
+import { syncApi } from '@/api/sync'
 import { Sun, Moon, LogOut } from '@lucide/vue'
 
 defineEmits<{ 'toggle-sidebar': [] }>()
@@ -69,6 +72,53 @@ const route = useRoute()
 const router = useRouter()
 const ui    = useUiStore()
 const auth  = useAuthStore()
+
+// ── Frescor dos dados ──────────────────────────────────────────────────────
+const syncEm = ref<Date | null>(null)
+
+/**
+ * Busca silenciosa: se falhar, o indicador simplesmente não aparece. É
+ * informação de apoio no cabeçalho — não vale interromper a navegação com erro,
+ * nem poluir o console em cada rota.
+ */
+async function carregarUltimaAtualizacao() {
+  if (!auth.user?.grupo_id) { syncEm.value = null; return }
+  try {
+    const { data } = await syncApi.ultimaAtualizacao()
+    const bruto = data?.data?.ultimo_sync_at ?? null
+    syncEm.value = bruto ? new Date(bruto) : null
+  } catch {
+    syncEm.value = null
+  }
+}
+
+// Recarrega ao trocar de grupo: o horário é por grupo, e manter o anterior
+// mostraria o frescor do cliente errado.
+watch(() => auth.user?.grupo_id, () => { carregarUltimaAtualizacao() })
+onMounted(carregarUltimaAtualizacao)
+
+/**
+ * "hoje HH:MM" para o dia corrente, "ontem HH:MM" para o anterior e
+ * "DD/MM HH:MM" além disso. Data cheia num rótulo discreto rouba atenção sem
+ * acrescentar nada no caso comum, que é o sync do próprio dia.
+ */
+const ultimaAtualizacao = computed(() => {
+  const d = syncEm.value
+  if (!d || isNaN(d.getTime())) return null
+
+  const hora = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  const soData = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
+  const dias = Math.round((soData(new Date()) - soData(d)) / 86400000)
+
+  if (dias === 0) return `Sync hoje ${hora}`
+  if (dias === 1) return `Sync ontem ${hora}`
+  return `Sync ${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} ${hora}`
+})
+
+// O título traz a data completa, para quem precisar do valor exato.
+const tituloSync = computed(() =>
+  syncEm.value ? `Última sincronização: ${syncEm.value.toLocaleString('pt-BR')}` : ''
+)
 
 async function handleLogout() {
   if (confirm('Deseja realmente sair do sistema?')) {
@@ -180,15 +230,11 @@ const grupoAtivo = computed(() => {
 .filtro-btn--on .filtro-chv { transform: rotate(180deg); }
 @media (max-width: 900px) { .filtro-txt { display: none; } }
 
-.live-wrap { display: flex; align-items: center; gap: 6px; }
-.live-dot {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: var(--success); animation: pulse 2s infinite;
+.sync-info {
+  font-family: var(--font-display); font-size: var(--fs-xs);
+  color: var(--text-dim); white-space: nowrap;
 }
-@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
-.live-label { font-family: var(--font-display); font-size: var(--fs-xs); color: var(--text-dim); }
-
-@media (max-width: 480px) { .live-wrap { display: none; } }
+@media (max-width: 640px) { .sync-info { display: none; } }
 
 .theme-btn {
   width: 38px; height: 38px; border-radius: 10px;

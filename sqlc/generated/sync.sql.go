@@ -757,6 +757,29 @@ func (q *Queries) GetSyncJobProgress(ctx context.Context, jobID pgtype.UUID) ([]
 	return items, nil
 }
 
+const getUltimoSyncDoGrupo = `-- name: GetUltimoSyncDoGrupo :one
+SELECT MAX(sc.ultimo_sync_at)::timestamptz AS ultimo_sync_at
+FROM _etl.sync_control sc
+JOIN _etl.empresas e ON e.id = sc.empresa_id
+WHERE e.grupo_id = $1
+  AND e.deleted_at IS NULL
+  AND e.status = 'ativa'
+`
+
+// Horario da ultima sincronizacao concluida entre as empresas ativas do grupo.
+// Serve de indicador de frescor dos dados no cabecalho: o REFRESH das views
+// gerenciais acontece imediatamente apos cada sync, entao este horario e um
+// retrato fiel de quando o dashboard foi atualizado.
+//
+// Ressalva: o refresh manual pela rota de manutencao nao mexe em ultimo_sync_at,
+// entao nesse caso especifico o horario fica defasado.
+func (q *Queries) GetUltimoSyncDoGrupo(ctx context.Context, grupoID pgtype.UUID) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, getUltimoSyncDoGrupo, grupoID)
+	var ultimo_sync_at pgtype.Timestamptz
+	err := row.Scan(&ultimo_sync_at)
+	return ultimo_sync_at, err
+}
+
 const initSyncJobProgress = `-- name: InitSyncJobProgress :exec
 INSERT INTO _etl.sync_job_progress (job_id, executor, status, updated_at)
 VALUES ($1, $2, 'aguardando', NOW())

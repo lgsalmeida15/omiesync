@@ -40,6 +40,9 @@ func (m *mockRepo) CountJobs(_ context.Context, _ string) (int64, error) {
 func (m *mockRepo) UpdateJobStatus(_ context.Context, id, status, erro string, _, _ *time.Time) (*SyncJob, error) {
 	return &SyncJob{ID: id, Status: status, Erro: erro}, m.err
 }
+func (m *mockRepo) UltimoSyncDoGrupo(_ context.Context, _ string) (*time.Time, error) {
+	return nil, nil
+}
 func (m *mockRepo) GetControl(_ context.Context, _ string) (*SyncControl, error) {
 	if m.control == nil {
 		return nil, errors.New("não encontrado")

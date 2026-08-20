@@ -15,17 +15,17 @@ type SyncJob struct {
 }
 
 type SyncControl struct {
-	ID                     string     `json:"id"`
-	EmpresaID              string     `json:"empresa_id"`
-	Ativo                  bool       `json:"ativo"`
+	ID                      string     `json:"id"`
+	EmpresaID               string     `json:"empresa_id"`
+	Ativo                   bool       `json:"ativo"`
 	IntervaloIncrementalMin int        `json:"intervalo_incremental_min"`
-	IntervaloFullDias      int        `json:"intervalo_full_dias"`
-	UltimoSyncAt           *time.Time `json:"ultimo_sync_at,omitempty"`
-	ProximoSyncAt          *time.Time `json:"proximo_sync_at,omitempty"`
-	UltimoFullSyncAt       *time.Time `json:"ultimo_full_sync_at,omitempty"`
-	ProximoFullSyncAt      *time.Time `json:"proximo_full_sync_at,omitempty"`
-	CreatedAt              time.Time  `json:"created_at"`
-	UpdatedAt              time.Time  `json:"updated_at"`
+	IntervaloFullDias       int        `json:"intervalo_full_dias"`
+	UltimoSyncAt            *time.Time `json:"ultimo_sync_at,omitempty"`
+	ProximoSyncAt           *time.Time `json:"proximo_sync_at,omitempty"`
+	UltimoFullSyncAt        *time.Time `json:"ultimo_full_sync_at,omitempty"`
+	ProximoFullSyncAt       *time.Time `json:"proximo_full_sync_at,omitempty"`
+	CreatedAt               time.Time  `json:"created_at"`
+	UpdatedAt               time.Time  `json:"updated_at"`
 }
 
 type StatusResponse struct {
@@ -40,9 +40,9 @@ type ForcarSyncRequest struct {
 }
 
 type ConfigurarRequest struct {
-	Ativo                  bool `json:"ativo"`
+	Ativo                   bool `json:"ativo"`
 	IntervaloIncrementalMin int  `json:"intervalo_incremental_min"`
-	IntervaloFullDias      int  `json:"intervalo_full_dias"`
+	IntervaloFullDias       int  `json:"intervalo_full_dias"`
 }
 
 type EmpresaExecutorConfig struct {
@@ -112,17 +112,17 @@ type JobPage struct {
 }
 
 type DLQPageRow struct {
-	ID           string     `json:"id"`
-	JobID        string     `json:"job_id"`
-	EmpresaNome  string     `json:"empresa_nome"`
-	GrupoNome    string     `json:"grupo_nome"`
-	Modulo       string     `json:"modulo"`
-	Pagina       int        `json:"pagina"`
-	TotalPaginas int        `json:"total_paginas"`
-	Tentativas   int        `json:"tentativas"`
-	MaxTentativas int       `json:"max_tentativas"`
-	Erro         *string    `json:"erro,omitempty"`
-	ConcluidoAt  *time.Time `json:"concluido_at,omitempty"`
+	ID            string     `json:"id"`
+	JobID         string     `json:"job_id"`
+	EmpresaNome   string     `json:"empresa_nome"`
+	GrupoNome     string     `json:"grupo_nome"`
+	Modulo        string     `json:"modulo"`
+	Pagina        int        `json:"pagina"`
+	TotalPaginas  int        `json:"total_paginas"`
+	Tentativas    int        `json:"tentativas"`
+	MaxTentativas int        `json:"max_tentativas"`
+	Erro          *string    `json:"erro,omitempty"`
+	ConcluidoAt   *time.Time `json:"concluido_at,omitempty"`
 }
 
 type PageRow struct {
@@ -138,4 +138,11 @@ type PageRow struct {
 	ProximoRetryAt    *time.Time `json:"proximo_retry_at,omitempty"`
 	IniciadoAt        *time.Time `json:"iniciado_at,omitempty"`
 	ConcluidoAt       *time.Time `json:"concluido_at,omitempty"`
+}
+
+// UltimaAtualizacao é o frescor dos dados do grupo. Ponteiro porque grupo sem
+// nenhum sync concluído devolve null, e não uma data de época que o frontend
+// exibiria como 1970.
+type UltimaAtualizacao struct {
+	UltimoSyncAt *time.Time `json:"ultimo_sync_at"`
 }

@@ -1,4 +1,4 @@
-﻿package sync
+package sync
 
 import (
 	"context"
@@ -27,6 +27,7 @@ type Service interface {
 	ForcarSync(ctx context.Context, grupoID, empresaID string, req ForcarSyncRequest) (*SyncJob, error)
 	Configurar(ctx context.Context, empresaID string, req ConfigurarRequest) (*SyncControl, error)
 	GetJobProgress(ctx context.Context, jobID string) ([]*SyncJobProgress, error)
+	UltimaAtualizacao(ctx context.Context, grupoID string) (*UltimaAtualizacao, error)
 
 	StartupRecovery(ctx context.Context) error
 
@@ -70,6 +71,7 @@ func SetProcessor(svc Service, p JobProcessor) {
 		s.processor = p
 	}
 }
+
 // SetSubmitter registra o WorkerPool apos construcao — garante que ForcarSync
 // tambem passa pelo semaforo de concorrencia.
 func SetSubmitter(svc Service, sub JobSubmitter) {
@@ -240,6 +242,20 @@ func (s *service) GetJobProgress(ctx context.Context, jobID string) ([]*SyncJobP
 	return progress, nil
 }
 
+// UltimaAtualizacao informa quando os dados do grupo foram sincronizados por
+// último. Serve ao indicador de frescor no cabeçalho.
+//
+// O REFRESH das views gerenciais roda imediatamente após cada sync, então este
+// horário é um retrato fiel de quando o dashboard mudou. A exceção é o refresh
+// manual pela rota de manutenção, que não toca em ultimo_sync_at.
+func (s *service) UltimaAtualizacao(ctx context.Context, grupoID string) (*UltimaAtualizacao, error) {
+	t, err := s.repo.UltimoSyncDoGrupo(ctx, grupoID)
+	if err != nil {
+		return nil, fmt.Errorf("syncService.UltimaAtualizacao: %w", err)
+	}
+	return &UltimaAtualizacao{UltimoSyncAt: t}, nil
+}
+
 func (s *service) StartupRecovery(ctx context.Context) error {
 	n, err := s.repo.MarkStaleJobs(ctx)
 	if err != nil {
@@ -371,4 +387,3 @@ func (s *service) UpdateExecutorConfig(ctx context.Context, empresaID, executor 
 
 	return config, nil
 }
-

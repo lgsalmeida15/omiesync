@@ -26,7 +26,20 @@ export interface SyncStatus {
   ultimo_job: SyncJob | null
 }
 
+/**
+ * Frescor dos dados do grupo. `ultimo_sync_at` vem null quando nenhuma empresa
+ * do grupo concluiu sync — o backend devolve null em vez de uma data de época,
+ * que apareceria como 1970 na interface.
+ */
+export interface UltimaAtualizacao {
+  ultimo_sync_at: string | null
+}
+
 export const syncApi = {
+  // O grupo sai das claims do token; não recebe parâmetro de propósito.
+  ultimaAtualizacao: () =>
+    api.get<{ data: UltimaAtualizacao }>('/sync/ultima-atualizacao'),
+
   status: (empresaId: string) =>
     api.get(`/sync/${empresaId}/status`),
 
