@@ -7,7 +7,7 @@
 
     <!-- Título -->
     <div class="topbar-title">
-      {{ pageTitles[route.name as string] ?? 'Omie' }}
+      {{ pageTitles[route.name as string] ?? 'VisiON' }}
       <span v-if="pageSubtitle">{{ pageSubtitle }}</span>
     </div>
 

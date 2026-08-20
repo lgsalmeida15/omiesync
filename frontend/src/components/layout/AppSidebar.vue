@@ -19,9 +19,12 @@
         @click="ui.toggleSidebarPin()"
         @keydown.enter.prevent="ui.toggleSidebarPin()"
         @keydown.space.prevent="ui.toggleSidebarPin()"
-      >O</div>
+      >
+        <span class="logo-marca" aria-hidden="true" />
+        <span class="logo-letra" aria-hidden="true">V</span>
+      </div>
       <div class="logo-text">
-        <div class="logo-name">Omie<span>Sync</span></div>
+        <div class="logo-name">Visi<span>ON</span></div>
         <div class="logo-sub">ADMIN PANEL</div>
       </div>
     </div>
@@ -190,15 +193,32 @@ const navSections = computed(() => {
 }
 
 .logo-icon {
-  width: 34px; height: 34px; border-radius: 10px;
-  background: linear-gradient(135deg, var(--primary-line), var(--accent-line));
-  display: flex; align-items: center; justify-content: center;
-  font-family: var(--font-display);
-  /* #fff literal e proposital: o "O" fica sobre o gradiente violeta, que e o
-     mesmo nos dois temas. --text-oncolor viraria quase preto no tema claro. */
-  font-size: var(--fs-md); font-weight: 700; color: #fff; flex-shrink: 0;
-  box-shadow: 0 2px 10px var(--primary-weak);
-  cursor: pointer;
+  width: 34px; height: 34px; flex-shrink: 0; cursor: pointer;
+  display: grid; place-items: center;
+}
+.logo-icon .logo-marca { width: 34px; height: 34px; }
+/* A logo entra como MASCARA e nao como imagem: o PNG tem a forma no canal
+   alfa, e a cor vem do token, entao a marca acompanha os dois temas com um
+   arquivo so. O lilas claro do arquivo sobre o fundo claro ficaria invisivel. */
+.logo-marca {
+  display: block;
+  background: var(--primary);
+  -webkit-mask: url('/logo-vision.png') center / contain no-repeat;
+          mask: url('/logo-vision.png') center / contain no-repeat;
+}
+/* Sem suporte a mascara, volta ao quadrado com gradiente e a letra. */
+@supports not ((mask-image: url('/logo-vision.png')) or (-webkit-mask-image: url('/logo-vision.png'))) {
+  .logo-marca { display: none; }
+  .logo-letra { display: grid; }
+}
+.logo-letra { display: none; place-items: center; }
+@supports not ((mask-image: url('/logo-vision.png')) or (-webkit-mask-image: url('/logo-vision.png'))) {
+  .logo-icon {
+    border-radius: 10px;
+    background: linear-gradient(135deg, var(--primary-line), var(--accent-line));
+    font-family: var(--font-display); font-size: var(--fs-md); font-weight: 700;
+    color: #fff; box-shadow: 0 2px 10px var(--primary-weak);
+  }
 }
 
 .logo-text {

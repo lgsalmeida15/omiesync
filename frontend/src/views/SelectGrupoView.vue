@@ -2,8 +2,11 @@
   <div class="select-grupo-page">
     <div class="card">
       <div class="logo">
-        <div class="logo-icon">O</div>
-        <div class="logo-text">Omie<span>Sync</span></div>
+        <div class="logo-icon">
+          <span class="logo-marca" aria-hidden="true" />
+          <span class="logo-letra" aria-hidden="true">V</span>
+        </div>
+        <div class="logo-text">Visi<span>ON</span></div>
       </div>
 
       <h2 class="title">Selecionar Grupo</h2>
@@ -135,10 +138,31 @@ function cancelar() {
 }
 
 .logo-icon {
-  width: 36px; height: 36px; border-radius: 10px;
-  background: linear-gradient(135deg, var(--primary), var(--primary-line));
-  display: flex; align-items: center; justify-content: center;
-  font-size: var(--fs-lg); font-weight: 800; color: var(--text-oncolor);
+  width: 36px; height: 36px;
+  display: grid; place-items: center;
+}
+.logo-icon .logo-marca { width: 36px; height: 36px; }
+/* A logo entra como MASCARA e nao como imagem: o PNG tem a forma no canal
+   alfa, e a cor vem do token, entao a marca acompanha os dois temas com um
+   arquivo so. O lilas claro do arquivo sobre o fundo claro ficaria invisivel. */
+.logo-marca {
+  display: block;
+  background: var(--primary);
+  -webkit-mask: url('/logo-vision.png') center / contain no-repeat;
+          mask: url('/logo-vision.png') center / contain no-repeat;
+}
+/* Sem suporte a mascara, volta ao quadrado com gradiente e a letra. */
+@supports not ((mask-image: url('/logo-vision.png')) or (-webkit-mask-image: url('/logo-vision.png'))) {
+  .logo-marca { display: none; }
+  .logo-letra { display: grid; }
+}
+.logo-letra { display: none; place-items: center; }
+@supports not ((mask-image: url('/logo-vision.png')) or (-webkit-mask-image: url('/logo-vision.png'))) {
+  .logo-icon {
+    border-radius: 10px;
+    background: linear-gradient(135deg, var(--primary), var(--primary-line));
+    font-size: var(--fs-lg); font-weight: 800; color: var(--text-oncolor);
+  }
 }
 
 .logo-text {

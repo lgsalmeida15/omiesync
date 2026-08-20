@@ -3,9 +3,12 @@
     <div class="login-card fade-up">
       <!-- Logo -->
       <div class="login-logo">
-        <div class="login-logo-icon">O</div>
+        <div class="login-logo-icon">
+          <span class="logo-marca" aria-hidden="true" />
+          <span class="logo-letra" aria-hidden="true">V</span>
+        </div>
         <div>
-          <div class="login-logo-name">Omie<span>Sync</span></div>
+          <div class="login-logo-name">Visi<span>ON</span></div>
           <div class="login-logo-sub">PAINEL ADMINISTRATIVO</div>
         </div>
       </div>
@@ -37,7 +40,7 @@
         </AppButton>
       </form>
 
-      <p class="login-footer">Omie Sync · Painel Interno</p>
+      <p class="login-footer">VisiON · Painel Interno</p>
     </div>
   </div>
 </template>
@@ -102,11 +105,32 @@ async function submit() {
 }
 
 .login-logo-icon {
-  width: 44px; height: 44px; border-radius: 12px;
-  background: linear-gradient(135deg, var(--primary), var(--primary-line));
-  display: flex; align-items: center; justify-content: center;
-  font-size: var(--fs-lg); font-weight: 800; color: var(--text-oncolor); flex-shrink: 0;
-  box-shadow: 0 0 24px var(--primary-weak);
+  width: 44px; height: 44px; flex-shrink: 0;
+  display: grid; place-items: center;
+}
+.login-logo-icon .logo-marca { width: 44px; height: 44px; }
+/* A logo entra como MASCARA e nao como imagem: o PNG tem a forma no canal
+   alfa, e a cor vem do token, entao a marca acompanha os dois temas com um
+   arquivo so. O lilas claro do arquivo sobre o fundo claro ficaria invisivel. */
+.logo-marca {
+  display: block;
+  background: var(--primary);
+  -webkit-mask: url('/logo-vision.png') center / contain no-repeat;
+          mask: url('/logo-vision.png') center / contain no-repeat;
+}
+/* Sem suporte a mascara, volta ao quadrado com gradiente e a letra. */
+@supports not ((mask-image: url('/logo-vision.png')) or (-webkit-mask-image: url('/logo-vision.png'))) {
+  .logo-marca { display: none; }
+  .logo-letra { display: grid; }
+}
+.logo-letra { display: none; place-items: center; }
+@supports not ((mask-image: url('/logo-vision.png')) or (-webkit-mask-image: url('/logo-vision.png'))) {
+  .login-logo-icon {
+    border-radius: 12px;
+    background: linear-gradient(135deg, var(--primary), var(--primary-line));
+    font-size: var(--fs-lg); font-weight: 800; color: var(--text-oncolor);
+    box-shadow: 0 0 24px var(--primary-weak);
+  }
 }
 
 .login-logo-name { font-size: var(--fs-lg); font-weight: 800; color: var(--text); }

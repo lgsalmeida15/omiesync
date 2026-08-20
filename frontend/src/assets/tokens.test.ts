@@ -120,7 +120,7 @@ describe('tokens: erradicação de cor fixa', () => {
   // Teto que só desce. Serve de catraca: uma cor fixa nova quebra o teste, e
   // cada arquivo migrado permite baixar o número — sem exigir a limpeza toda
   // de uma vez.
-  const TETO_HEX  = 23
+  const TETO_HEX  = 22
   const TETO_RGBA = 12
 
   const conta = (re: RegExp) => fontes.reduce((soma, arq) => {
