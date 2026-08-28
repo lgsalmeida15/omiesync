@@ -220,8 +220,29 @@ watch(() => [props.grupoId, props.filtros], carregar, { deep: true, immediate: t
 }
 
 /* A tabela rola dentro do próprio container — a página nunca rola na horizontal. */
+/*
+ * A altura aqui é o que faz o cabeçalho grudar. `position: sticky` se ancora no
+ * ancestral rolável mais próximo, e não na janela — e este contêiner virou esse
+ * ancestral por ter overflow-x: auto (com um eixo diferente de `visible`, o
+ * outro passa a `auto`). Sem altura própria ele crescia até caber a tabela
+ * inteira, nunca rolava por dentro, e o `top: 0` do th grudava no topo do
+ * contêiner, que subia junto com a página. Parecia que o sticky não existia.
+ *
+ * Ancorar na janela em vez disso exigiria um `top` igual à altura do cabeçalho
+ * da aplicação, que varia com a barra de filtros aberta ou fechada — erraria a
+ * cada vez que ela fosse alternada.
+ *
+ * O desconto de 240px cobre o pior caso do que fica acima: cabeçalho com
+ * filtros abertos, respiro da página e a barra de botões de expandir.
+ *
+ * O piso de 320px vai dentro do max-height, e não em min-height: como piso do
+ * teto, ele só garante altura mínima em tela baixa. Em min-height ele forçaria
+ * 320px sempre, deixando faixa vazia embaixo quando a tabela está recolhida —
+ * que é justamente o estado inicial dela.
+ */
 .pv-scroll {
-  overflow-x: auto;
+  overflow: auto;
+  max-height: max(320px, calc(100vh - 240px));
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 12px;
