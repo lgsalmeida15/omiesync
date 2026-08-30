@@ -79,8 +79,8 @@ Schema _etl          → controle central
 
 Schema tenant        → criado ao criar um grupo (ex: grupo_alpha)
                         clientes, categorias, departamentos,
-                        contas_correntes, contas_a_pagar,
-                        contas_a_receber, extrato,
+                        contas_correntes, contas_pagar,
+                        contas_receber, extrato,
                         movimentos_financeiros, ordens_servico, projetos
 ```
 
@@ -435,7 +435,7 @@ Todas as tabelas incluem `empresa_id` como coluna de isolamento por empresa dent
 
 ```
 clientes, categorias, departamentos,
-contas_correntes, contas_a_pagar, contas_a_receber,
+contas_correntes, contas_pagar, contas_receber,
 extrato, movimentos_financeiros,
 ordens_servico, projetos
 ```

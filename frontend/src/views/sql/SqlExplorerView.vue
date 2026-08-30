@@ -151,13 +151,17 @@ import { queryApi, type QueryResult } from '@/api/query'
 const auth = useAuthStore()
 
 // ── Tabelas disponíveis ──────────────────────────────────────
+// Os nomes precisam bater com o que o provisionador cria em
+// internal/db/provisioner.go. Aqui constavam 'contas_a_pagar' e
+// 'contas_a_receber', que nao existem: as tabelas sao contas_pagar e
+// contas_receber. Clicar nelas montava consulta contra relacao inexistente.
 const TABLES = [
   'clientes',
   'categorias',
   'departamentos',
   'contas_correntes',
-  'contas_a_pagar',
-  'contas_a_receber',
+  'contas_pagar',
+  'contas_receber',
   'extrato',
   'movimentos_financeiros',
   'ordens_servico',
