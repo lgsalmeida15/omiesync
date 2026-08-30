@@ -23,6 +23,16 @@
           </select>
         </div>
 
+        <!-- Inadimplência: só nas abas de contas, mesmo criterio do seletor de MÊS.
+             Nas demais abas nem aparece, porque nao tem efeito nelas. -->
+        <div class="fi" v-if="abaDeContas">
+          <span class="fi-label">INADIMPLÊNCIA</span>
+          <select class="fi-select" v-model="filtros.inadimplencia">
+            <option :value="true">Considerar</option>
+            <option :value="false">Ignorar</option>
+          </select>
+        </div>
+
         <!-- Empresas: só aparece quando há mais de uma no grupo -->
         <div class="fi" v-if="filtrosDisponiveis.empresas.length > 1">
           <span class="fi-label">EMPRESA</span>
@@ -315,6 +325,9 @@ const aba = ref<'geral' | 'resultado' | 'fluxo' | 'receber' | 'pagar'>('geral')
 const abasMensais = ['fluxo', 'receber', 'pagar']
 const abaMensal = computed(() => abasMensais.includes(aba.value))
 
+/** Abas que somam a inadimplencia e exibem o seletor correspondente. */
+const abaDeContas = computed(() => aba.value === 'receber' || aba.value === 'pagar')
+
 /**
  * Mês só existe no Fluxo de Caixa. Visão Geral e Resultado são anuais — filtrar
  * por mês ali esvaziaria onze das doze colunas, então o seletor some fora da aba.
@@ -340,6 +353,9 @@ const filtrosAtivos = computed(() => ({
   categorias:       filtros.categorias.length       ? filtros.categorias       : undefined,
   cliente:          filtros.cliente || undefined,
   categorias_excluir: filtros.categorias_excluir.length ? filtros.categorias_excluir : undefined,
+  // Enviado apenas nas abas de contas: Fluxo de Caixa usa o mesmo endpoint e
+  // precisa continuar devolvendo exatamente o que devolvia antes.
+  inadimplencia:    abaDeContas.value && filtros.inadimplencia ? true : undefined,
 }))
 
 // ── Estado ─────────────────────────────────────────────────────────────────
@@ -378,6 +394,9 @@ const filtros = reactive({
   empresas:          [] as string[],
   cliente:           '',
   categorias_excluir: [CATEGORIA_OCULTA_PADRAO] as string[],
+  // Ligado por padrao: quem abre Contas a Pagar ou a Receber quer ver o que
+  // esta vencido. Desligado, ninguem descobriria a opcao.
+  inadimplencia:     true,
 })
 
 /**

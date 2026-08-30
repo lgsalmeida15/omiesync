@@ -18,6 +18,17 @@ const amostra: FluxoTransacao[] = [
   t({ dia: 15, tipo: 'despesa', status: 'Pendente', realizado: false, valor: 3000, categoria: 'Fornecedores' }),
 ]
 
+// Amostra separada de propósito: os testes acima afirmam contagens exatas sobre
+// `amostra`, e ampliá-la quebraria seis deles sem que nada de real regredisse.
+//
+// Inadimplência tem `realizado: false` como qualquer pendente — é o `status` que
+// a distingue, e é por isso que ela precisa de tratamento próprio.
+const comAtraso: FluxoTransacao[] = [
+  ...amostra,
+  t({ dia: 8, status: 'Atrasado', realizado: false, valor: 7000, descricao: 'DEVEDOR SA' }),
+  t({ dia: 20, tipo: 'despesa', status: 'Atrasado', realizado: false, valor: 4000 }),
+]
+
 describe('filtrarTransacoes', () => {
   it('sem filtros devolve tudo, inclusive pendentes', () => {
     expect(filtrarTransacoes(amostra, base)).toHaveLength(4)
@@ -75,12 +86,69 @@ describe('filtrarTransacoes', () => {
 
 describe('classeStatus', () => {
   it('pendente é âmbar independentemente do tipo', () => {
-    expect(classeStatus({ tipo: 'receita', realizado: false })).toBe('pill--pend')
-    expect(classeStatus({ tipo: 'despesa', realizado: false })).toBe('pill--pend')
+    expect(classeStatus({ tipo: 'receita', realizado: false, status: 'Pendente' })).toBe('pill--pend')
+    expect(classeStatus({ tipo: 'despesa', realizado: false, status: 'Pendente' })).toBe('pill--pend')
   })
 
   it('recebido é verde e pago é vermelho', () => {
-    expect(classeStatus({ tipo: 'receita', realizado: true })).toBe('pill--in')
-    expect(classeStatus({ tipo: 'despesa', realizado: true })).toBe('pill--out')
+    expect(classeStatus({ tipo: 'receita', realizado: true, status: 'Recebido' })).toBe('pill--in')
+    expect(classeStatus({ tipo: 'despesa', realizado: true, status: 'Pago' })).toBe('pill--out')
+  })
+})
+
+describe('filtrarTransacoes — inadimplência', () => {
+  it('situacao=atrasada devolve só os vencidos', () => {
+    const r = filtrarTransacoes(comAtraso, { ...base, situacao: 'atrasada' })
+    expect(r).toHaveLength(2)
+    expect(r.every(x => x.status === 'Atrasado')).toBe(true)
+  })
+
+  // A regra antiga era `(situacao === 'efetuada') === realizado`. Como atrasado
+  // tem realizado false, ele cai em pendente — e precisa continuar caindo, senao
+  // sumiria de quem filtra por pendente esperando ver tudo que nao foi pago.
+  it('atrasado continua aparecendo em situacao=pendente', () => {
+    const r = filtrarTransacoes(comAtraso, { ...base, situacao: 'pendente' })
+    expect(r).toHaveLength(4)
+    expect(r.filter(x => x.status === 'Atrasado')).toHaveLength(2)
+  })
+
+  it('atrasado nunca aparece em situacao=efetuada', () => {
+    const r = filtrarTransacoes(comAtraso, { ...base, situacao: 'efetuada' })
+    expect(r.some(x => x.status === 'Atrasado')).toBe(false)
+  })
+
+  it('sem filtro de situacao, os atrasados vêm junto', () => {
+    expect(filtrarTransacoes(comAtraso, base)).toHaveLength(6)
+  })
+
+  it('combina atrasada com tipo', () => {
+    const r = filtrarTransacoes(comAtraso, { ...base, situacao: 'atrasada', tipo: 'despesa' })
+    expect(r).toHaveLength(1)
+    expect(r[0].valor).toBe(4000)
+  })
+
+  it('combina atrasada com dia', () => {
+    expect(filtrarTransacoes(comAtraso, { ...base, situacao: 'atrasada', dia: 8 })).toHaveLength(1)
+  })
+
+  it('busca alcança os atrasados', () => {
+    const r = filtrarTransacoes(comAtraso, { ...base, busca: 'devedor' })
+    expect(r).toHaveLength(1)
+    expect(r[0].status).toBe('Atrasado')
+  })
+})
+
+describe('classeStatus — inadimplência', () => {
+  // Sem testar status antes de realizado, o atrasado cairia em pill--pend e
+  // ficaria igual a um titulo que ainda nem venceu.
+  it('atrasado tem classe propria, nao a de pendente', () => {
+    expect(classeStatus({ tipo: 'receita', realizado: false, status: 'Atrasado' })).toBe('pill--atraso')
+    expect(classeStatus({ tipo: 'despesa', realizado: false, status: 'Atrasado' })).toBe('pill--atraso')
+  })
+
+  it('atrasado nao muda a classe dos demais', () => {
+    expect(classeStatus({ tipo: 'receita', realizado: false, status: 'Pendente' })).toBe('pill--pend')
+    expect(classeStatus({ tipo: 'receita', realizado: true,  status: 'Recebido' })).toBe('pill--in')
+    expect(classeStatus({ tipo: 'despesa', realizado: true,  status: 'Pago' })).toBe('pill--out')
   })
 })

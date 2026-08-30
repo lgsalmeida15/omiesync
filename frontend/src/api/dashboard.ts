@@ -64,6 +64,13 @@ export interface DashboardParams {
    * ficaria fora dos números em silêncio até alguém marcá-la.
    */
   categorias_excluir?: string[]
+
+  /**
+   * Inclui os títulos vencidos e não pagos no fluxo. Só as abas Contas a Pagar
+   * e Contas a Receber enviam: a aba Fluxo de Caixa e o dashboard continuam
+   * lendo apenas o realizado e o previsto, sem mudar de número.
+   */
+  inadimplencia?: boolean
 }
 
 /** Serializa os filtros para query string. Compartilhado por dashboard, pivot e filtros. */
@@ -76,6 +83,9 @@ export function paramsToQuery(params: DashboardParams): Record<string, string> {
   if (params.categorias?.length)        q.categorias         = params.categorias.join(',')
   if (params.cliente)                   q.cliente            = params.cliente
   if (params.categorias_excluir?.length) q.categorias_excluir = params.categorias_excluir.join(',')
+  // Só serializa quando ligado: ausente, o backend responde como antes de a
+  // opção existir.
+  if (params.inadimplencia)             q.inadimplencia      = 'true'
   return q
 }
 

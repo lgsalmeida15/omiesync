@@ -116,6 +116,7 @@
               <option value="">Todas as situações</option>
               <option value="efetuada">Efetuadas</option>
               <option value="pendente">Pendentes</option>
+              <option value="atrasada">Atrasadas</option>
             </select>
           </div>
         </div>
@@ -469,4 +470,7 @@ watch(() => [props.grupoId, props.filtros, props.mes], carregar, { deep: true, i
 .pill--in  { background: var(--success-weak); color: var(--success); }
 .pill--out  { background: var(--danger-weak); color: var(--danger); }
 .pill--pend { background: var(--warning-weak); color: var(--warning); }
+/* Atrasado usa a cor de perigo, e nao o ambar de pendente: vencido nao e a
+   mesma coisa que "ainda vai vencer", e a diferenca precisa saltar na lista. */
+.pill--atraso { background: var(--danger-weak); color: var(--danger); font-weight: 700; }
 </style>

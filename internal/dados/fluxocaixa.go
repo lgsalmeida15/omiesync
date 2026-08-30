@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/rs/zerolog/log"
 )
 
 // FluxoTransacao é um lançamento individual do fluxo de caixa.
@@ -17,7 +18,7 @@ type FluxoTransacao struct {
 	Dia       int     `json:"dia"`
 	Data      string  `json:"data"` // DD/MM/YYYY
 	Descricao string  `json:"descricao"`
-	Tipo      string  `json:"tipo"`   // "receita" | "despesa"
+	Tipo      string  `json:"tipo"` // "receita" | "despesa"
 	Categoria string  `json:"categoria"`
 	Valor     float64 `json:"valor"`
 	Status    string  `json:"status"` // "Recebido" | "Pago" | "Pendente"
@@ -38,10 +39,10 @@ type FluxoResumo struct {
 }
 
 type FluxoCaixaResponse struct {
-	Ano         int              `json:"ano"`
-	Mes         int              `json:"mes"`
-	Transacoes  []FluxoTransacao `json:"transacoes"`
-	Resumo      FluxoResumo      `json:"resumo"`
+	Ano        int              `json:"ano"`
+	Mes        int              `json:"mes"`
+	Transacoes []FluxoTransacao `json:"transacoes"`
+	Resumo     FluxoResumo      `json:"resumo"`
 	// ProximosVencimentos ignora o mês selecionado: são as provisões a partir de
 	// hoje, para que a tela continue avisando do que vem mesmo ao navegar por
 	// meses passados.
@@ -108,6 +109,24 @@ func QueryFluxoCaixa(ctx context.Context, pool *pgxpool.Pool, p DashboardParams)
 			return nil, ErrViewNaoPopulada
 		}
 		return nil, fmt.Errorf("dados.QueryFluxoCaixa transacoes: %w", err)
+	}
+
+	// Inadimplência entra ANTES do resumo somar, e por isso não precisa de
+	// tratamento em nenhum outro lugar: o resumo é somado desta lista, e o
+	// donut, o top 10 e o calendário são derivados dela no navegador. Uma única
+	// inserção alimenta todos.
+	//
+	// Falha aqui degrada em vez de derrubar: sem o acréscimo a aba continua
+	// mostrando o fluxo, que é o dado principal.
+	if p.Inadimplencia {
+		atrasados, errIna := queryInadimplencia(ctx, pool, schema, p, mes)
+		if errIna != nil {
+			log.Warn().Err(errIna).
+				Str("grupo_id", p.GrupoID).
+				Msg("dados: inadimplência indisponível; seguindo sem ela")
+		} else {
+			resp.Transacoes = append(resp.Transacoes, atrasados...)
+		}
 	}
 
 	for _, t := range resp.Transacoes {

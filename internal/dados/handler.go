@@ -200,6 +200,7 @@ func parseDashboardParams(r *http.Request, grupoID string) DashboardParams {
 		Categorias:      split(r.URL.Query().Get("categorias")),
 		Cliente:         strings.TrimSpace(r.URL.Query().Get("cliente")),
 		Mes:             mes,
+		Inadimplencia:   r.URL.Query().Get("inadimplencia") == "true",
 		// Vazio por padrão: o backend não decide o que ocultar. Quem define o
 		// padrão é a tela, para que outros consumidores da API não herdem a
 		// exclusão sem pedir.

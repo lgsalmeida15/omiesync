@@ -33,6 +33,12 @@ type DashboardParams struct {
 	Categorias      []string
 	Cliente         string
 
+	// Inadimplencia inclui os titulos vencidos e nao pagos (status ATRASADO de
+	// contas_pagar/contas_receber) no fluxo. Fica desligado por padrao no
+	// backend: sem o parametro a resposta e identica a de antes desta opcao
+	// existir, e nenhum consumidor herda o comportamento novo sem pedir.
+	Inadimplencia bool
+
 	// Mes (1-12) só é usado pelo fluxo de caixa. Fica fora de buildFiltro de
 	// propósito: dashboard e pivot são anuais, e filtrar por mês ali esvaziaria
 	// onze das doze colunas.

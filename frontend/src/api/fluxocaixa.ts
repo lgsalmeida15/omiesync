@@ -8,7 +8,9 @@ export interface FluxoTransacao {
   tipo: 'receita' | 'despesa'
   categoria: string
   valor: number
-  status: 'Recebido' | 'Pago' | 'Pendente'
+  // 'Atrasado' vem dos titulos vencidos de contas_pagar/contas_receber, e nao da
+  // view materializada — que so conhece realizado e previsto.
+  status: 'Recebido' | 'Pago' | 'Pendente' | 'Atrasado'
   /** true = movimento realizado; false = provisão do extrato. */
   realizado: boolean
 }
