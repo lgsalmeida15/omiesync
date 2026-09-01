@@ -87,10 +87,14 @@
                 <span class="pv-nota" title="Receita menos despesa do período. Não inclui o saldo das contas correntes, por isso difere do card RESULTADO da Visão Geral.">?</span>
               </td>
               <td v-for="(v, i) in resultado.meses" :key="i"
-                  :class="['pv-td-num', { 'pv-previsto': i + 1 >= dados.mes_corte, 'pv-neg': v < 0 }]">
+                  :class="['pv-td-num', { 'pv-previsto': i + 1 >= dados.mes_corte,
+                                          'pv-neg': v < 0, 'pv-pos': v > 0 }]">
                 {{ v === 0 ? '—' : fmt(v) }}
               </td>
-              <td class="pv-td-total" :class="{ 'pv-neg': resultado.total < 0 }">{{ fmt(resultado.total) }}</td>
+              <td class="pv-td-total"
+                  :class="{ 'pv-neg': resultado.total < 0, 'pv-pos': resultado.total > 0 }">
+                {{ fmt(resultado.total) }}
+              </td>
             </tr>
           </tfoot>
         </table>
@@ -455,7 +459,14 @@ watch(() => [props.grupoId, props.filtros], carregar, { deep: true, immediate: t
 .pv-zero { color: var(--text-dim); opacity: 0.45; }
 /* Negativo em vermelho, somado aos parênteses da notação contábil. !important
    porque .pv-td-total define cor própria e a especificidade empata. */
+/* Rodapé RESULTADO: cor pelo SINAL, ao contrário das linhas do corpo, onde ela
+   vem do tipo. Aqui o negativo é negativo de verdade.
+
+   O !important nas duas não é preguiça: `.pv-tfoot td` fixa color com
+   especificidade (0,2,1), e uma classe sozinha (0,1,0) perderia a disputa e não
+   pintaria nada. Zero fica de fora — é exibido como "—" e não teve resultado. */
 .pv-neg { color: var(--danger) !important; }
+.pv-pos { color: var(--success) !important; }
 /* Cor pelo TIPO nas linhas: receita e faturamento, despesa e gasto, e as duas
    chegam como magnitude positiva. O rodape segue usando .pv-neg, porque ali o
    negativo e negativo de verdade. */
