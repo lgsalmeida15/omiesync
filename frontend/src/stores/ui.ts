@@ -25,6 +25,21 @@ export const useUiStore = defineStore('ui', () => {
    */
   const filtrosAbertos = ref(localStorage.getItem('filtros_abertos') === 'true')
 
+  /**
+   * Exibição de centavos. Persistida porque é preferência de leitura, não estado
+   * de navegação: há empresas em que o centavo é irrelevante, e quem desliga não
+   * deve precisar desligar de novo a cada acesso.
+   *
+   * Atua só onde existem centavos hoje — o pivô do Resultado e os cards de KPI.
+   * Ver a nota em utils/formato.ts.
+   */
+  const mostrarCentavos = ref(localStorage.getItem('mostrar_centavos') !== 'false')
+
+  function toggleCentavos() {
+    mostrarCentavos.value = !mostrarCentavos.value
+    localStorage.setItem('mostrar_centavos', String(mostrarCentavos.value))
+  }
+
   function toggleFiltros() {
     filtrosAbertos.value = !filtrosAbertos.value
     localStorage.setItem('filtros_abertos', String(filtrosAbertos.value))
@@ -47,5 +62,5 @@ export const useUiStore = defineStore('ui', () => {
     theme.value = theme.value === 'dark' ? 'light' : 'dark'
   }
 
-  return { theme, filtrosAbertos, toggleTheme, toggleFiltros }
+  return { theme, filtrosAbertos, mostrarCentavos, toggleTheme, toggleFiltros, toggleCentavos }
 })

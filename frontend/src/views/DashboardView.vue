@@ -384,7 +384,10 @@ const anosDisponiveis = computed(() => {
  * Categoria oculta por padrão. É lista de EXCLUSÃO: se fosse de inclusão, uma
  * categoria nova no Omie ficaria fora dos números em silêncio até alguém marcá-la.
  */
-const CATEGORIA_OCULTA_PADRAO = 'Transferência'
+// Categoria FINAL, nao superior: o filtro passou a operar na final, e a superior
+// "Transferência" nao existe mais como opcao. Consequencia esperada — as demais
+// finais que estavam sob ela passam a aparecer e a somar.
+const CATEGORIA_OCULTA_PADRAO = 'Transf. Inter Empresas/Contas'
 
 const filtros = reactive({
   ano:               anoAtual,

@@ -10,6 +10,10 @@
         <button class="pv-btn" @click="expandirAte(2)">Categoria superior</button>
         <button class="pv-btn" @click="expandirAte(3)">Categoria final</button>
         <button class="pv-btn" @click="expandirAte(4)">Expandir tudo</button>
+        <button class="pv-btn" @click="ui.toggleCentavos()"
+                :title="ui.mostrarCentavos ? 'Ocultar centavos' : 'Mostrar centavos'">
+          {{ ui.mostrarCentavos ? '0,00' : '0' }}
+        </button>
         <span v-if="dados.mes_corte <= 12" class="pv-legenda">
           <span class="pv-chip-prev" /> a partir de {{ nomeMes[dados.mes_corte - 1] }} são valores previstos
         </span>
@@ -27,19 +31,26 @@
           </thead>
           <tbody>
             <tr v-for="n in linhasVisiveis" :key="n.id"
-                :class="['pv-tr', `pv-nivel-${n.nivel}`, { 'pv-tr-folha': n.nivel === 4 }]">
+                :class="['pv-tr', `pv-nivel-${n.nivel}`,
+                         { 'pv-tr-folha': n.nivel === 4, 'pv-fora': foraDoResultado(n) }]">
               <td class="pv-td-dim" :style="{ paddingLeft: `${12 + (n.nivel - 1) * 18}px` }">
                 <button v-if="n.temFilhos" class="pv-toggle" @click="alternar(n.id)">
                   {{ expandidos.has(n.id) ? '−' : '+' }}
                 </button>
                 <span v-else class="pv-toggle pv-toggle--vazio" />
-                <span class="pv-rotulo">{{ n.rotulo }}</span>
+                <!-- Só a categoria superior alterna: é o nível em que faz sentido
+                     tirar um bloco inteiro da conta, como Transferência. -->
+                <button v-if="n.nivel === 2" class="pv-rotulo pv-rotulo--clicavel"
+                        :title="foraDoResultado(n) ? 'Voltar a contar no resultado' : 'Não contar no resultado'"
+                        @click="alternarNoResultado(n.tipo, n.rotulo)">{{ n.rotulo }}</button>
+                <span v-else class="pv-rotulo">{{ n.rotulo }}</span>
               </td>
               <td v-for="(v, i) in n.meses" :key="i"
-                  :class="['pv-td-num', { 'pv-previsto': i + 1 >= dados.mes_corte, 'pv-zero': v === 0, 'pv-neg': v < 0 }]">
-                {{ v === 0 ? '—' : fmt(v) }}
+                  :class="['pv-td-num', `pv-${n.tipo}`,
+                           { 'pv-previsto': i + 1 >= dados.mes_corte, 'pv-zero': v === 0 }]">
+                {{ fmtPorTipo(v, n.tipo) }}
               </td>
-              <td class="pv-td-total" :class="{ 'pv-neg': n.total < 0 }">{{ fmt(n.total) }}</td>
+              <td :class="['pv-td-total', `pv-${n.tipo}`]">{{ fmtPorTipo(n.total, n.tipo) }}</td>
             </tr>
           </tbody>
           <tfoot>
@@ -48,11 +59,11 @@
                 RESULTADO
                 <span class="pv-nota" title="Receita menos despesa do período. Não inclui o saldo das contas correntes, por isso difere do card RESULTADO da Visão Geral.">?</span>
               </td>
-              <td v-for="(v, i) in dados.resultado_mes" :key="i"
+              <td v-for="(v, i) in resultado.meses" :key="i"
                   :class="['pv-td-num', { 'pv-previsto': i + 1 >= dados.mes_corte, 'pv-neg': v < 0 }]">
                 {{ v === 0 ? '—' : fmt(v) }}
               </td>
-              <td class="pv-td-total" :class="{ 'pv-neg': dados.resultado_total < 0 }">{{ fmt(dados.resultado_total) }}</td>
+              <td class="pv-td-total" :class="{ 'pv-neg': resultado.total < 0 }">{{ fmt(resultado.total) }}</td>
             </tr>
           </tfoot>
         </table>
@@ -67,8 +78,12 @@ import { fetchPivot, type PivotData, type PivotLinha } from '@/api/pivot'
 import type { DashboardParams } from '@/api/dashboard'
 import AppSpinner from '@/components/ui/AppSpinner.vue'
 import { fmtNumero } from '@/utils/formato'
+import { useUiStore } from '@/stores/ui'
+import { calcularResultado, chaveSuperior } from '@/utils/resultado'
 
 const props = defineProps<{ grupoId: string; filtros: DashboardParams }>()
+
+const ui = useUiStore()
 
 const nomeMes = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
 
@@ -76,6 +91,31 @@ const dados      = ref<PivotData | null>(null)
 const carregando = ref(false)
 const erro       = ref('')
 const expandidos = ref<Set<string>>(new Set())
+
+/**
+ * Categorias superiores fora da conta do RESULTADO. Estado de sessão, como a
+ * legenda do donut: é uma lente de análise, não uma preferência — persistir faria
+ * o usuário voltar dias depois a um resultado alterado sem lembrar por quê.
+ */
+const excluidosDoResultado = ref<Set<string>>(new Set())
+
+function alternarNoResultado(tipo: string, categoriaSuperior: string) {
+  const k = chaveSuperior(tipo, categoriaSuperior)
+  const s = new Set(excluidosDoResultado.value)
+  s.has(k) ? s.delete(k) : s.add(k)
+  excluidosDoResultado.value = s
+}
+
+const foraDoResultado = (n: No) =>
+  n.nivel === 2 && excluidosDoResultado.value.has(chaveSuperior(n.tipo, n.rotulo))
+
+/**
+ * Recalculado na tela porque o servidor não conhece as exclusões do usuário. Com
+ * nenhuma exclusão o valor é o mesmo que o backend envia — ver utils/resultado.ts.
+ */
+const resultado = computed(() =>
+  calcularResultado(dados.value?.linhas ?? [], excluidosDoResultado.value)
+)
 
 // ── Montagem da árvore ─────────────────────────────────────────────────────
 // O backend entrega as folhas já pivotadas por mês. Os níveis superiores são
@@ -88,6 +128,9 @@ interface No {
   total: number
   temFilhos: boolean
   paiId: string | null
+  // Herdado da raiz da arvore. Receita e despesa chegam ambas como magnitude
+  // positiva, entao o sinal nao distingue as duas — quem distingue e o tipo.
+  tipo: 'receita' | 'despesa'
 }
 
 const zeros = () => Array(12).fill(0)
@@ -102,7 +145,8 @@ const arvore = computed<No[]>(() => {
   const somar = (id: string, nivel: No['nivel'], rotulo: string, paiId: string | null, l: PivotLinha) => {
     let n = acc.get(id)
     if (!n) {
-      n = { id, nivel, rotulo, meses: zeros(), total: 0, temFilhos: nivel < 4, paiId }
+      n = { id, nivel, rotulo, meses: zeros(), total: 0, temFilhos: nivel < 4, paiId,
+            tipo: l.tipo as No['tipo'] }
       acc.set(id, n)
       ordem.push(id)
     }
@@ -171,7 +215,17 @@ function expandirAte(nivel: number) {
 }
 
 // Notação contábil: negativo entre parênteses. Ver src/utils/formato.ts.
-const fmt = fmtNumero
+const fmt = (v: number) => fmtNumero(v, ui.mostrarCentavos ? 2 : 0)
+
+/**
+ * Despesa sempre entre parênteses, receita nunca. A matvw guarda as duas como
+ * magnitude POSITIVA, então formatar pelo sinal deixava gasto e faturamento com
+ * a mesma aparência — que é o que o usuário pediu para separar.
+ *
+ * A linha RESULTADO continua pelo sinal: ali o negativo é negativo de verdade.
+ */
+const fmtPorTipo = (v: number, tipo: No['tipo']) =>
+  v === 0 ? '—' : fmt(tipo === 'despesa' ? -Math.abs(v) : Math.abs(v))
 
 // ── Carregamento ───────────────────────────────────────────────────────────
 async function carregar() {
@@ -275,6 +329,23 @@ watch(() => [props.grupoId, props.filtros], carregar, { deep: true, immediate: t
 /* Negativo em vermelho, somado aos parênteses da notação contábil. !important
    porque .pv-td-total define cor própria e a especificidade empata. */
 .pv-neg { color: var(--danger) !important; }
+/* Cor pelo TIPO nas linhas: receita e faturamento, despesa e gasto, e as duas
+   chegam como magnitude positiva. O rodape segue usando .pv-neg, porque ali o
+   negativo e negativo de verdade. */
+/* Mesmo tratamento da legenda do donut: o item continua legivel e com os proprios
+   valores, so avisa que saiu da conta. */
+.pv-fora .pv-rotulo { text-decoration: line-through; }
+.pv-fora .pv-td-num, .pv-fora .pv-td-total { opacity: 0.45; }
+.pv-rotulo--clicavel {
+  background: none; border: none; padding: 0; font: inherit; color: inherit;
+  cursor: pointer; text-align: left;
+}
+.pv-rotulo--clicavel:hover { text-decoration: underline; }
+
+.pv-receita { color: var(--success); }
+.pv-despesa { color: var(--danger); }
+/* .pv-zero vence as duas: celula sem valor nao deve puxar atencao com cor. */
+.pv-zero { color: var(--text-dim) !important; }
 .pv-previsto { background: var(--warning-weak); }
 
 .pv-tr { border-bottom: 1px solid var(--border); }

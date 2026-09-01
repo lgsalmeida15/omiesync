@@ -26,22 +26,34 @@ export function fmtMoeda(v: number): string {
  * Separado de fmtMoeda porque os dois têm públicos diferentes: no gráfico e no
  * tooltip o centavo é ruído, no card de topo ele é o número que o usuário
  * confere contra o extrato.
+ *
+ * `casas` permite suprimir os centavos quando o usuário desliga a exibição —
+ * há empresas em que o centavo é irrelevante e só atrapalha a leitura. O padrão
+ * mantém o comportamento anterior, então nenhum chamador precisa mudar.
+ *
+ * Arredonda, não trunca: Intl já faz isso, e 490.000,97 vira 490.001.
  */
-export function fmtMoedaExata(v: number): string {
+export function fmtMoedaExata(v: number, casas: 0 | 2 = 2): string {
   const s = new Intl.NumberFormat('pt-BR', {
     style: 'currency',
     currency: 'BRL',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: casas,
+    maximumFractionDigits: casas,
   }).format(Math.abs(v))
   return v < 0 ? `(${s})` : s
 }
 
-/** Número com dois decimais, sem símbolo de moeda. Para a tabela do Resultado. */
-export function fmtNumero(v: number): string {
+/**
+ * Número sem símbolo de moeda, para a tabela do Resultado.
+ *
+ * Mesma regra de `casas` do fmtMoedaExata. Estas duas são as únicas funções que
+ * exibem centavos na aplicação — fmtMoeda e fmtCompacto já arredondam sempre —,
+ * por isso o botão de decimais atua só nelas.
+ */
+export function fmtNumero(v: number, casas: 0 | 2 = 2): string {
   const s = Math.abs(v).toLocaleString('pt-BR', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: casas,
+    maximumFractionDigits: casas,
   })
   return v < 0 ? `(${s})` : s
 }

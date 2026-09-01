@@ -90,3 +90,45 @@ describe('fmtCompacto', () => {
     expect(n(fmtCompacto(-500))).toBe('(R$ 500)')
   })
 })
+
+describe('casas decimais suprimidas', () => {
+  // O botao de decimais existe porque em muitas empresas o centavo e ruido.
+  // Estas duas funcoes sao as unicas que exibem centavos na aplicacao.
+  it('fmtNumero com 0 casas arredonda para cima', () => {
+    expect(fmtNumero(1599804.84, 0)).toBe('1.599.805')
+  })
+
+  it('fmtNumero com 0 casas arredonda para baixo', () => {
+    expect(fmtNumero(1599804.44, 0)).toBe('1.599.804')
+  })
+
+  it('negativo sem casas mantem os parenteses e perde os centavos', () => {
+    const r = fmtNumero(-215297.44, 0)
+    expect(r).toBe('(215.297)')
+    expect(r).not.toContain(',')
+    expect(r).not.toContain('-')
+  })
+
+  it('zero sem casas nao vira negativo', () => {
+    expect(fmtNumero(0, 0)).toBe('0')
+  })
+
+  it('fmtMoedaExata com 0 casas mantem o simbolo e some com os centavos', () => {
+    expect(n(fmtMoedaExata(490000.97, 0))).toBe('R$ 490.001')
+    expect(n(fmtMoedaExata(-490000.97, 0))).toBe('(R$ 490.001)')
+  })
+
+  // Sem isto, ligar o parametro em um chamador mudaria silenciosamente todos os
+  // outros, que dependem do formato com centavos.
+  it('o padrao continua sendo duas casas nas duas funcoes', () => {
+    expect(fmtNumero(1599804.84)).toBe('1.599.804,84')
+    expect(n(fmtMoedaExata(490000.97))).toBe('R$ 490.000,97')
+  })
+
+  // fmtMoeda e fmtCompacto nao ganham centavos: ja arredondam sempre, e o botao
+  // nao as alcanca. Travar isso evita que alguem "uniformize" sem perceber.
+  it('fmtMoeda e fmtCompacto seguem sem centavos', () => {
+    expect(n(fmtMoeda(1234.56))).toBe('R$ 1.235')
+    expect(fmtCompacto(1500000)).toBe('R$1.5M')
+  })
+})

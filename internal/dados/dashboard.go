@@ -163,6 +163,12 @@ func buildFiltroAno(p DashboardParams) (where string, args []any) {
 
 // buildFiltro monta o WHERE aplicando os filtros até o nível pedido. $1 é sempre o ano.
 //
+// A categoria filtrada é a FINAL, e não a superior. A superior agrupa demais para
+// servir de filtro de análise: marcar "Transferência" ali levava junto todas as
+// finais abaixo dela. Vale para o filtro, para a exclusão e para a lista de opções
+// — as três precisam falar da mesma coluna, senão o usuário marca um nome que o
+// WHERE não encontra.
+//
 // A exclusão de categorias entra apenas em nivelTodos: ela é filtro de dados, não de
 // opções. Nas listas a categoria excluída precisa continuar visível para poder ser
 // remarcada.
@@ -187,11 +193,11 @@ func buildFiltro(p DashboardParams, ate nivelFiltro) (where string, args []any) 
 		add("departamento_final = ANY($%d)", p.Departamentos)
 	}
 	if ate >= nivelCategorias && len(p.Categorias) > 0 {
-		add("descricao_categoria_superior = ANY($%d)", p.Categorias)
+		add("descricao_categoria_final = ANY($%d)", p.Categorias)
 	}
 	if ate >= nivelTodos {
 		if len(p.CategoriasExcluir) > 0 {
-			add("NOT (COALESCE(descricao_categoria_superior, '') = ANY($%d))", p.CategoriasExcluir)
+			add("NOT (COALESCE(descricao_categoria_final, '') = ANY($%d))", p.CategoriasExcluir)
 		}
 		if p.Cliente != "" {
 			add("cliente_final ILIKE $%d", "%"+p.Cliente+"%")
@@ -357,7 +363,7 @@ func queryFiltrosDisponiveis(ctx context.Context, pool *pgxpool.Pool, safe, view
 		nome   string
 	}{
 		{"departamento_final", nivelContas, "", &f.Departamentos, "departamentos"},
-		{"descricao_categoria_superior", nivelDepartamentos, "", &f.Categorias, "categorias"},
+		{"descricao_categoria_final", nivelDepartamentos, "", &f.Categorias, "categorias"},
 		{"cliente_final", nivelCategorias, "LIMIT 300", &f.Clientes, "clientes"},
 	}
 
