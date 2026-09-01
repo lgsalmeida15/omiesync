@@ -5,27 +5,53 @@
     <div v-else-if="!dados || !dados.linhas.length" class="pv-state">Nenhum dado no período.</div>
 
     <template v-else>
-      <div class="pv-toolbar">
+      <!-- No modo foco os controles ficam atrás de um botão, como os filtros:
+           a barra ocupa altura que a tabela pode usar melhor. -->
+      <div class="pv-barra">
+        <button class="pv-btn pv-btn--modo" @click="controlesAbertos = !controlesAbertos"
+                :aria-expanded="controlesAbertos">
+          Exibição<span class="pv-chv">▾</span>
+        </button>
+
+        <button v-if="ui.focoTabela" class="pv-btn pv-btn--sair" @click="ui.toggleFoco()">
+          ✕ Sair do modo foco
+        </button>
+        <button v-else class="pv-btn pv-btn--modo" @click="ui.toggleFoco()"
+                title="Ocupar a página inteira com a tabela">
+          ⤢ Modo foco
+        </button>
+
+        <span v-if="dados.mes_corte <= 12" class="pv-legenda">
+          <span class="pv-chip-prev" /> a partir de {{ nomeMes[dados.mes_corte - 1] }} são valores previstos
+        </span>
+      </div>
+
+      <div v-show="controlesAbertos" class="pv-toolbar">
         <button class="pv-btn" @click="expandirAte(1)">Recolher tudo</button>
         <button class="pv-btn" @click="expandirAte(2)">Categoria superior</button>
         <button class="pv-btn" @click="expandirAte(3)">Categoria final</button>
         <button class="pv-btn" @click="expandirAte(4)">Expandir tudo</button>
         <button class="pv-btn" @click="ui.toggleCentavos()"
                 :title="ui.mostrarCentavos ? 'Ocultar centavos' : 'Mostrar centavos'">
-          {{ ui.mostrarCentavos ? '0,00' : '0' }}
+          {{ ui.mostrarCentavos ? 'Sem centavos' : 'Com centavos' }}
         </button>
-        <span v-if="dados.mes_corte <= 12" class="pv-legenda">
-          <span class="pv-chip-prev" /> a partir de {{ nomeMes[dados.mes_corte - 1] }} são valores previstos
-        </span>
+        <button class="pv-btn" @click="restaurarColunas">Restaurar colunas</button>
       </div>
 
       <div class="pv-scroll">
         <table class="pv-table">
           <thead>
             <tr>
-              <th class="pv-th-dim">DESCRIÇÃO</th>
+              <th class="pv-th-dim" :style="estiloCol('dim', 280)">
+                DESCRIÇÃO
+                <span class="pv-alca" @mousedown="iniciarArrasto('dim', $event, larguras['dim'] ?? 280)" />
+              </th>
               <th v-for="(m, i) in nomeMes" :key="m"
-                  :class="['pv-th-mes', { 'pv-previsto': i + 1 >= dados.mes_corte }]">{{ m }}</th>
+                  :class="['pv-th-mes', { 'pv-previsto': i + 1 >= dados.mes_corte }]"
+                  :style="estiloCol(`m${i}`, 92)">
+                {{ m }}
+                <span class="pv-alca" @mousedown="iniciarArrasto(`m${i}`, $event, larguras[`m${i}`] ?? 92)" />
+              </th>
               <th class="pv-th-total">TOTAL</th>
             </tr>
           </thead>
@@ -79,7 +105,7 @@ import type { DashboardParams } from '@/api/dashboard'
 import AppSpinner from '@/components/ui/AppSpinner.vue'
 import { fmtNumero } from '@/utils/formato'
 import { useUiStore } from '@/stores/ui'
-import { calcularResultado, chaveSuperior } from '@/utils/resultado'
+import { calcularResultado, chaveSuperior, larguraAoArrastar } from '@/utils/resultado'
 
 const props = defineProps<{ grupoId: string; filtros: DashboardParams }>()
 
@@ -98,6 +124,50 @@ const expandidos = ref<Set<string>>(new Set())
  * o usuário voltar dias depois a um resultado alterado sem lembrar por quê.
  */
 const excluidosDoResultado = ref<Set<string>>(new Set())
+
+// Controles recolhidos por padrão no modo foco, abertos fora dele: quem entra no
+// foco quer área de tabela, quem está fora espera os botões onde sempre estiveram.
+const controlesAbertos = ref(true)
+
+/**
+ * Larguras arrastadas, por coluna. Sessão apenas — o usuário dispensou persistir,
+ * e "Restaurar colunas" cobre o arrependimento dentro da sessão.
+ *
+ * Chave 'dim' para a descrição e o índice do mês para as demais. O TOTAL fica de
+ * fora: é a âncora de leitura à direita.
+ */
+const larguras = ref<Record<string, number>>({})
+
+function restaurarColunas() {
+  larguras.value = {}
+}
+
+/**
+ * Arrasto na divisa do cabeçalho. Os listeners vão na `window`, não no elemento:
+ * o ponteiro sai do `th` durante o movimento, e presos ao elemento o arrasto
+ * morreria no meio.
+ */
+function iniciarArrasto(chave: string, ev: MouseEvent, larguraAtual: number) {
+  ev.preventDefault()
+  const x0 = ev.clientX
+  const mover = (e: MouseEvent) => {
+    larguras.value = { ...larguras.value, [chave]: larguraAoArrastar(larguraAtual, e.clientX - x0) }
+  }
+  const soltar = () => {
+    window.removeEventListener('mousemove', mover)
+    window.removeEventListener('mouseup', soltar)
+    document.body.style.userSelect = ''
+  }
+  // Sem isto o arrasto seleciona o texto do cabeçalho junto.
+  document.body.style.userSelect = 'none'
+  window.addEventListener('mousemove', mover)
+  window.addEventListener('mouseup', soltar)
+}
+
+const estiloCol = (chave: string, padrao: number) => ({
+  width: `${larguras.value[chave] ?? padrao}px`,
+})
+watch(() => ui.focoTabela, foco => { controlesAbertos.value = !foco })
 
 function alternarNoResultado(tipo: string, categoriaSuperior: string) {
   const k = chaveSuperior(tipo, categoriaSuperior)
@@ -311,7 +381,30 @@ watch(() => [props.grupoId, props.filtros], carregar, { deep: true, immediate: t
   padding: 10px 12px; border-bottom: 1px solid var(--border-strong);
   white-space: nowrap;
 }
-.pv-th-dim   { text-align: left; min-width: 280px; }
+/* min-width fixo saiu: a largura agora vem do estilo inline, e um minimo em CSS
+   venceria o arrasto para a esquerda. O piso vive em larguraAoArrastar. */
+.pv-th-dim   { text-align: left; }
+
+/* Alca de arrasto na divisa, com o cursor indicando a acao. Nao precisa de
+   position:relative no th: ele ja e sticky por causa do cabecalho fixo, e sticky
+   e posicionado — logo, ancora filhos absolutos. */
+.pv-alca {
+  position: absolute; top: 0; right: 0; width: 6px; height: 100%;
+  cursor: col-resize; user-select: none;
+}
+.pv-alca:hover { background: var(--primary); opacity: 0.5; }
+
+/* Barra de modo: fica sempre visivel, mesmo com os controles recolhidos. */
+.pv-barra {
+  display: flex; align-items: center; gap: var(--sp-2);
+  flex-wrap: wrap; margin-bottom: var(--sp-2);
+}
+.pv-btn--modo { font-weight: 600; }
+.pv-btn--sair {
+  background: var(--danger-weak); color: var(--danger);
+  border-color: var(--danger); font-weight: 700;
+}
+.pv-chv { margin-left: 5px; font-size: var(--fs-xs); }
 .pv-th-mes   { text-align: right; }
 .pv-th-total { text-align: right; border-left: 1px solid var(--border-strong); }
 

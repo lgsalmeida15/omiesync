@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { calcularResultado, chaveSuperior } from './resultado'
+import { calcularResultado, chaveSuperior, larguraAoArrastar } from './resultado'
 import type { PivotLinha } from '@/api/pivot'
 
 function l(p: Partial<PivotLinha>): PivotLinha {
@@ -114,5 +114,27 @@ describe('chaveSuperior', () => {
   it('separa tipo de categoria', () => {
     expect(chaveSuperior('receita', 'Transferência')).toBe('receita|Transferência')
     expect(chaveSuperior('receita', 'X')).not.toBe(chaveSuperior('despesa', 'X'))
+  })
+})
+
+describe('larguraAoArrastar', () => {
+  it('soma o deslocamento à largura inicial', () => {
+    expect(larguraAoArrastar(280, 40)).toBe(320)
+    expect(larguraAoArrastar(280, -40)).toBe(240)
+  })
+
+  // Sem o piso, arrastar para a esquerda alem da origem daria largura negativa e
+  // a coluna sumiria sem como recuperar.
+  it('nunca desce abaixo do mínimo', () => {
+    expect(larguraAoArrastar(280, -500)).toBe(60)
+    expect(larguraAoArrastar(100, -100, 80)).toBe(80)
+  })
+
+  it('arredonda para pixel inteiro', () => {
+    expect(larguraAoArrastar(280, 10.6)).toBe(291)
+  })
+
+  it('deslocamento zero devolve a largura inicial', () => {
+    expect(larguraAoArrastar(280, 0)).toBe(280)
   })
 })

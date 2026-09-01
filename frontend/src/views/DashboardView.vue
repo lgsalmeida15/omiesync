@@ -164,7 +164,7 @@
          Mesmo `defer` dos filtros: #appbar-tabs é renderizado pelo MainLayout e
          sem ele o querySelector do alvo devolve null na montagem. -->
     <Teleport defer to="#appbar-tabs">
-      <div class="dash-tabs">
+      <div v-if="!ui.focoTabela" class="dash-tabs">
         <button v-for="t in abas" :key="t.id"
                 :class="['dash-tab', { active: aba === t.id }]"
                 @click="aba = t.id">{{ t.label }}</button>

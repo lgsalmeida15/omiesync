@@ -47,3 +47,14 @@ export function calcularResultado(
 
   return { meses, total }
 }
+
+/**
+ * Largura de coluna durante o arrasto.
+ *
+ * O mínimo não é cosmético: sem ele, arrastar para a esquerda além da origem
+ * produz largura negativa, e a coluna some sem meio de recuperá-la a não ser
+ * recarregando.
+ */
+export function larguraAoArrastar(inicial: number, dx: number, minimo = 60): number {
+  return Math.max(minimo, Math.round(inicial + dx))
+}

@@ -40,6 +40,21 @@ export const useUiStore = defineStore('ui', () => {
     localStorage.setItem('mostrar_centavos', String(mostrarCentavos.value))
   }
 
+  /**
+   * Modo foco da tabela: some a faixa de abas e a barra de botoes do pivo, para
+   * a tabela ocupar o maximo da pagina. Barra superior, lateral e o botao de
+   * filtros permanecem.
+   *
+   * Nao persiste: e um modo de trabalho, nao preferencia. Voltar dias depois a
+   * uma tela sem abas, sem lembrar como entrou, seria uma armadilha — e a saida
+   * so existe dentro do proprio modo.
+   */
+  const focoTabela = ref(false)
+
+  function toggleFoco() {
+    focoTabela.value = !focoTabela.value
+  }
+
   function toggleFiltros() {
     filtrosAbertos.value = !filtrosAbertos.value
     localStorage.setItem('filtros_abertos', String(filtrosAbertos.value))
@@ -62,5 +77,6 @@ export const useUiStore = defineStore('ui', () => {
     theme.value = theme.value === 'dark' ? 'light' : 'dark'
   }
 
-  return { theme, filtrosAbertos, mostrarCentavos, toggleTheme, toggleFiltros, toggleCentavos }
+  return { theme, filtrosAbertos, mostrarCentavos, focoTabela,
+           toggleTheme, toggleFiltros, toggleCentavos, toggleFoco }
 })
