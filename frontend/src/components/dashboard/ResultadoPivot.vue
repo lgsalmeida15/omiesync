@@ -38,7 +38,8 @@
         <button class="pv-btn" @click="restaurarColunas">Restaurar colunas</button>
       </div>
 
-      <div class="pv-scroll">
+      <div class="pv-scroll" ref="scrollEl"
+           :style="alturaTabela ? { maxHeight: `${alturaTabela}px` } : undefined">
         <table class="pv-table">
           <thead>
             <tr>
@@ -99,13 +100,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { fetchPivot, type PivotData, type PivotLinha } from '@/api/pivot'
 import type { DashboardParams } from '@/api/dashboard'
 import AppSpinner from '@/components/ui/AppSpinner.vue'
 import { fmtNumero } from '@/utils/formato'
 import { useUiStore } from '@/stores/ui'
-import { calcularResultado, chaveSuperior, larguraAoArrastar } from '@/utils/resultado'
+import { calcularResultado, chaveSuperior, larguraAoArrastar, alturaDisponivel } from '@/utils/resultado'
 
 const props = defineProps<{ grupoId: string; filtros: DashboardParams }>()
 
@@ -137,6 +138,37 @@ const controlesAbertos = ref(true)
  * fora: é a âncora de leitura à direita.
  */
 const larguras = ref<Record<string, number>>({})
+
+/**
+ * Altura da tabela medida, e não estimada.
+ *
+ * Havia um `calc(100vh - 240px)` aqui. O 240 era um chute do que fica acima, mas
+ * isso muda em três eixos independentes — filtros abertos ou fechados, modo foco
+ * (que remove a faixa de abas) e controles recolhidos. No foco o número fixo
+ * desperdiçava quase 80px justamente onde se quer área.
+ *
+ * innerHeight e não 100vh: em navegador móvel o vh ignora a barra de endereço e
+ * estoura a tela.
+ */
+const scrollEl = ref<HTMLElement | null>(null)
+const alturaTabela = ref(0)
+
+function medirAltura() {
+  const el = scrollEl.value
+  if (!el) return
+  alturaTabela.value = alturaDisponivel(el.getBoundingClientRect().top, window.innerHeight)
+}
+
+// Recalcula quando algo ACIMA da tabela muda de altura. Sem isto, abrir os
+// filtros empurraria a tabela para fora da janela sem que ela encolhesse.
+watch(() => [ui.filtrosAbertos, ui.focoTabela, controlesAbertos.value, dados.value],
+  () => nextTick(medirAltura))
+
+onMounted(() => {
+  nextTick(medirAltura)
+  window.addEventListener('resize', medirAltura)
+})
+onBeforeUnmount(() => window.removeEventListener('resize', medirAltura))
 
 function restaurarColunas() {
   larguras.value = {}
@@ -366,6 +398,8 @@ watch(() => [props.grupoId, props.filtros], carregar, { deep: true, immediate: t
  */
 .pv-scroll {
   overflow: auto;
+  /* Fallback até a primeira medição, e rede de segurança se ela falhar. O valor
+     que vale é o inline, calculado por alturaDisponivel. */
   max-height: max(320px, calc(100vh - 240px));
   background: var(--surface);
   border: 1px solid var(--border);

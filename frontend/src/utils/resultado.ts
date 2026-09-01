@@ -58,3 +58,27 @@ export function calcularResultado(
 export function larguraAoArrastar(inicial: number, dx: number, minimo = 60): number {
   return Math.max(minimo, Math.round(inicial + dx))
 }
+
+/**
+ * Altura que sobra na janela para a tabela, a partir de onde ela começa.
+ *
+ * Substituiu um `calc(100vh - 240px)` fixo. O 240 era uma estimativa do que fica
+ * acima, mas isso varia em três eixos independentes — barra de filtros aberta ou
+ * fechada, modo foco (que remove a faixa de abas) e controles recolhidos. No modo
+ * foco o número fixo desperdiçava quase 80px justamente onde o usuário quer área;
+ * com os filtros abertos, estourava a tela.
+ *
+ * `folga` é o respiro abaixo da tabela — o padding inferior da página. Sem ele a
+ * tabela encosta na borda e some a sensação de fim de conteúdo.
+ *
+ * O mínimo evita que uma janela baixa, ou um topo grande demais, produza altura
+ * negativa e faça a tabela desaparecer.
+ */
+export function alturaDisponivel(
+  topo: number,
+  alturaJanela: number,
+  folga = 32,
+  minimo = 320,
+): number {
+  return Math.max(minimo, Math.round(alturaJanela - topo - folga))
+}

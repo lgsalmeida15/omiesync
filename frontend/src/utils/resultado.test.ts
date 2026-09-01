@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { calcularResultado, chaveSuperior, larguraAoArrastar } from './resultado'
+import { calcularResultado, chaveSuperior, larguraAoArrastar, alturaDisponivel } from './resultado'
 import type { PivotLinha } from '@/api/pivot'
 
 function l(p: Partial<PivotLinha>): PivotLinha {
@@ -136,5 +136,39 @@ describe('larguraAoArrastar', () => {
 
   it('deslocamento zero devolve a largura inicial', () => {
     expect(larguraAoArrastar(280, 0)).toBe(280)
+  })
+})
+
+describe('alturaDisponivel', () => {
+  it('ocupa o que sobra abaixo do topo, descontando a folga', () => {
+    expect(alturaDisponivel(240, 900)).toBe(628)   // 900 − 240 − 32
+  })
+
+  // É o ganho do modo foco: sem a faixa de abas o topo sobe e a tabela cresce
+  // na mesma medida — o que o número fixo não fazia.
+  it('topo mais alto na tela rende mais altura', () => {
+    const normal = alturaDisponivel(240, 900)
+    const foco   = alturaDisponivel(160, 900)
+    expect(foco).toBeGreaterThan(normal)
+    expect(foco - normal).toBe(80)
+  })
+
+  it('janela maior rende mais altura', () => {
+    expect(alturaDisponivel(240, 1200) - alturaDisponivel(240, 900)).toBe(300)
+  })
+
+  // Sem o piso, janela baixa ou topo grande fariam a tabela sumir.
+  it('nunca desce abaixo do mínimo', () => {
+    expect(alturaDisponivel(240, 400)).toBe(320)
+    expect(alturaDisponivel(900, 500)).toBe(320)
+  })
+
+  it('nunca devolve altura negativa', () => {
+    expect(alturaDisponivel(2000, 600)).toBeGreaterThan(0)
+  })
+
+  it('folga e mínimo são configuráveis', () => {
+    expect(alturaDisponivel(240, 900, 0)).toBe(660)
+    expect(alturaDisponivel(240, 400, 32, 100)).toBe(128)
   })
 })
