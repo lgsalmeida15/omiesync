@@ -20,6 +20,14 @@ export interface FluxoResumo {
   a_receber: number
   pago: number
   a_pagar: number
+  /**
+   * Vencido e nao pago, ja FORA de a_receber/a_pagar: antes ficava somado
+   * dentro deles, invisivel. Zero quando a inadimplencia esta desligada, e a
+   * tela usa isso para nao exibir a linha.
+   */
+  atrasado_receber: number
+  atrasado_pagar: number
+  /** Soma os seis. Separar o atrasado redistribui as linhas, nao muda o total. */
   resultado: number
 }
 

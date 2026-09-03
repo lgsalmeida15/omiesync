@@ -1,4 +1,4 @@
-import type { FluxoTransacao } from '@/api/fluxocaixa'
+import type { FluxoTransacao, FluxoResumo } from '@/api/fluxocaixa'
 
 export interface FiltrosListagem {
   /** null = mês inteiro. */
@@ -51,4 +51,45 @@ export function classeStatus(t: Pick<FluxoTransacao, 'tipo' | 'realizado' | 'sta
   if (t.status === 'Atrasado') return 'pill--atraso'
   if (!t.realizado) return 'pill--pend'
   return t.tipo === 'receita' ? 'pill--in' : 'pill--out'
+}
+
+/**
+ * Totaliza transações no mesmo formato do resumo do servidor.
+ *
+ * Existe porque a tela recalcula o resumo em dois casos — aba de um lado só e
+ * dia selecionado no calendário — e a regra estava escrita à mão nos dois. Com
+ * a chegada do "Atrasado", os dois teriam de mudar juntos, e esquecer um faria
+ * o vencido voltar a se esconder dentro do previsto justamente nas abas de
+ * Contas a Pagar e a Receber, que é onde ele importa.
+ *
+ * A ordem dos ramos é a mesma do backend: atrasado ANTES de realizado, porque
+ * ele também tem `realizado: false`.
+ *
+ * `somarUmLadoSo` cobre a aba de um lado só, onde tudo tem o mesmo sinal e o
+ * total é soma, não diferença — subtrair ali não teria contra o quê.
+ */
+export function resumirTransacoes(
+  transacoes: FluxoTransacao[],
+  somarUmLadoSo = false,
+): FluxoResumo {
+  const r: FluxoResumo = {
+    recebido: 0, a_receber: 0, pago: 0, a_pagar: 0,
+    atrasado_receber: 0, atrasado_pagar: 0, resultado: 0,
+  }
+
+  for (const t of transacoes) {
+    const receita = t.tipo === 'receita'
+    if (t.status === 'Atrasado') {
+      receita ? (r.atrasado_receber += t.valor) : (r.atrasado_pagar += t.valor)
+    } else if (t.realizado) {
+      receita ? (r.recebido += t.valor) : (r.pago += t.valor)
+    } else {
+      receita ? (r.a_receber += t.valor) : (r.a_pagar += t.valor)
+    }
+  }
+
+  const entradas = r.recebido + r.a_receber + r.atrasado_receber
+  const saidas   = r.pago + r.a_pagar + r.atrasado_pagar
+  r.resultado = somarUmLadoSo ? entradas + saidas : entradas - saidas
+  return r
 }

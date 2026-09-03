@@ -31,10 +31,22 @@ type FluxoTransacao struct {
 // "total a receber" / "total a pagar", que seria ambíguo entre o que já entrou e
 // o que ainda vai entrar.
 type FluxoResumo struct {
-	Recebido  float64 `json:"recebido"`
-	AReceber  float64 `json:"a_receber"`
-	Pago      float64 `json:"pago"`
-	APagar    float64 `json:"a_pagar"`
+	Recebido float64 `json:"recebido"`
+	AReceber float64 `json:"a_receber"`
+	Pago     float64 `json:"pago"`
+	APagar   float64 `json:"a_pagar"`
+
+	// Vencido e não pago, separado do previsto: um título atrasado tem
+	// Realizado=false e caía dentro de AReceber/APagar, somado mas invisível.
+	// Fora dali, "a receber" volta a significar só o que ainda vai vencer.
+	//
+	// Zero quando a inadimplência está desligada — a tela usa isso para não
+	// exibir a linha.
+	AtrasadoReceber float64 `json:"atrasado_receber"`
+	AtrasadoPagar   float64 `json:"atrasado_pagar"`
+
+	// Continua somando os seis: separar o atrasado redistribui as linhas acima,
+	// mas não muda o total.
 	Resultado float64 `json:"resultado"`
 }
 
@@ -131,6 +143,12 @@ func QueryFluxoCaixa(ctx context.Context, pool *pgxpool.Pool, p DashboardParams)
 
 	for _, t := range resp.Transacoes {
 		switch {
+		// Atrasado ANTES de Realizado: ele também tem Realizado=false e, sem este
+		// ramo primeiro, voltaria a se esconder dentro de AReceber/APagar.
+		case t.Status == statusAtrasado && t.Tipo == "receita":
+			resp.Resumo.AtrasadoReceber += t.Valor
+		case t.Status == statusAtrasado:
+			resp.Resumo.AtrasadoPagar += t.Valor
 		case t.Tipo == "receita" && t.Realizado:
 			resp.Resumo.Recebido += t.Valor
 		case t.Tipo == "receita":
@@ -141,8 +159,9 @@ func QueryFluxoCaixa(ctx context.Context, pool *pgxpool.Pool, p DashboardParams)
 			resp.Resumo.APagar += t.Valor
 		}
 	}
-	resp.Resumo.Resultado = (resp.Resumo.Recebido + resp.Resumo.AReceber) -
-		(resp.Resumo.Pago + resp.Resumo.APagar)
+	resp.Resumo.Resultado =
+		(resp.Resumo.Recebido + resp.Resumo.AReceber + resp.Resumo.AtrasadoReceber) -
+			(resp.Resumo.Pago + resp.Resumo.APagar + resp.Resumo.AtrasadoPagar)
 
 	// ── Próximos vencimentos ─────────────────────────────────────────────────
 	// Sempre do ano corrente: o extrato só é sincronizado de hoje em diante, e o

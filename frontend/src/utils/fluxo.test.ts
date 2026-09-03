@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { filtrarTransacoes, classeStatus, type FiltrosListagem } from './fluxo'
+import { filtrarTransacoes, classeStatus, resumirTransacoes, type FiltrosListagem } from './fluxo'
 import type { FluxoTransacao } from '@/api/fluxocaixa'
 
 function t(p: Partial<FluxoTransacao>): FluxoTransacao {
@@ -150,5 +150,54 @@ describe('classeStatus — inadimplência', () => {
     expect(classeStatus({ tipo: 'receita', realizado: false, status: 'Pendente' })).toBe('pill--pend')
     expect(classeStatus({ tipo: 'receita', realizado: true,  status: 'Recebido' })).toBe('pill--in')
     expect(classeStatus({ tipo: 'despesa', realizado: true,  status: 'Pago' })).toBe('pill--out')
+  })
+})
+
+describe('resumirTransacoes', () => {
+  it('separa realizado de previsto', () => {
+    const r = resumirTransacoes(amostra)
+    expect(r.recebido).toBe(5000)
+    expect(r.a_receber).toBe(8000)
+    expect(r.pago).toBe(2000)
+    expect(r.a_pagar).toBe(3000)
+  })
+
+  // O ponto do ajuste: atrasado tem realizado=false e, sem o ramo proprio antes,
+  // voltaria a somar em a_receber/a_pagar — somado, mas invisivel.
+  it('atrasado sai de a_receber e a_pagar', () => {
+    const r = resumirTransacoes(comAtraso)
+    expect(r.atrasado_receber).toBe(7000)
+    expect(r.atrasado_pagar).toBe(4000)
+    // Os previstos continuam com os valores de antes: o atrasado nao entrou neles
+    expect(r.a_receber).toBe(8000)
+    expect(r.a_pagar).toBe(3000)
+  })
+
+  it('sem atraso os campos ficam zerados', () => {
+    const r = resumirTransacoes(amostra)
+    expect(r.atrasado_receber).toBe(0)
+    expect(r.atrasado_pagar).toBe(0)
+  })
+
+  // Separar o atrasado redistribui as linhas, mas o total tem de continuar o
+  // mesmo — e a regressao que protege quem ja le esse numero.
+  it('o resultado nao muda ao separar o atrasado', () => {
+    const r = resumirTransacoes(comAtraso)
+    const entradas = r.recebido + r.a_receber + r.atrasado_receber
+    const saidas   = r.pago + r.a_pagar + r.atrasado_pagar
+    expect(r.resultado).toBe(entradas - saidas)
+    expect(r.resultado).toBe((5000 + 8000 + 7000) - (2000 + 3000 + 4000))
+  })
+
+  // Na aba de um lado so tudo tem o mesmo sinal: subtrair nao teria contra o que.
+  it('um lado so soma em vez de subtrair', () => {
+    const soReceitas = comAtraso.filter(t => t.tipo === 'receita')
+    const r = resumirTransacoes(soReceitas, true)
+    expect(r.resultado).toBe(5000 + 8000 + 7000)
+  })
+
+  it('lista vazia devolve tudo zerado', () => {
+    const r = resumirTransacoes([])
+    expect(Object.values(r).every(v => v === 0)).toBe(true)
   })
 })

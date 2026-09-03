@@ -20,6 +20,12 @@ import (
 // A projeção e as regras de rateio abaixo copiam a matvw de propósito. Se
 // divergirem, a mesma categoria some com valores diferentes entre as abas.
 
+// statusAtrasado e o rotulo que identifica a linha vencida. Constante porque o
+// valor viaja da projecao SQL ate a classificacao do resumo e a pill do
+// frontend: escrito solto em cada lugar, uma divergencia de caixa faria o
+// atrasado voltar a se esconder dentro do previsto, sem erro nenhum.
+const statusAtrasado = "Atrasado"
+
 // colunasInadimplencia devolve exatamente o mesmo formato de colunasFluxo, para
 // que as linhas possam ser anexadas à mesma lista sem tratamento especial.
 //
@@ -32,7 +38,7 @@ const projecaoInadimplencia = `
 	%s                                                             AS tipo,
 	COALESCE(NULLIF(cat_fim.descricao, ''), 'Sem categoria')       AS categoria,
 	t.valor_documento * COALESCE(rateio.percentual, 100) / 100.0   AS valor,
-	'Atrasado'                                                     AS status,
+	'` + statusAtrasado + `'                                        AS status,
 	FALSE                                                          AS realizado`
 
 /*

@@ -16,12 +16,12 @@ import (
 // por 12 e obrigaria o cliente a cruzar tudo. Assim cada combinação vem uma vez só,
 // e a árvore é montada somando os filhos, sem consulta adicional por expansão.
 type PivotLinha struct {
-	Tipo               string     `json:"tipo"` // "receita" | "despesa"
-	CategoriaSuperior  string     `json:"categoria_superior"`
-	CategoriaFinal     string     `json:"categoria_final"`
-	Cliente            string     `json:"cliente"`
-	Meses              [12]float64 `json:"meses"`
-	Total              float64    `json:"total"`
+	Tipo              string      `json:"tipo"` // "receita" | "despesa"
+	CategoriaSuperior string      `json:"categoria_superior"`
+	CategoriaFinal    string      `json:"categoria_final"`
+	Cliente           string      `json:"cliente"`
+	Meses             [12]float64 `json:"meses"`
+	Total             float64     `json:"total"`
 }
 
 type PivotResponse struct {

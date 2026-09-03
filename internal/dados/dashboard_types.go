@@ -1,17 +1,17 @@
 package dados
 
 type DashboardResponse struct {
-	Cards                    CardMetrics          `json:"cards"`
-	GraficoMensal            []GraficoMensal      `json:"grafico_mensal"`
-	GraficoResultadoAcumulado []GraficoAcumulado  `json:"grafico_resultado_acumulado"`
-	FiltrosDisponiveis       FiltrosDisponiveis   `json:"filtros_disponiveis"`
+	Cards                     CardMetrics        `json:"cards"`
+	GraficoMensal             []GraficoMensal    `json:"grafico_mensal"`
+	GraficoResultadoAcumulado []GraficoAcumulado `json:"grafico_resultado_acumulado"`
+	FiltrosDisponiveis        FiltrosDisponiveis `json:"filtros_disponiveis"`
 }
 
 type CardMetrics struct {
-	ReceitaTotal          float64 `json:"receita_total"`
-	DespesaTotal          float64 `json:"despesa_total"`
-	Resultado             float64 `json:"resultado"`
-	SaldoContasCorrentes  float64 `json:"saldo_contas_correntes"`
+	ReceitaTotal         float64 `json:"receita_total"`
+	DespesaTotal         float64 `json:"despesa_total"`
+	Resultado            float64 `json:"resultado"`
+	SaldoContasCorrentes float64 `json:"saldo_contas_correntes"`
 }
 
 type GraficoMensal struct {

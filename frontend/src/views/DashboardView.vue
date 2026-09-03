@@ -232,7 +232,12 @@
             <span class="kpi-label">Saldo em contas</span>
             <span class="kpi-icon kpi-icon--cyan"><IconCreditCard /></span>
           </div>
-          <div class="kpi-value">{{ fmtExato(dados.cards.saldo_contas_correntes) }}</div>
+          <!-- Mesma regra do card Resultado ao lado: cor pelo sinal, e os parenteses
+               do negativo vem do proprio fmtExato. -->
+          <div class="kpi-value"
+               :class="dados.cards.saldo_contas_correntes >= 0 ? 'kpi-value--green' : 'kpi-value--red'">
+            {{ fmtExato(dados.cards.saldo_contas_correntes) }}
+          </div>
           <div class="kpi-foot">
             <span class="tag tag--ok">{{ contasNoFluxo }}</span> consideradas no fluxo
           </div>

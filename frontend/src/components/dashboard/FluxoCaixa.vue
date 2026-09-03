@@ -57,6 +57,12 @@
                 <span class="res-rot">A receber<span class="res-prev">previsto</span></span>
                 <span class="res-val res-val--in">{{ fmtMoeda(resumo.a_receber) }}</span>
               </div>
+              <!-- So aparece quando ha atraso: com a inadimplencia desligada o
+                   valor e zero e a linha nao deve ocupar espaco. -->
+              <div v-if="resumo.atrasado_receber > 0" class="res-linha">
+                <span class="res-rot">A receber<span class="res-atraso">atrasado</span></span>
+                <span class="res-val res-val--atraso">{{ fmtMoeda(resumo.atrasado_receber) }}</span>
+              </div>
             </template>
             <template v-if="tipo !== 'receita'">
               <div class="res-linha">
@@ -66,6 +72,10 @@
               <div class="res-linha">
                 <span class="res-rot">A pagar<span class="res-prev">previsto</span></span>
                 <span class="res-val res-val--out">{{ fmtMoeda(resumo.a_pagar) }}</span>
+              </div>
+              <div v-if="resumo.atrasado_pagar > 0" class="res-linha">
+                <span class="res-rot">A pagar<span class="res-atraso">atrasado</span></span>
+                <span class="res-val res-val--atraso">{{ fmtMoeda(resumo.atrasado_pagar) }}</span>
               </div>
             </template>
             <div class="res-linha res-linha--total">
@@ -161,7 +171,7 @@ import { fetchFluxoCaixa, type FluxoCaixaData, type FluxoResumo, type FluxoTrans
 import type { DashboardParams } from '@/api/dashboard'
 import AppSpinner from '@/components/ui/AppSpinner.vue'
 import { fmtMoeda, fmtCompacto } from '@/utils/formato'
-import { filtrarTransacoes, classeStatus } from '@/utils/fluxo'
+import { filtrarTransacoes, classeStatus, resumirTransacoes } from '@/utils/fluxo'
 
 const props = withDefaults(defineProps<{
   grupoId: string
@@ -209,18 +219,10 @@ const dados = computed<FluxoCaixaData | null>(() => {
 
   const doLado = (t: FluxoTransacao) => t.tipo === props.tipo
   const transacoes = bruto.value.transacoes.filter(doLado)
-  const resumo: FluxoResumo = {
-    recebido: 0, a_receber: 0, pago: 0, a_pagar: 0, resultado: 0,
-  }
-  for (const t of transacoes) {
-    if (soReceitas.value) t.realizado ? (resumo.recebido += t.valor) : (resumo.a_receber += t.valor)
-    else                  t.realizado ? (resumo.pago += t.valor)     : (resumo.a_pagar += t.valor)
-  }
-  // Aqui o total é a soma do lado, não uma diferença: tudo na tela é do mesmo
-  // sinal, então subtrair não teria contra o quê.
-  resumo.resultado = soReceitas.value
-    ? resumo.recebido + resumo.a_receber
-    : resumo.pago + resumo.a_pagar
+  // Totaliza pela mesma função do dia selecionado e com a mesma ordem de ramos
+  // do servidor. Escrito à mão aqui, o "Atrasado" cairia em a_receber e a linha
+  // nova nunca apareceria nesta aba — que é justamente onde ela importa.
+  const resumo = resumirTransacoes(transacoes, true)
 
   return {
     ...bruto.value,
@@ -271,17 +273,13 @@ const diasDoMes = computed(() => {
 // Sem dia selecionado usa o total que veio do servidor, para não divergir por
 // arredondamento do que o banco reportou.
 const resumo = computed<FluxoResumo>(() => {
-  if (!dados.value) return { recebido: 0, a_receber: 0, pago: 0, a_pagar: 0, resultado: 0 }
+  if (!dados.value) return resumirTransacoes([])
   if (diaSelecionado.value === null) return dados.value.resumo
 
-  const r: FluxoResumo = { recebido: 0, a_receber: 0, pago: 0, a_pagar: 0, resultado: 0 }
-  for (const t of dados.value.transacoes) {
-    if (t.dia !== diaSelecionado.value) continue
-    if (t.tipo === 'receita') t.realizado ? (r.recebido += t.valor) : (r.a_receber += t.valor)
-    else                      t.realizado ? (r.pago += t.valor)     : (r.a_pagar += t.valor)
-  }
-  r.resultado = (r.recebido + r.a_receber) - (r.pago + r.a_pagar)
-  return r
+  return resumirTransacoes(
+    dados.value.transacoes.filter(t => t.dia === diaSelecionado.value),
+    umLadoSo.value,
+  )
 })
 
 // ── Listagem: efetuadas e pendentes; a coluna Status distingue ─────────────
@@ -418,9 +416,18 @@ watch(() => [props.grupoId, props.filtros, props.mes], carregar, { deep: true, i
   padding: 1px 5px; border-radius: 10px;
   background: var(--warning-weak); color: var(--warning);
 }
+/* Atrasado usa a cor de perigo, e nao o ambar do previsto: vencido nao e a
+   mesma coisa que "ainda vai vencer". Mesma distincao ja feita na pill da
+   listagem. */
+.res-atraso {
+  font-family: var(--font-display); font-size: var(--fs-xs); letter-spacing: 0.5px;
+  padding: 1px 5px; border-radius: 10px;
+  background: var(--danger-weak); color: var(--danger);
+}
 .res-val { font-family: var(--font-display); font-size: var(--fs-xs); font-weight: 600; }
-.res-val--in  { color: var(--success); }
-.res-val--out { color: var(--danger); }
+.res-val--in     { color: var(--success); }
+.res-val--out    { color: var(--danger); }
+.res-val--atraso { color: var(--danger); font-weight: 700; }
 .res-linha--total .res-val { font-size: var(--fs-base); }
 
 /* ── Próximos vencimentos ── */
