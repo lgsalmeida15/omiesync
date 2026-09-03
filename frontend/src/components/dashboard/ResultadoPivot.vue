@@ -47,10 +47,10 @@
                 DESCRIÇÃO
                 <span class="pv-alca" @mousedown="iniciarArrasto('dim', $event, larguras['dim'] ?? 280)" />
               </th>
-              <th v-for="(m, i) in nomeMes" :key="m"
+              <th v-for="i in indicesVisiveis" :key="i"
                   :class="['pv-th-mes', { 'pv-previsto': i + 1 >= dados.mes_corte }]"
                   :style="estiloCol(`m${i}`, 92)">
-                {{ m }}
+                {{ nomeMes[i] }}
                 <span class="pv-alca" @mousedown="iniciarArrasto(`m${i}`, $event, larguras[`m${i}`] ?? 92)" />
               </th>
               <th class="pv-th-total">TOTAL</th>
@@ -72,12 +72,16 @@
                         @click="alternarNoResultado(n.tipo, n.rotulo)">{{ n.rotulo }}</button>
                 <span v-else class="pv-rotulo">{{ n.rotulo }}</span>
               </td>
-              <td v-for="(v, i) in n.meses" :key="i"
+              <td v-for="i in indicesVisiveis" :key="i"
                   :class="['pv-td-num', `pv-${n.tipo}`,
-                           { 'pv-previsto': i + 1 >= dados.mes_corte, 'pv-zero': v === 0 }]">
-                {{ fmtPorTipo(v, n.tipo) }}
+                           { 'pv-previsto': i + 1 >= dados.mes_corte, 'pv-zero': n.meses[i] === 0 }]">
+                {{ fmtPorTipo(n.meses[i], n.tipo) }}
               </td>
-              <td :class="['pv-td-total', `pv-${n.tipo}`]">{{ fmtPorTipo(n.total, n.tipo) }}</td>
+              <!-- Soma os meses visíveis, não n.total: aquele guarda o ano fechado
+                   e mentiria embaixo de colunas recortadas. -->
+              <td :class="['pv-td-total', `pv-${n.tipo}`]">
+                {{ fmtPorTipo(totalVisivel(n.meses, mesesVisiveis), n.tipo) }}
+              </td>
             </tr>
           </tbody>
           <tfoot>
@@ -86,10 +90,11 @@
                 RESULTADO
                 <span class="pv-nota" title="Receita menos despesa do período. Não inclui o saldo das contas correntes, por isso difere do card RESULTADO da Visão Geral.">?</span>
               </td>
-              <td v-for="(v, i) in resultado.meses" :key="i"
+              <td v-for="i in indicesVisiveis" :key="i"
                   :class="['pv-td-num', { 'pv-previsto': i + 1 >= dados.mes_corte,
-                                          'pv-neg': v < 0, 'pv-pos': v > 0 }]">
-                {{ v === 0 ? '—' : fmt(v) }}
+                                          'pv-neg': resultado.meses[i] < 0,
+                                          'pv-pos': resultado.meses[i] > 0 }]">
+                {{ resultado.meses[i] === 0 ? '—' : fmt(resultado.meses[i]) }}
               </td>
               <td class="pv-td-total"
                   :class="{ 'pv-neg': resultado.total < 0, 'pv-pos': resultado.total > 0 }">
@@ -110,9 +115,19 @@ import type { DashboardParams } from '@/api/dashboard'
 import AppSpinner from '@/components/ui/AppSpinner.vue'
 import { fmtNumero } from '@/utils/formato'
 import { useUiStore } from '@/stores/ui'
-import { calcularResultado, chaveSuperior, larguraAoArrastar, alturaDisponivel } from '@/utils/resultado'
+import { calcularResultado, chaveSuperior, larguraAoArrastar, alturaDisponivel, totalVisivel } from '@/utils/resultado'
 
-const props = defineProps<{ grupoId: string; filtros: DashboardParams }>()
+const props = withDefaults(defineProps<{
+  grupoId: string
+  filtros: DashboardParams
+  /** Recorte de exibição, fora de `filtros` para não disparar nova consulta. */
+  meses?: number[]
+}>(), { meses: () => [1,2,3,4,5,6,7,8,9,10,11,12] })
+
+const mesesVisiveis = computed(() => new Set(props.meses))
+/** Índices 0-11 das colunas exibidas, na ordem do ano. */
+const indicesVisiveis = computed(() =>
+  Array.from({ length: 12 }, (_, i) => i).filter(i => mesesVisiveis.value.has(i + 1)))
 
 const ui = useUiStore()
 
@@ -165,7 +180,7 @@ function medirAltura() {
 
 // Recalcula quando algo ACIMA da tabela muda de altura. Sem isto, abrir os
 // filtros empurraria a tabela para fora da janela sem que ela encolhesse.
-watch(() => [ui.filtrosAbertos, ui.focoTabela, controlesAbertos.value, dados.value],
+watch(() => [ui.filtrosAbertos, ui.focoTabela, controlesAbertos.value, dados.value, props.meses],
   () => nextTick(medirAltura))
 
 onMounted(() => {
@@ -220,7 +235,7 @@ const foraDoResultado = (n: No) =>
  * nenhuma exclusão o valor é o mesmo que o backend envia — ver utils/resultado.ts.
  */
 const resultado = computed(() =>
-  calcularResultado(dados.value?.linhas ?? [], excluidosDoResultado.value)
+  calcularResultado(dados.value?.linhas ?? [], excluidosDoResultado.value, mesesVisiveis.value)
 )
 
 // ── Montagem da árvore ─────────────────────────────────────────────────────

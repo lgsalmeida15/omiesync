@@ -22,6 +22,9 @@ export function chaveSuperior(tipo: string, categoriaSuperior: string): string {
   return `${tipo}|${categoriaSuperior}`
 }
 
+/** Jan..Dez. Padrão de `mesesVisiveis`, para o chamador que não recorta nada. */
+export const TODOS_OS_MESES: Set<number> = new Set([1,2,3,4,5,6,7,8,9,10,11,12])
+
 export interface ResultadoCalculado {
   meses: number[]
   total: number
@@ -30,6 +33,7 @@ export interface ResultadoCalculado {
 export function calcularResultado(
   linhas: PivotLinha[],
   excluidos: Set<string> = new Set(),
+  mesesVisiveis: Set<number> = TODOS_OS_MESES,
 ): ResultadoCalculado {
   const meses = Array(12).fill(0)
   let total = 0
@@ -41,11 +45,27 @@ export function calcularResultado(
     // ajuste_receita_despesa manda o não classificado para despesa, e replicar
     // isso é o que mantém os dois números iguais.
     const sinal = l.tipo === 'receita' ? 1 : -1
-    for (let i = 0; i < 12; i++) meses[i] += sinal * l.meses[i]
-    total += sinal * l.total
+    for (let i = 0; i < 12; i++) {
+      if (!mesesVisiveis.has(i + 1)) continue
+      meses[i] += sinal * l.meses[i]
+      // O total soma os meses visíveis em vez de usar l.total, que é sempre o
+      // ano inteiro: com um recorte, usar l.total mostraria o total anual sob
+      // colunas de um trimestre.
+      total += sinal * l.meses[i]
+    }
   }
 
   return { meses, total }
+}
+
+/**
+ * Soma de uma linha nos meses visíveis. Mesmo motivo do total acima: `l.total`
+ * e `n.total` guardam o ano fechado, e sob um recorte de meses eles mentiriam.
+ */
+export function totalVisivel(meses: number[], mesesVisiveis: Set<number> = TODOS_OS_MESES): number {
+  let t = 0
+  for (let i = 0; i < meses.length; i++) if (mesesVisiveis.has(i + 1)) t += meses[i]
+  return t
 }
 
 /**

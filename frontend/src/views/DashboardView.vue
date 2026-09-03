@@ -23,6 +23,17 @@
           </select>
         </div>
 
+        <!-- Meses do Resultado: recorte de exibição da tabela, não filtro de dados.
+             Por isso só aparece nessa aba e não dispara nova consulta. -->
+        <div class="fi" v-if="aba === 'resultado'">
+          <span class="fi-label">MESES</span>
+          <div class="fi-multi">
+            <button class="fi-select fi-trigger" @click.stop="toggleDropdown('meses', $event)">
+              {{ rotuloMeses }}<span class="chv">▾</span>
+            </button>
+          </div>
+        </div>
+
         <!-- Inadimplência: só nas abas de contas, mesmo criterio do seletor de MÊS.
              Nas demais abas nem aparece, porque nao tem efeito nelas. -->
         <div class="fi" v-if="abaDeContas">
@@ -147,6 +158,18 @@
           {{ c }}
         </label>
       </div>
+      <!-- Meses do Resultado -->
+      <div v-if="dropdown === 'meses'" class="fd-fixed" :style="fdStyle" @click.stop>
+        <div class="fd-acoes">
+          <button class="fd-acao" @click="todosOsMeses">Ano inteiro</button>
+          <button class="fd-acao" @click="nenhumMes">Limpar</button>
+        </div>
+        <label v-for="m in mesesDoAno" :key="m.v" class="chk-item">
+          <input type="checkbox" :checked="mesesVisiveisSet.has(m.v)" @change="alternarMes(m.v)" />
+          {{ m.n }}
+        </label>
+      </div>
+
       <!-- Autocomplete cliente -->
       <div v-if="dropdown === 'cli' && clienteSugestoes.length" class="fd-fixed" :style="fdStyle" @click.stop>
         <div
@@ -179,7 +202,8 @@
 
     <!-- Aba Resultado: componente carregado sob demanda para não pesar no bundle
          inicial do dashboard, que já é o maior da aplicação. -->
-    <ResultadoPivot v-else-if="aba === 'resultado'" :grupo-id="grupoIDAtivo" :filtros="filtrosAtivos" />
+    <ResultadoPivot v-else-if="aba === 'resultado'" :grupo-id="grupoIDAtivo"
+                    :filtros="filtrosAtivos" :meses="mesesVisiveis" />
     <FluxoCaixa v-else-if="aba === 'fluxo'" :grupo-id="grupoIDAtivo" :filtros="filtrosAtivos" :mes="mesSelecionado" />
     <ContasPorTipo v-else-if="aba === 'receber'" :grupo-id="grupoIDAtivo" :filtros="filtrosAtivos" :mes="mesSelecionado" tipo="receita" />
     <ContasPorTipo v-else-if="aba === 'pagar'"   :grupo-id="grupoIDAtivo" :filtros="filtrosAtivos" :mes="mesSelecionado" tipo="despesa" />
@@ -332,6 +356,31 @@ const abaMensal = computed(() => abasMensais.includes(aba.value))
 
 /** Abas que somam a inadimplencia e exibem o seletor correspondente. */
 const abaDeContas = computed(() => aba.value === 'receber' || aba.value === 'pagar')
+
+/**
+ * Meses exibidos no pivô do Resultado.
+ *
+ * Vive fora de `filtrosAtivos` de propósito: o ResultadoPivot observa `filtros`
+ * com deep:true e refaz a consulta a cada mudança. Como o servidor já devolve os
+ * doze meses, recortar é decisão de exibição — dentro dos filtros, cada clique
+ * num mês custaria uma ida ao banco à toa.
+ */
+const mesesVisiveis = ref<number[]>([1,2,3,4,5,6,7,8,9,10,11,12])
+const mesesVisiveisSet = computed(() => new Set(mesesVisiveis.value))
+
+function alternarMes(m: number) {
+  const s = new Set(mesesVisiveis.value)
+  s.has(m) ? s.delete(m) : s.add(m)
+  mesesVisiveis.value = [...s].sort((a, b) => a - b)
+}
+function todosOsMeses()  { mesesVisiveis.value = [1,2,3,4,5,6,7,8,9,10,11,12] }
+function nenhumMes()     { mesesVisiveis.value = [] }
+
+const rotuloMeses = computed(() =>
+  mesesVisiveis.value.length === 12 ? 'Ano inteiro'
+    : mesesVisiveis.value.length === 0 ? 'Nenhum mês'
+    : `${mesesVisiveis.value.length} de 12`
+)
 
 /**
  * Mês só existe no Fluxo de Caixa. Visão Geral e Resultado são anuais — filtrar

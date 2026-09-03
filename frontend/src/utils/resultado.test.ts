@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { calcularResultado, chaveSuperior, larguraAoArrastar, alturaDisponivel } from './resultado'
+import { calcularResultado, chaveSuperior, larguraAoArrastar, alturaDisponivel, totalVisivel } from './resultado'
 import type { PivotLinha } from '@/api/pivot'
 
 function l(p: Partial<PivotLinha>): PivotLinha {
@@ -170,5 +170,61 @@ describe('alturaDisponivel', () => {
   it('folga e mínimo são configuráveis', () => {
     expect(alturaDisponivel(240, 900, 0)).toBe(660)
     expect(alturaDisponivel(240, 400, 32, 100)).toBe(128)
+  })
+})
+
+describe('calcularResultado — meses visíveis', () => {
+  // Linhas com valor em janeiro e em fevereiro, para recortar entre eles.
+  const doisMeses: PivotLinha[] = [
+    l({ tipo: 'receita', meses: [100, 200, ...Array(10).fill(0)], total: 300 }),
+    l({ tipo: 'despesa', categoria_superior: 'Despesas',
+        meses: [40, 60, ...Array(10).fill(0)], total: 100 }),
+  ]
+
+  it('sem recorte soma o ano, como antes', () => {
+    expect(calcularResultado(doisMeses).total).toBe(200)   // 300 − 100
+  })
+
+  it('recorte soma só os meses escolhidos', () => {
+    expect(calcularResultado(doisMeses, new Set(), new Set([1])).total).toBe(60)   // 100 − 40
+    expect(calcularResultado(doisMeses, new Set(), new Set([2])).total).toBe(140)  // 200 − 60
+  })
+
+  // O ponto do ajuste: o total nao pode vir de l.total, que e sempre o ano
+  // fechado — sob um recorte ele mostraria o anual embaixo de colunas parciais.
+  it('o total ignora l.total e soma os meses', () => {
+    const mentiroso = [l({ tipo: 'receita', meses: [10, ...Array(11).fill(0)], total: 99999 })]
+    expect(calcularResultado(mentiroso, new Set(), new Set([1])).total).toBe(10)
+  })
+
+  it('meses fora do recorte ficam zerados no vetor', () => {
+    const r = calcularResultado(doisMeses, new Set(), new Set([1]))
+    expect(r.meses[0]).toBe(60)
+    expect(r.meses[1]).toBe(0)
+  })
+
+  it('recorte vazio zera tudo', () => {
+    const r = calcularResultado(doisMeses, new Set(), new Set())
+    expect(r.total).toBe(0)
+    expect(r.meses.every(v => v === 0)).toBe(true)
+  })
+
+  it('recorte e exclusão de categoria se combinam', () => {
+    const r = calcularResultado(doisMeses, new Set([chaveSuperior('despesa', 'Despesas')]), new Set([1]))
+    expect(r.total).toBe(100)   // só a receita de janeiro
+  })
+})
+
+describe('totalVisivel', () => {
+  it('soma só os meses escolhidos', () => {
+    expect(totalVisivel([10, 20, 30, ...Array(9).fill(0)], new Set([1, 3]))).toBe(40)
+  })
+
+  it('sem recorte soma tudo', () => {
+    expect(totalVisivel([10, 20, 30, ...Array(9).fill(0)])).toBe(60)
+  })
+
+  it('recorte vazio devolve zero', () => {
+    expect(totalVisivel([10, 20], new Set())).toBe(0)
   })
 })
