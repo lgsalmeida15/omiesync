@@ -31,11 +31,18 @@ const statusAtrasado = "Atrasado"
 //
 // `tipo` é constante por tabela: contas_receber é sempre receita, contas_pagar
 // sempre despesa. Não há a ambiguidade que a matvw resolve por status.
+//
+// A descrição prefere nome_fantasia, como a matvw (cliente_final), e só cai em
+// razao_social se ele faltar. Com razao_social direto, o mesmo cliente aparecia
+// como duas entidades — "ACME" pela matvw e "ACME LTDA" pela inadimplência —, e o
+// gráfico de clientes/fornecedores dividia o valor dele em duas barras.
 const projecaoInadimplencia = `
 	EXTRACT(DAY FROM t.data_vencimento)::INT                       AS dia,
 	TO_CHAR(t.data_vencimento, 'DD/MM/YYYY')                       AS data,
-	COALESCE(NULLIF(cli.razao_social, ''), 'Não informado')         AS descricao,
+	COALESCE(NULLIF(cli.nome_fantasia, ''),
+	         NULLIF(cli.razao_social, ''), 'Não informado')         AS descricao,
 	%s                                                             AS tipo,
+	COALESCE(NULLIF(cat_sup.descricao, ''), 'Sem categoria')       AS categoria_superior,
 	COALESCE(NULLIF(cat_fim.descricao, ''), 'Sem categoria')       AS categoria,
 	t.valor_documento * COALESCE(rateio.percentual, 100) / 100.0   AS valor,
 	'` + statusAtrasado + `'                                        AS status,

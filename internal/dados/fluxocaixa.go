@@ -15,13 +15,18 @@ import (
 // Descricao vem de cliente_final: a matvw não guarda texto livre, e o nome do
 // cliente ou fornecedor é o identificador mais útil que existe por linha.
 type FluxoTransacao struct {
-	Dia       int     `json:"dia"`
-	Data      string  `json:"data"` // DD/MM/YYYY
-	Descricao string  `json:"descricao"`
-	Tipo      string  `json:"tipo"` // "receita" | "despesa"
-	Categoria string  `json:"categoria"`
-	Valor     float64 `json:"valor"`
-	Status    string  `json:"status"` // "Recebido" | "Pago" | "Pendente"
+	Dia       int    `json:"dia"`
+	Data      string `json:"data"` // DD/MM/YYYY
+	Descricao string `json:"descricao"`
+	Tipo      string `json:"tipo"` // "receita" | "despesa"
+	// CategoriaSuperior é o agrupador de nível 2 do pivô — na matvw, LEFT(codigo, 4)
+	// resolvido contra a tabela de categorias. Existe aqui para que a tabela
+	// intradia da aba Fluxo de Caixa tenha os mesmos quatro níveis da aba
+	// Resultado, que a lê da consulta de pivô.
+	CategoriaSuperior string  `json:"categoria_superior"`
+	Categoria         string  `json:"categoria"`
+	Valor             float64 `json:"valor"`
+	Status            string  `json:"status"` // "Recebido" | "Pago" | "Pendente"
 	// Realizado separa o que já aconteceu (movimentos) do que é provisão do
 	// extrato. Alimenta o filtro de situação da listagem e o marcador do calendário.
 	Realizado bool `json:"realizado"`
@@ -73,6 +78,7 @@ const colunasFluxo = `
 	COALESCE(data_pagamento, '')                                           AS data,
 	COALESCE(NULLIF(cliente_final, ''), 'Não informado')                   AS descricao,
 	CASE ajuste_receita_despesa WHEN 1 THEN 'receita' ELSE 'despesa' END   AS tipo,
+	COALESCE(NULLIF(descricao_categoria_superior, ''), 'Sem categoria')    AS categoria_superior,
 	COALESCE(NULLIF(descricao_categoria_final, ''), 'Sem categoria')       AS categoria,
 	valor_final                                                            AS valor,
 	CASE
@@ -205,7 +211,7 @@ func scanTransacoes(ctx context.Context, pool *pgxpool.Pool, sql string, args []
 	out := []FluxoTransacao{}
 	for rows.Next() {
 		var t FluxoTransacao
-		if err := rows.Scan(&t.Dia, &t.Data, &t.Descricao, &t.Tipo, &t.Categoria, &t.Valor, &t.Status, &t.Realizado); err != nil {
+		if err := rows.Scan(&t.Dia, &t.Data, &t.Descricao, &t.Tipo, &t.CategoriaSuperior, &t.Categoria, &t.Valor, &t.Status, &t.Realizado); err != nil {
 			return nil, err
 		}
 		out = append(out, t)
