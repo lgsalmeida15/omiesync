@@ -204,7 +204,7 @@
          inicial do dashboard, que já é o maior da aplicação. -->
     <ResultadoPivot v-else-if="aba === 'resultado'" :grupo-id="grupoIDAtivo"
                     :filtros="filtrosAtivos" :meses="mesesVisiveis" />
-    <FluxoCaixa v-else-if="aba === 'fluxo'" :grupo-id="grupoIDAtivo" :filtros="filtrosAtivos" :mes="mesSelecionado" />
+    <FluxoCaixa v-else-if="aba === 'fluxo'" :grupo-id="grupoIDAtivo" :filtros="filtrosAtivos" :mes="mesSelecionado" layout="completo" />
     <ContasPorTipo v-else-if="aba === 'receber'" :grupo-id="grupoIDAtivo" :filtros="filtrosAtivos" :mes="mesSelecionado" tipo="receita" />
     <ContasPorTipo v-else-if="aba === 'pagar'"   :grupo-id="grupoIDAtivo" :filtros="filtrosAtivos" :mes="mesSelecionado" tipo="despesa" />
 

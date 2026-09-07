@@ -6,7 +6,7 @@
         <div class="gr-sub">{{ subtitulo }}</div>
       </div>
       <button v-if="itens.length" class="gr-acao" @click="alternarTodos">
-        {{ todosMarcados ? 'Desmarcar todos' : 'Marcar todos' }}
+        {{ rotuloAcao }}
       </button>
     </div>
 
@@ -15,7 +15,11 @@
     <div v-else class="bar-lista">
       <button
         v-for="(it, i) in itens" :key="it.rotulo"
-        :class="['bar-item', { 'bar-item--off': !marcados.has(it.rotulo) }]"
+        :class="['bar-item', {
+          'bar-item--off': modoOcultar && !marcados.has(it.rotulo),
+          'bar-item--apagado': !modoOcultar && haSelecao && !selecao.has(it.rotulo),
+          'bar-item--ativo': !modoOcultar && selecao.has(it.rotulo),
+        }]"
         @click="alternar(it.rotulo)"
       >
         <span class="bar-nome" :title="it.rotulo">{{ it.rotulo }}</span>
@@ -36,12 +40,22 @@ import { ref, computed } from 'vue'
 import { fmtMoeda } from '@/utils/formato'
 import { corDe } from '@/utils/paleta'
 import type { Agregado } from '@/utils/agregacao'
+import { alternarRotulo } from '@/utils/fluxocruzado'
 
 const props = withDefaults(defineProps<{
   titulo: string
   subtitulo?: string
   itens: Agregado[]
-}>(), { subtitulo: '' })
+  /** Ver GraficoDonut.vue: 'ocultar' esconde do gráfico, 'selecionar' recorta a tela. */
+  modo?: 'ocultar' | 'selecionar'
+  selecionados?: string[]
+}>(), { subtitulo: '', modo: 'ocultar', selecionados: () => [] })
+
+const emit = defineEmits<{ (e: 'update:selecionados', v: string[]): void }>()
+
+const modoOcultar = computed(() => props.modo === 'ocultar')
+const selecao   = computed(() => new Set(props.selecionados))
+const haSelecao = computed(() => selecao.value.size > 0)
 
 // Barras em CSS e não em Chart.js: são poucas, precisam de nome à esquerda e
 // valor à direita alinhados, e cada linha é clicável. Um canvas dificultaria
@@ -54,24 +68,44 @@ const marcados = computed(() => {
 })
 const todosMarcados = computed(() => marcados.value.size === props.itens.length)
 
+const rotuloAcao = computed(() => {
+  if (modoOcultar.value) return todosMarcados.value ? 'Desmarcar todos' : 'Marcar todos'
+  return haSelecao.value ? 'Limpar seleção' : 'Todos'
+})
+
 // A escala usa só o que está visível: ao desmarcar o maior, os demais crescem
 // e voltam a ser comparáveis entre si.
+//
+// No modo 'selecionar' a escala considera TODOS: as barras continuam na tela e
+// mudar a régua a cada clique faria comprimentos iguais representarem valores
+// diferentes de um instante para o outro.
 const maiorVisivel = computed(() =>
-  Math.max(0, ...props.itens.filter(i => marcados.value.has(i.rotulo)).map(i => i.valor))
+  modoOcultar.value
+    ? Math.max(0, ...props.itens.filter(i => marcados.value.has(i.rotulo)).map(i => i.valor))
+    : Math.max(0, ...props.itens.map(i => i.valor))
 )
 
 function largura(it: Agregado): string {
-  if (!marcados.value.has(it.rotulo) || maiorVisivel.value <= 0) return '0%'
+  if (maiorVisivel.value <= 0) return '0%'
+  if (modoOcultar.value && !marcados.value.has(it.rotulo)) return '0%'
   return `${Math.max(2, (it.valor / maiorVisivel.value) * 100)}%`
 }
 
 function alternar(rotulo: string) {
+  if (!modoOcultar.value) {
+    emit('update:selecionados', [...alternarRotulo(selecao.value, rotulo)])
+    return
+  }
   const s = new Set(ocultos.value)
   s.has(rotulo) ? s.delete(rotulo) : s.add(rotulo)
   ocultos.value = s
 }
 
 function alternarTodos() {
+  if (!modoOcultar.value) {
+    emit('update:selecionados', [])
+    return
+  }
   ocultos.value = todosMarcados.value ? new Set(props.itens.map(i => i.rotulo)) : new Set()
 }
 </script>
@@ -109,6 +143,11 @@ function alternarTodos() {
 .bar-item:hover { background: var(--surface-2); }
 .bar-item--off { opacity: 0.4; }
 .bar-item--off .bar-nome { text-decoration: line-through; }
+/* Ver GraficoDonut.vue: no modo 'selecionar' realça o escolhido, sem riscar os
+   demais — eles não saíram da conta. */
+.bar-item--apagado { opacity: 0.45; }
+.bar-item--ativo { background: var(--primary-weak); }
+.bar-item--ativo .bar-nome { color: var(--text); font-weight: 600; }
 .bar-nome {
   font-size: var(--fs-sm); color: var(--text-muted);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;

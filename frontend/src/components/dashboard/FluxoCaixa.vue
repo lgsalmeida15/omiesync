@@ -6,33 +6,36 @@
     <div v-else-if="erro" class="fc-state fc-state--erro">{{ erro }}</div>
 
     <template v-else-if="dados">
-      <div class="fc-grid">
+      <div :class="['fc-grid', { 'fc-grid--tres': completo }]">
         <!-- Calendário -->
         <section class="fc-card fc-card--cal">
           <div class="fc-card-head">
             <div>
               <div class="fc-card-title">{{ tituloCalendario }}</div>
-              <div class="fc-card-sub">{{ nomeMes[dados.mes - 1] }} de {{ dados.ano }}</div>
+              <div class="fc-card-sub">
+                {{ nomeMes[dados.mes - 1] }} de {{ dados.ano }}
+                <template v-if="completo"> · Ctrl+clique soma dias</template>
+              </div>
             </div>
-            <button v-if="diaSelecionado" class="fc-btn" @click="diaSelecionado = null">
+            <button v-if="selDias.size" class="fc-btn" @click="selDias = new Set()">
               Ver mês inteiro
             </button>
           </div>
 
           <div class="cal-semana">
-            <span v-for="d in ['D','S','T','Q','Q','S','S']" :key="d">{{ d }}</span>
+            <span v-for="(d, i) in ['D','S','T','Q','Q','S','S']" :key="i">{{ d }}</span>
           </div>
           <div class="cal-grid">
             <div v-for="v in vaziosAntes" :key="`v${v}`" class="cal-vazio" />
             <button
               v-for="d in diasDoMes" :key="d.dia"
               :class="['cal-dia', {
-                'cal-dia--sel': diaSelecionado === d.dia,
+                'cal-dia--sel': selDias.has(d.dia),
                 'cal-dia--hoje': d.dia === diaDeHoje,
                 'cal-dia--vazio': !d.temLancamento,
               }]"
               :disabled="!d.temLancamento"
-              @click="diaSelecionado = diaSelecionado === d.dia ? null : d.dia"
+              @click="cliqueDia(d.dia, $event)"
             >
               <span class="cal-num">{{ d.dia }}</span>
               <span v-if="d.entradas" class="cal-val cal-val--in">{{ fmtCompacto(d.entradas) }}</span>
@@ -42,78 +45,78 @@
           </div>
         </section>
 
-        <!-- Lateral: resumo + próximos vencimentos -->
-        <div class="fc-lateral">
-          <section class="fc-card">
-            <div class="fc-card-title">{{ diaSelecionado ? `Resumo — dia ${diaSelecionado}` : 'Resumo do mês' }}</div>
-            <div class="fc-card-sub">{{ diaSelecionado ? 'Seleção atual' : 'Acumulado do período' }}</div>
+        <!-- Categorias e entidades: só no layout completo. Nas abas de contas
+             esses dois gráficos vivem em ContasPorTipo, acima desta tela. -->
+        <template v-if="completo">
+          <GraficoDonut
+            titulo="TOTAL GERAL POR CATEGORIA"
+            :subtitulo="rotuloRecorte"
+            :itens="itensCategoria"
+            modo="selecionar"
+            :selecionados="[...selCategorias]"
+            @update:selecionados="selCategorias = new Set($event)"
+          />
+          <GraficoBarrasH
+            titulo="TOTAL GERAL POR CLIENTE/FORNECEDOR"
+            :subtitulo="rotuloRecorte"
+            :itens="itensEntidade"
+            modo="selecionar"
+            :selecionados="[...selEntidades]"
+            @update:selecionados="selEntidades = new Set($event)"
+          />
+        </template>
 
-            <template v-if="tipo !== 'despesa'">
-              <div class="res-linha">
-                <span class="res-rot">Recebido</span>
-                <span class="res-val res-val--in">{{ fmtMoeda(resumo.recebido) }}</span>
-              </div>
-              <div class="res-linha">
-                <span class="res-rot">A receber<span class="res-prev">previsto</span></span>
-                <span class="res-val res-val--in">{{ fmtMoeda(resumo.a_receber) }}</span>
-              </div>
-              <!-- So aparece quando ha atraso: com a inadimplencia desligada o
-                   valor e zero e a linha nao deve ocupar espaco. -->
-              <div v-if="resumo.atrasado_receber > 0" class="res-linha">
-                <span class="res-rot">A receber<span class="res-atraso">atrasado</span></span>
-                <span class="res-val res-val--atraso">{{ fmtMoeda(resumo.atrasado_receber) }}</span>
-              </div>
-            </template>
-            <template v-if="tipo !== 'receita'">
-              <div class="res-linha">
-                <span class="res-rot">Pago</span>
-                <span class="res-val res-val--out">{{ fmtMoeda(resumo.pago) }}</span>
-              </div>
-              <div class="res-linha">
-                <span class="res-rot">A pagar<span class="res-prev">previsto</span></span>
-                <span class="res-val res-val--out">{{ fmtMoeda(resumo.a_pagar) }}</span>
-              </div>
-              <div v-if="resumo.atrasado_pagar > 0" class="res-linha">
-                <span class="res-rot">A pagar<span class="res-atraso">atrasado</span></span>
-                <span class="res-val res-val--atraso">{{ fmtMoeda(resumo.atrasado_pagar) }}</span>
-              </div>
-            </template>
-            <div class="res-linha res-linha--total">
-              <span class="res-rot">{{ umLadoSo ? 'Total' : 'Resultado' }}</span>
-              <span class="res-val" :class="resumo.resultado < 0 ? 'res-val--out' : 'res-val--in'">
-                {{ fmtMoeda(resumo.resultado) }}
-              </span>
-            </div>
+        <!-- Lateral: resumo + próximos vencimentos (layout das abas de contas) -->
+        <div v-else class="fc-lateral">
+          <section class="fc-card">
+            <ResumoMes :resumo="resumo" :tipo="tipo" :titulo="tituloResumo" :subtitulo="rotuloRecorte" />
           </section>
 
           <section class="fc-card fc-card--venc">
-            <div class="fc-card-title">Próximos vencimentos</div>
-            <div class="fc-card-sub">A partir de hoje, em qualquer mês</div>
-            <p v-if="!dados.proximos_vencimentos.length" class="fc-vazio">Nada previsto adiante.</p>
-            <div v-else class="venc-lista">
-              <div v-for="(t, i) in dados.proximos_vencimentos" :key="i" class="venc-item">
-                <div class="venc-data">{{ t.data.slice(0, 5) }}</div>
-                <div class="venc-desc">
-                  <span class="venc-nome">{{ t.descricao }}</span>
-                  <span class="venc-cat">{{ t.categoria }}</span>
-                </div>
-                <div class="venc-val" :class="t.tipo === 'receita' ? 'res-val--in' : 'res-val--out'">
-                  {{ fmtMoeda(t.valor) }}
-                </div>
-              </div>
-            </div>
+            <ProximosVencimentos :itens="dados.proximos_vencimentos" />
           </section>
         </div>
       </div>
+
+      <!-- No layout completo, resumo e vencimentos ficam atrás de um botão. É o
+           que libera altura para os três gráficos e a tabela intradia caberem na
+           mesma tela — o pedido central desta aba. -->
+      <template v-if="completo">
+        <section class="fc-card fc-card--dobra">
+          <button class="fc-dobra-btn" :aria-expanded="resumoAberto"
+                  @click="resumoAberto = !resumoAberto">
+            <span class="fc-chv">{{ resumoAberto ? '▾' : '▸' }}</span>
+            Resumo do mês e próximos vencimentos
+          </button>
+
+          <!-- Um recorte esquecido explica um número "errado" sem dar pista de
+               onde está. O aviso fica aqui, sempre visível, com a saída ao lado. -->
+          <div v-if="haRecorte" class="fc-recorte">
+            <span class="fc-recorte-txt">{{ rotuloRecorte }}</span>
+            <button class="fc-btn fc-btn--limpar" @click="limparRecorte">✕ Limpar recorte</button>
+          </div>
+
+          <div v-show="resumoAberto" class="fc-dobra-corpo">
+            <div class="fc-dobra-col">
+              <ResumoMes :resumo="resumo" :tipo="tipo" :titulo="tituloResumo" :subtitulo="rotuloRecorte" />
+            </div>
+            <div class="fc-dobra-col">
+              <ProximosVencimentos :itens="dados.proximos_vencimentos" />
+            </div>
+          </div>
+        </section>
+
+        <section class="fc-card">
+          <PivotDiario :transacoes="recortadas" :ano="dados.ano" :mes="dados.mes" />
+        </section>
+      </template>
 
       <!-- Listagem: realizado e pendente, a coluna Status distingue -->
       <section class="fc-card">
         <div class="fc-card-head">
           <div>
             <div class="fc-card-title">TRANSAÇÕES</div>
-            <div class="fc-card-sub">
-              {{ diaSelecionado ? `Dia ${diaSelecionado}` : 'Mês inteiro' }} — efetuadas e pendentes
-            </div>
+            <div class="fc-card-sub">{{ rotuloRecorte }} — efetuadas e pendentes</div>
           </div>
           <div class="fc-filtros">
             <input v-model="busca" class="fc-input" placeholder="Buscar descrição ou categoria..." />
@@ -166,12 +169,22 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, defineAsyncComponent } from 'vue'
 import { fetchFluxoCaixa, type FluxoCaixaData, type FluxoResumo, type FluxoTransacao } from '@/api/fluxocaixa'
 import type { DashboardParams } from '@/api/dashboard'
 import AppSpinner from '@/components/ui/AppSpinner.vue'
+import ResumoMes from './ResumoMes.vue'
+import ProximosVencimentos from './ProximosVencimentos.vue'
 import { fmtMoeda, fmtCompacto } from '@/utils/formato'
 import { filtrarTransacoes, classeStatus, resumirTransacoes } from '@/utils/fluxo'
+import { aplicarSelecao, alternarDia, temRecorte, type Selecao } from '@/utils/fluxocruzado'
+import { porCategoria, topEntidades } from '@/utils/agregacao'
+
+// Assíncronos: as abas de contas montam este componente no layout 'lateral' e
+// nunca precisam dos três, então não devem pagar o download deles.
+const GraficoDonut = defineAsyncComponent(() => import('./GraficoDonut.vue'))
+const GraficoBarrasH = defineAsyncComponent(() => import('./GraficoBarrasH.vue'))
+const PivotDiario = defineAsyncComponent(() => import('./PivotDiario.vue'))
 
 const props = withDefaults(defineProps<{
   grupoId: string
@@ -179,10 +192,19 @@ const props = withDefaults(defineProps<{
   mes: number
   /** Restringe a visão a um lado: abas Contas a Receber e Contas a Pagar. */
   tipo?: 'todos' | 'receita' | 'despesa'
-}>(), { tipo: 'todos' })
+  /**
+   * 'lateral'  — calendário + resumo/vencimentos ao lado (abas de contas).
+   * 'completo' — três gráficos no topo, resumo recolhível e pivô intradia
+   *              (aba Fluxo de Caixa).
+   *
+   * Prop, e não componente separado, porque o recorte cruzado precisa alcançar
+   * o calendário, o resumo e a listagem, que vivem aqui dentro.
+   */
+  layout?: 'lateral' | 'completo'
+}>(), { tipo: 'todos', layout: 'lateral' })
 
+const completo   = computed(() => props.layout === 'completo')
 const umLadoSo   = computed(() => props.tipo !== 'todos')
-const soReceitas = computed(() => props.tipo === 'receita')
 
 const tituloCalendario = computed(() => ({
   todos:   'CALENDÁRIO FINANCEIRO',
@@ -202,16 +224,41 @@ const nomeMes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
 const bruto          = ref<FluxoCaixaData | null>(null)
 const carregando     = ref(false)
 const erro           = ref('')
-const diaSelecionado = ref<number | null>(null)
 const busca          = ref('')
 const filtroTipo     = ref('')
 const filtroSituacao = ref('')
+const resumoAberto   = ref(false)
+
+// ── Recorte cruzado ────────────────────────────────────────────────────────
+// No layout 'lateral' só `selDias` chega a ser usado: os gráficos das abas de
+// contas ficam no modo 'ocultar' e não emitem seleção. O comportamento daquelas
+// abas é, portanto, o mesmo de antes.
+const selDias       = ref<Set<number>>(new Set())
+const selCategorias = ref<Set<string>>(new Set())
+const selEntidades  = ref<Set<string>>(new Set())
+
+const selecao = computed<Selecao>(() => ({
+  dias: selDias.value,
+  categorias: selCategorias.value,
+  entidades: selEntidades.value,
+}))
+const haRecorte = computed(() => temRecorte(selecao.value))
+
+function cliqueDia(dia: number, ev: MouseEvent) {
+  selDias.value = alternarDia(selDias.value, dia, ev.ctrlKey || ev.metaKey)
+}
+
+function limparRecorte() {
+  selDias.value = new Set()
+  selCategorias.value = new Set()
+  selEntidades.value = new Set()
+}
 
 /**
- * Na visão de recebimentos o recorte é aplicado uma vez, aqui: transações,
- * resumo e próximos vencimentos passam a enxergar só receitas. Filtrar em cada
- * consumidor separadamente deixaria algum deles para trás — o resumo já vem
- * totalizado do servidor e precisa ser recalculado junto.
+ * Na visão de recebimentos o recorte por tipo é aplicado uma vez, aqui:
+ * transações, resumo e próximos vencimentos passam a enxergar só receitas.
+ * Filtrar em cada consumidor separadamente deixaria algum deles para trás — o
+ * resumo já vem totalizado do servidor e precisa ser recalculado junto.
  */
 const dados = computed<FluxoCaixaData | null>(() => {
   if (!bruto.value) return null
@@ -232,10 +279,39 @@ const dados = computed<FluxoCaixaData | null>(() => {
   }
 })
 
-// Emite as transações já recortadas para quem compõe a tela (os gráficos da aba
-// Contas a Receber), evitando uma segunda chamada ao mesmo endpoint.
+// Emite as transações do MÊS INTEIRO, sem o recorte cruzado: é o que a aba
+// Contas a Receber consome para os gráficos dela, que têm interação própria.
 const emit = defineEmits<{ (e: 'dados', d: FluxoCaixaData | null): void }>()
 watch(dados, d => emit('dados', d), { immediate: true })
+
+// ── As quatro visões do mesmo conjunto ─────────────────────────────────────
+// Cada bloco ignora a própria dimensão. Ver utils/fluxocruzado.ts: sem isso,
+// clicar numa categoria apagaria todas as outras do donut e o gráfico deixaria
+// de servir de ponto de partida para o clique seguinte.
+const todas = computed(() => dados.value?.transacoes ?? [])
+const paraCalendario = computed(() => aplicarSelecao(todas.value, selecao.value, 'dias'))
+const paraCategorias = computed(() => aplicarSelecao(todas.value, selecao.value, 'categorias'))
+const paraEntidades  = computed(() => aplicarSelecao(todas.value, selecao.value, 'entidades'))
+const recortadas     = computed(() => aplicarSelecao(todas.value, selecao.value))
+
+const itensCategoria = computed(() => porCategoria(paraCategorias.value))
+const itensEntidade  = computed(() => topEntidades(paraEntidades.value))
+
+/** Descreve o recorte ativo em uma linha, para os subtítulos dos blocos. */
+const rotuloRecorte = computed(() => {
+  const partes: string[] = []
+  const d = [...selDias.value].sort((a, b) => a - b)
+  if (d.length === 1) partes.push(`Dia ${d[0]}`)
+  else if (d.length > 1) partes.push(`${d.length} dias: ${d.join(', ')}`)
+  if (selCategorias.value.size === 1) partes.push([...selCategorias.value][0])
+  else if (selCategorias.value.size > 1) partes.push(`${selCategorias.value.size} categorias`)
+  if (selEntidades.value.size === 1) partes.push([...selEntidades.value][0])
+  else if (selEntidades.value.size > 1) partes.push(`${selEntidades.value.size} entidades`)
+  return partes.length ? partes.join(' · ') : 'Mês inteiro'
+})
+
+const tituloResumo = computed(() =>
+  haRecorte.value ? 'Resumo do recorte' : 'Resumo do mês')
 
 // ── Calendário ─────────────────────────────────────────────────────────────
 const diasNoMes = computed(() =>
@@ -258,7 +334,7 @@ const diasDoMes = computed(() => {
   const base = Array.from({ length: diasNoMes.value }, (_, i) => ({
     dia: i + 1, entradas: 0, saidas: 0, temPrevisto: false, temLancamento: false,
   }))
-  for (const t of dados.value?.transacoes ?? []) {
+  for (const t of paraCalendario.value) {
     const d = base[t.dia - 1]
     if (!d) continue
     if (t.tipo === 'receita') d.entradas += t.valor
@@ -269,23 +345,21 @@ const diasDoMes = computed(() => {
   return base
 })
 
-// ── Resumo: recalculado no cliente quando há dia selecionado ────────────────
-// Sem dia selecionado usa o total que veio do servidor, para não divergir por
+// ── Resumo: recalculado no cliente quando há recorte ───────────────────────
+// Sem recorte usa o total que veio do servidor, para não divergir por
 // arredondamento do que o banco reportou.
 const resumo = computed<FluxoResumo>(() => {
   if (!dados.value) return resumirTransacoes([])
-  if (diaSelecionado.value === null) return dados.value.resumo
-
-  return resumirTransacoes(
-    dados.value.transacoes.filter(t => t.dia === diaSelecionado.value),
-    umLadoSo.value,
-  )
+  if (!haRecorte.value) return dados.value.resumo
+  return resumirTransacoes(recortadas.value, umLadoSo.value)
 })
 
-// ── Listagem: efetuadas e pendentes; a coluna Status distingue ─────────────
+// ── Listagem ───────────────────────────────────────────────────────────────
+// O recorte cruzado entra antes; `filtrarTransacoes` segue cuidando de busca,
+// tipo e situação. `dia: null` porque a dimensão de dia já foi aplicada.
 const listagem = computed(() =>
-  filtrarTransacoes(dados.value?.transacoes ?? [], {
-    dia: diaSelecionado.value,
+  filtrarTransacoes(recortadas.value, {
+    dia: null,
     tipo: filtroTipo.value,
     situacao: filtroSituacao.value,
     busca: busca.value,
@@ -301,7 +375,10 @@ async function carregar() {
   erro.value = ''
   try {
     bruto.value = await fetchFluxoCaixa(props.grupoId, { ...props.filtros, mes: props.mes })
-    diaSelecionado.value = null
+    // Recorte é uma lente sobre o mês exibido; carregar outro mês o invalida —
+    // um dia ou uma categoria que não existe ali deixaria a tela vazia sem
+    // motivo aparente.
+    limparRecorte()
   } catch (e: unknown) {
     const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
     erro.value = msg || 'Erro ao carregar fluxo de caixa'
@@ -329,7 +406,30 @@ watch(() => [props.grupoId, props.filtros, props.mes], carregar, { deep: true, i
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--sp-4); align-items: stretch; margin-bottom: var(--sp-4);
 }
-@media (max-width: 1100px) { .fc-grid { grid-template-columns: 1fr; } }
+/* Três colunas iguais no layout completo: calendário, categorias e entidades.
+   Segue em três até 1100px — havia um degrau em 1400px que jogava o terceiro
+   gráfico para uma segunda linha e, com ela, empurrava o pivô intradia para
+   fora da tela num notebook de 1366px. Cabendo em três, cabe na dobra. */
+.fc-grid--tres { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 1100px) {
+  .fc-grid, .fc-grid--tres { grid-template-columns: 1fr; }
+}
+
+/*
+ * Altura da faixa superior, no layout completo.
+ *
+ * Medida antes de ser escolhida: a faixa saía com 438px, e nesse ponto o pivô
+ * intradia não caberia na dobra de uma tela de 768px — que é o notebook comum.
+ * Os dois culpados eram o donut, cujo aspect-ratio 1:1 o faz crescer com a
+ * largura da coluna, e as células do calendário, com piso de 56px em seis linhas.
+ *
+ * Aqui os dois são limitados só nesta aba; nas abas de contas os gráficos e o
+ * calendário continuam com o tamanho de antes.
+ */
+.fc-grid--tres :deep(.gr-canvas-wrap) { max-height: 170px; }
+.fc-grid--tres :deep(.gr-legenda) { max-height: 190px; }
+.fc-grid--tres .cal-grid { grid-auto-rows: minmax(38px, 1fr); }
+.fc-grid--tres .cal-dia, .fc-grid--tres .cal-vazio { min-height: 38px; }
 
 /* O card de vencimentos absorve a altura que sobra, então a coluna lateral
    termina na mesma linha do calendário em qualquer viewport. */
@@ -366,6 +466,37 @@ watch(() => [props.grupoId, props.filtros, props.mes], carregar, { deep: true, i
 .fc-btn:hover { border-color: var(--primary); color: var(--primary); }
 .fc-filtros { display: flex; gap: 6px; flex-wrap: wrap; }
 .fc-input { min-width: 200px; }
+
+/* ── Bloco recolhível (layout completo) ── */
+/* Padding menor que os outros cards: recolhido, ele é uma faixa de comando, e
+   cada pixel aqui é altura que a tabela intradia deixa de ter. */
+.fc-card--dobra { padding: var(--sp-3) var(--sp-4); }
+.fc-dobra-btn {
+  display: flex; align-items: center; gap: 8px;
+  background: none; border: none; padding: 2px 0; cursor: pointer;
+  font-family: var(--font-display); font-size: var(--fs-sm); font-weight: 600;
+  color: var(--text-muted); transition: var(--transition);
+}
+.fc-dobra-btn:hover { color: var(--primary); }
+.fc-chv { font-size: var(--fs-xs); color: var(--text-dim); }
+.fc-dobra-corpo {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-5); margin-top: var(--sp-4);
+}
+@media (max-width: 1100px) { .fc-dobra-corpo { grid-template-columns: 1fr; } }
+.fc-dobra-col { min-width: 0; display: flex; flex-direction: column; }
+
+.fc-recorte {
+  display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap;
+  margin-top: 6px;
+}
+.fc-recorte-txt {
+  font-family: var(--font-display); font-size: var(--fs-xs); font-weight: 600;
+  color: var(--primary);
+  background: var(--primary-weak); border-radius: 20px; padding: 2px 10px;
+}
+.fc-btn--limpar { border-color: var(--danger); color: var(--danger); }
+.fc-btn--limpar:hover { border-color: var(--danger); color: var(--danger); background: var(--danger-weak); }
 
 /* ── Calendário ── */
 .cal-semana, .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
@@ -404,56 +535,6 @@ watch(() => [props.grupoId, props.filtros, props.mes], carregar, { deep: true, i
   background: var(--warning);
 }
 
-/* ── Resumo ── */
-.res-linha {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 7px 0; border-bottom: 1px solid var(--border);
-}
-.res-linha--total { border-bottom: none; border-top: 1px solid var(--border-strong); margin-top: 4px; padding-top: 10px; }
-.res-rot { font-size: var(--fs-xs); color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
-.res-prev {
-  font-family: var(--font-display); font-size: var(--fs-xs); letter-spacing: 0.5px;
-  padding: 1px 5px; border-radius: 10px;
-  background: var(--warning-weak); color: var(--warning);
-}
-/* Atrasado usa a cor de perigo, e nao o ambar do previsto: vencido nao e a
-   mesma coisa que "ainda vai vencer". Mesma distincao ja feita na pill da
-   listagem. */
-.res-atraso {
-  font-family: var(--font-display); font-size: var(--fs-xs); letter-spacing: 0.5px;
-  padding: 1px 5px; border-radius: 10px;
-  background: var(--danger-weak); color: var(--danger);
-}
-.res-val { font-family: var(--font-display); font-size: var(--fs-xs); font-weight: 600; }
-.res-val--in     { color: var(--success); }
-.res-val--out    { color: var(--danger); }
-.res-val--atraso { color: var(--danger); font-weight: 700; }
-.res-linha--total .res-val { font-size: var(--fs-base); }
-
-/* ── Próximos vencimentos ── */
-/* A lista rola em vez de esticar o card com o volume de títulos. A rolagem fica
-   na lista, não no card, para o título continuar visível. */
-/* flex-basis 140px, não auto: é o basis que a grade usa para dimensionar a
-   linha. Com basis auto a lista inteira entrava na conta e esticava o
-   calendário junto. O grow faz a lista preencher a altura que sobrar. */
-.venc-lista { flex: 1 1 150px; min-height: 0; overflow-y: auto; padding-right: 6px; }
-.venc-item {
-  display: grid; grid-template-columns: 38px 1fr auto; gap: 8px; align-items: center;
-  padding: 5px 0; border-bottom: 1px solid var(--border);
-}
-.venc-item:last-child { border-bottom: none; }
-.venc-data { font-family: var(--font-display); font-size: var(--fs-xs); color: var(--text-dim); }
-.venc-desc { min-width: 0; display: flex; flex-direction: column; }
-.venc-nome {
-  font-size: var(--fs-xs); line-height: 1.3; color: var(--text);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.venc-cat {
-  font-family: var(--font-display); font-size: var(--fs-xs); line-height: 1.3; color: var(--text-dim);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.venc-val { font-family: var(--font-display); font-size: var(--fs-xs); font-weight: 600; white-space: nowrap; }
-
 /* ── Tabela ── */
 .fc-scroll { overflow-x: auto; }
 .fc-table { width: 100%; border-collapse: collapse; min-width: 720px; }
@@ -469,6 +550,9 @@ watch(() => [props.grupoId, props.filtros, props.mes], carregar, { deep: true, i
 .fc-table tr:hover td { background: var(--surface-2); }
 .ta-r { text-align: right; }
 .mono { font-family: var(--font-display); font-size: var(--fs-xs); }
+
+.res-val--in     { color: var(--success); }
+.res-val--out    { color: var(--danger); }
 
 .pill {
   display: inline-flex; padding: 2px 8px; border-radius: 20px;

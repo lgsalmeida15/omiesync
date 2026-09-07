@@ -6,6 +6,12 @@ export interface FluxoTransacao {
   data: string          // DD/MM/YYYY
   descricao: string     // cliente_final
   tipo: 'receita' | 'despesa'
+  /**
+   * Agrupador de nivel 2 do pivo — na matvw, LEFT(codigo, 4) resolvido contra a
+   * tabela de categorias. Alimenta a tabela intradia da aba Fluxo de Caixa, que
+   * usa os mesmos quatro niveis da aba Resultado.
+   */
+  categoria_superior: string
   categoria: string
   valor: number
   // 'Atrasado' vem dos titulos vencidos de contas_pagar/contas_receber, e nao da

@@ -6,7 +6,7 @@
         <div class="gr-sub">{{ subtitulo }}</div>
       </div>
       <button v-if="itens.length" class="gr-acao" @click="alternarTodos">
-        {{ todosMarcados ? 'Desmarcar todas' : 'Marcar todas' }}
+        {{ rotuloAcao }}
       </button>
     </div>
 
@@ -24,7 +24,11 @@
       <div class="gr-legenda">
         <button
           v-for="(it, i) in itens" :key="it.rotulo"
-          :class="['leg-item', { 'leg-item--off': !marcados.has(it.rotulo) }]"
+          :class="['leg-item', {
+            'leg-item--off': modoOcultar && !marcados.has(it.rotulo),
+            'leg-item--apagado': !modoOcultar && haSelecao && !selecao.has(it.rotulo),
+            'leg-item--ativo': !modoOcultar && selecao.has(it.rotulo),
+          }]"
           @click="alternar(it.rotulo)"
         >
           <span class="leg-cor" :style="{ background: corDe(i) }" />
@@ -41,14 +45,32 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { Chart } from 'chart.js'
 import { fmtMoeda, fmtCompacto } from '@/utils/formato'
-import { corDe } from '@/utils/paleta'
+import { corDe, corDeAlpha } from '@/utils/paleta'
 import { totalMarcados, type Agregado } from '@/utils/agregacao'
+import { alternarRotulo } from '@/utils/fluxocruzado'
 
 const props = withDefaults(defineProps<{
   titulo: string
   subtitulo?: string
   itens: Agregado[]
-}>(), { subtitulo: '' })
+  /**
+   * 'ocultar'    — o clique esconde o item do gráfico e do seu total (abas de contas).
+   * 'selecionar' — o clique recorta a tela inteira (aba Fluxo de Caixa).
+   *
+   * São semânticas opostas no mesmo gesto, e o visual também é o inverso: uma
+   * risca o excluído, a outra realça o escolhido. Optado por conviver com as
+   * duas em vez de trocar a das abas de contas, que ninguém pediu para mexer.
+   */
+  modo?: 'ocultar' | 'selecionar'
+  /** Rótulos selecionados no modo 'selecionar'. Vazio = nenhum recorte. */
+  selecionados?: string[]
+}>(), { subtitulo: '', modo: 'ocultar', selecionados: () => [] })
+
+const emit = defineEmits<{ (e: 'update:selecionados', v: string[]): void }>()
+
+const modoOcultar = computed(() => props.modo === 'ocultar')
+const selecao   = computed(() => new Set(props.selecionados))
+const haSelecao = computed(() => selecao.value.size > 0)
 
 const canvasEl = ref<HTMLCanvasElement | null>(null)
 let chart: Chart | null = null
@@ -62,7 +84,24 @@ const marcados = computed(() => {
   return s
 })
 const todosMarcados = computed(() => marcados.value.size === props.itens.length)
-const total = computed(() => totalMarcados(props.itens, marcados.value))
+
+/**
+ * No modo 'selecionar' o total acompanha o recorte, e sem recorte é o mês
+ * inteiro — assim o número no centro sempre corresponde ao que a tela está
+ * mostrando abaixo.
+ */
+const total = computed(() =>
+  modoOcultar.value
+    ? totalMarcados(props.itens, marcados.value)
+    : haSelecao.value
+      ? totalMarcados(props.itens, selecao.value)
+      : props.itens.reduce((s, i) => s + i.valor, 0)
+)
+
+const rotuloAcao = computed(() => {
+  if (modoOcultar.value) return todosMarcados.value ? 'Desmarcar todas' : 'Marcar todas'
+  return haSelecao.value ? 'Limpar seleção' : 'Todas as categorias'
+})
 
 /**
  * fmtCompacto devolve string vazia para zero — correto em rotulo de grafico,
@@ -71,17 +110,37 @@ const total = computed(() => totalMarcados(props.itens, marcados.value))
  */
 const totalTexto = computed(() => total.value === 0 ? 'R$ 0' : fmtCompacto(total.value))
 
+/**
+ * Base dos percentuais.
+ *
+ * No modo 'selecionar' NÃO pode ser `total`, que segue o recorte: com uma
+ * categoria escolhida ela apareceria como 100% e as demais somariam mais de 100%
+ * entre si, porque cada uma estaria sendo dividida pelo valor da escolhida. A
+ * fatia de cada categoria no mês não muda por causa do recorte.
+ */
+const baseDoPct = computed(() =>
+  modoOcultar.value ? total.value : props.itens.reduce((s, i) => s + i.valor, 0)
+)
+
 function pct(valor: number): string {
-  return total.value === 0 ? '—' : `${((valor / total.value) * 100).toFixed(1)}%`
+  return baseDoPct.value === 0 ? '—' : `${((valor / baseDoPct.value) * 100).toFixed(1)}%`
 }
 
 function alternar(rotulo: string) {
+  if (!modoOcultar.value) {
+    emit('update:selecionados', [...alternarRotulo(selecao.value, rotulo)])
+    return
+  }
   const s = new Set(ocultos.value)
   s.has(rotulo) ? s.delete(rotulo) : s.add(rotulo)
   ocultos.value = s
 }
 
 function alternarTodos() {
+  if (!modoOcultar.value) {
+    emit('update:selecionados', [])
+    return
+  }
   ocultos.value = todosMarcados.value ? new Set(props.itens.map(i => i.rotulo)) : new Set()
 }
 
@@ -89,14 +148,23 @@ function desenhar() {
   if (!canvasEl.value) return
   chart?.destroy()
 
-  const visiveis = props.itens.filter(i => marcados.value.has(i.rotulo))
+  // No modo 'selecionar' nenhuma fatia sai do donut: ele é o ponto de partida do
+  // próximo clique, e remover as outras deixaria o usuário sem como comparar ou
+  // voltar. O recorte aparece como esmaecimento.
+  const visiveis = modoOcultar.value
+    ? props.itens.filter(i => marcados.value.has(i.rotulo))
+    : props.itens
   chart = new Chart(canvasEl.value, {
     type: 'doughnut',
     data: {
       labels: visiveis.map(i => i.rotulo),
       datasets: [{
         data: visiveis.map(i => i.valor),
-        backgroundColor: visiveis.map(i => corDe(props.itens.findIndex(x => x.rotulo === i.rotulo))),
+        backgroundColor: visiveis.map(i => {
+          const idx = props.itens.findIndex(x => x.rotulo === i.rotulo)
+          const esmaecida = !modoOcultar.value && haSelecao.value && !selecao.value.has(i.rotulo)
+          return esmaecida ? corDeAlpha(idx, 0.18) : corDe(idx)
+        }),
         borderColor: 'transparent',
         borderWidth: 0,
       }],
@@ -116,7 +184,7 @@ function desenhar() {
   })
 }
 
-watch(() => [props.itens, marcados.value], () => nextTick(desenhar), { deep: true })
+watch(() => [props.itens, marcados.value, props.selecionados], () => nextTick(desenhar), { deep: true })
 onMounted(() => nextTick(desenhar))
 onBeforeUnmount(() => chart?.destroy())
 </script>
@@ -178,6 +246,12 @@ onBeforeUnmount(() => chart?.destroy())
 .leg-item:hover { background: var(--surface-2); }
 .leg-item--off { opacity: 0.4; }
 .leg-item--off .leg-rot { text-decoration: line-through; }
+/* Modo 'selecionar': realça o escolhido em vez de riscar o excluído. Sem
+   line-through de propósito — ali o item não foi removido da conta, só não é o
+   foco do recorte. */
+.leg-item--apagado { opacity: 0.45; }
+.leg-item--ativo { background: var(--primary-weak); }
+.leg-item--ativo .leg-rot { color: var(--text); font-weight: 600; }
 .leg-cor { width: 11px; height: 11px; border-radius: 3px; }
 .leg-rot {
   font-size: var(--fs-sm); color: var(--text-muted);
