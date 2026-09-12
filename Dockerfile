@@ -1,14 +1,22 @@
 # =============================================================
 # Backend — omie-sync-api
-# Multi-stage: build com Go 1.23, runtime com Alpine mínimo
+# Multi-stage: build com Go 1.24, runtime com Alpine mínimo
 # =============================================================
 
 FROM golang:1.24-alpine AS builder
 
 RUN apk --no-cache add ca-certificates git curl
 
-# Instala golang-migrate
-RUN go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+# Instala golang-migrate.
+#
+# Versão PINADA, e não @latest. Com @latest o build dependia de qual release
+# estivesse publicada no dia, e em 12/09/2026 o deploy passou a falhar sem que
+# uma linha do projeto tivesse mudado: a v4.20.x declara `go 1.25.11`, acima do
+# Go desta imagem, e o `go install` recusou.
+#
+# v4.19.1 é a última que declara `go 1.24.0` e portanto compila nesta imagem.
+# Para subir de versão, suba a imagem do builder junto — as duas andam casadas.
+RUN go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.19.1
 
 WORKDIR /app
 
