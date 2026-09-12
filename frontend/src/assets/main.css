@@ -142,3 +142,52 @@
 @media (max-width: 767px) {
   .page-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sp-4); }
 }
+
+/* ── Modo foco ─────────────────────────────────────────────────────────────
+ *
+ * Um bloco expandido ocupa a página sozinho, na dinâmica do Power BI. Quem
+ * esconde os irmãos é o componente pai (v-show, para não desmontar os
+ * gráficos); aqui só mora o que o bloco em foco ganha.
+ *
+ * Global, e não scoped: os blocos vivem em componentes diferentes
+ * (GraficoDonut, GraficoBarrasH, FluxoCaixa, PivotDiario), e cada um precisaria
+ * da própria cópia. CSS global alcança elementos de componentes scoped, então
+ * uma definição serve a todos.
+ *
+ * ATENÇÃO À ESPECIFICIDADE — medido, não suposto. O CSS scoped do Vue compila
+ * `.gr-canvas-wrap` para `.gr-canvas-wrap[data-v-xxx]`, e um seletor de
+ * atributo pesa o mesmo que uma classe: (0,2,0), empatando com `.em-foco
+ * .gr-canvas-wrap`. No empate vence a ordem de inserção, que aqui não está do
+ * nosso lado — o donut continuava em 300px. Por isso cada regra abaixo nomeia
+ * um ancestral a mais, chegando a (0,3,0). Ancestrais reais, e não `!important`
+ * nem truque de classe repetida: quem ler entende o que está sendo alcançado.
+ *
+ * As tabelas NÃO têm altura fixada aqui: PivotDiario e ResultadoPivot medem a
+ * própria altura com alturaDisponivel() a partir de onde começam na janela, e
+ * com os irmãos escondidos elas já sobem e crescem sozinhas. Fixar altura aqui
+ * brigaria com a medição.
+ */
+.em-foco {
+  display: flex;
+  flex-direction: column;
+}
+
+/* O donut deixa de caber em 300px e passa a usar a altura da janela. O
+   aspect-ratio 1/1 continua mandando na forma: o max-height é o teto, e a
+   largura da coluna é o outro limite. */
+.em-foco.gr-card .gr-corpo .gr-canvas-wrap { max-height: min(64vh, 620px); }
+.em-foco.gr-card .gr-corpo .gr-legenda     { max-height: min(64vh, 620px); }
+/* Donut e legenda meio a meio desperdiçariam metade da tela cada um; em foco o
+   gráfico manda e a legenda acompanha. */
+.em-foco.gr-card .gr-corpo { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+
+/* Barras em CSS: a altura vem do número de itens, então em foco o que ganha é
+   espessura — dez barras finas numa tela inteira ficariam perdidas. */
+.em-foco.gr-card .bar-lista .bar-trilho { height: 22px; }
+.em-foco.gr-card .bar-lista .bar-item   { padding: 6px 5px; }
+
+/* O calendário preenche a altura disponível em vez de parar nas células de
+   56px, que é o que torna a expansão útil para ler um mês inteiro. */
+.em-foco.fc-card--cal .cal-grid { grid-auto-rows: minmax(84px, 1fr); }
+.em-foco.fc-card--cal .cal-grid .cal-dia,
+.em-foco.fc-card--cal .cal-grid .cal-vazio { min-height: 84px; }

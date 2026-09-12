@@ -14,6 +14,7 @@
           {{ ui.mostrarCentavos ? 'Sem centavos' : 'Com centavos' }}
         </button>
         <button class="pv-btn" @click="restaurarColunas">Restaurar colunas</button>
+        <BotaoFoco :id="ID_FOCO" rotulo="Expandir" />
       </div>
     </div>
 
@@ -90,6 +91,7 @@ import { fmtNumero } from '@/utils/formato'
 import { useUiStore } from '@/stores/ui'
 import { chaveSuperior, larguraAoArrastar, alturaDisponivel } from '@/utils/resultado'
 import { montarPivotDiario, resultadoDiario, type NoDiario } from '@/utils/pivotdiario'
+import BotaoFoco from '@/components/ui/BotaoFoco.vue'
 
 /**
  * Tabela categoria × dia do mês, no padrão da aba Resultado.
@@ -108,6 +110,9 @@ const props = defineProps<{
 }>()
 
 const ui = useUiStore()
+
+/** Id deste bloco no modo foco. Ver utils/foco.ts. */
+const ID_FOCO = 'fc-intradia'
 
 const diasNoMes = computed(() => new Date(props.ano, props.mes, 0).getDate())
 const indices = computed(() => Array.from({ length: diasNoMes.value }, (_, i) => i))
@@ -223,7 +228,7 @@ function medirAltura() {
     el.getBoundingClientRect().top, window.innerHeight, props.folga ?? 90, 260)
 }
 
-watch(() => [ui.filtrosAbertos, arvore.value, linhasVisiveis.value.length],
+watch(() => [ui.filtrosAbertos, ui.foco, arvore.value, linhasVisiveis.value.length],
   () => nextTick(medirAltura))
 
 onMounted(() => {

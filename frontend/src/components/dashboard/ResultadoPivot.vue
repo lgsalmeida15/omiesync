@@ -13,13 +13,7 @@
           Exibição<span class="pv-chv">▾</span>
         </button>
 
-        <button v-if="ui.focoTabela" class="pv-btn pv-btn--sair" @click="ui.toggleFoco()">
-          ✕ Sair do modo foco
-        </button>
-        <button v-else class="pv-btn pv-btn--modo" @click="ui.toggleFoco()"
-                title="Ocupar a página inteira com a tabela">
-          ⤢ Modo foco
-        </button>
+        <BotaoFoco :id="ID_FOCO" rotulo="Modo foco" />
 
         <span v-if="dados.mes_corte <= 12" class="pv-legenda">
           <span class="pv-chip-prev" /> a partir de {{ nomeMes[dados.mes_corte - 1] }} são valores previstos
@@ -113,6 +107,7 @@ import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { fetchPivot, type PivotData, type PivotLinha } from '@/api/pivot'
 import type { DashboardParams } from '@/api/dashboard'
 import AppSpinner from '@/components/ui/AppSpinner.vue'
+import BotaoFoco from '@/components/ui/BotaoFoco.vue'
 import { fmtNumero } from '@/utils/formato'
 import { useUiStore } from '@/stores/ui'
 import { calcularResultado, chaveSuperior, larguraAoArrastar, alturaDisponivel, totalVisivel } from '@/utils/resultado'
@@ -130,6 +125,10 @@ const indicesVisiveis = computed(() =>
   Array.from({ length: 12 }, (_, i) => i).filter(i => mesesVisiveis.value.has(i + 1)))
 
 const ui = useUiStore()
+
+/** Id deste bloco no modo foco. Ver utils/foco.ts. */
+const ID_FOCO = 'resultado'
+const emFoco = computed(() => ui.emFoco(ID_FOCO))
 
 const nomeMes = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
 
@@ -180,7 +179,7 @@ function medirAltura() {
 
 // Recalcula quando algo ACIMA da tabela muda de altura. Sem isto, abrir os
 // filtros empurraria a tabela para fora da janela sem que ela encolhesse.
-watch(() => [ui.filtrosAbertos, ui.focoTabela, controlesAbertos.value, dados.value, props.meses],
+watch(() => [ui.filtrosAbertos, ui.foco, controlesAbertos.value, dados.value, props.meses],
   () => nextTick(medirAltura))
 
 onMounted(() => {
@@ -218,7 +217,7 @@ function iniciarArrasto(chave: string, ev: MouseEvent, larguraAtual: number) {
 const estiloCol = (chave: string, padrao: number) => ({
   width: `${larguras.value[chave] ?? padrao}px`,
 })
-watch(() => ui.focoTabela, foco => { controlesAbertos.value = !foco })
+watch(emFoco, foco => { controlesAbertos.value = !foco })
 
 function alternarNoResultado(tipo: string, categoriaSuperior: string) {
   const k = chaveSuperior(tipo, categoriaSuperior)

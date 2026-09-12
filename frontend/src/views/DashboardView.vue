@@ -188,7 +188,7 @@
          Mesmo `defer` dos filtros: #appbar-tabs é renderizado pelo MainLayout e
          sem ele o querySelector do alvo devolve null na montagem. -->
     <Teleport defer to="#appbar-tabs">
-      <div v-if="!ui.focoTabela" class="dash-tabs">
+      <div v-if="!ui.haFoco" class="dash-tabs">
         <button v-for="t in abas" :key="t.id"
                 :class="['dash-tab', { active: aba === t.id }]"
                 @click="aba = t.id">{{ t.label }}</button>
@@ -1174,8 +1174,20 @@ function selecionarCliente(nome: string) {
   carregar()
 }
 
+/*
+ * Esc sai do modo foco.
+ *
+ * Vive aqui por ser ancestral das duas abas que têm blocos focáveis, então um
+ * listener cobre as duas. Antes a única saída era o botão dentro do próprio
+ * modo: quem expandisse um bloco sem querer ficava sem rota de fuga óbvia.
+ */
+function aoTeclar(e: KeyboardEvent) {
+  if (e.key === 'Escape' && ui.haFoco) ui.sairDoFoco()
+}
+
 onMounted(() => {
   document.addEventListener('click', closeDropdown)
+  window.addEventListener('keydown', aoTeclar)
 })
 
 onBeforeUnmount(() => {
@@ -1185,6 +1197,7 @@ onBeforeUnmount(() => {
   chartSparkDesp?.destroy()
   clearTimeout(debounceTimer)
   document.removeEventListener('click', closeDropdown)
+  window.removeEventListener('keydown', aoTeclar)
 })
 </script>
 

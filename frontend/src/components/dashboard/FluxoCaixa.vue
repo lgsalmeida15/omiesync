@@ -6,9 +6,48 @@
     <div v-else-if="erro" class="fc-state fc-state--erro">{{ erro }}</div>
 
     <template v-else-if="dados">
-      <div :class="['fc-grid', { 'fc-grid--tres': completo }]">
-        <!-- Calendário -->
-        <section class="fc-card fc-card--cal">
+      <!-- Faixa de recorte: fina e sempre visível quando há recorte ativo.
+           Morava no bloco recolhível, que saiu junto com o layout de três
+           colunas. Não podia sair junto: um recorte esquecido explica um número
+           "errado" sem dar pista de onde está. -->
+      <div v-if="completo && haRecorte && !ui.haFoco" class="fc-recorte">
+        <span class="fc-recorte-txt">{{ rotuloRecorte }}</span>
+        <button class="fc-btn fc-btn--limpar" @click="limparRecorte">✕ Limpar recorte</button>
+      </div>
+
+      <!-- Primeira fileira, só no layout completo: categorias e clientes lado a
+           lado, como nas abas de contas. Nelas esses dois gráficos vivem em
+           ContasPorTipo, acima desta tela. -->
+      <div v-if="completo" v-show="mostrar(ID.categorias) || mostrar(ID.clientes)" class="fc-graficos">
+        <GraficoDonut
+          v-show="mostrar(ID.categorias)"
+          :class="{ 'em-foco': ui.emFoco(ID.categorias) }"
+          titulo="TOTAL GERAL POR CATEGORIA"
+          :subtitulo="rotuloRecorte"
+          :itens="itensCategoria"
+          modo="selecionar"
+          :foco-id="ID.categorias"
+          :selecionados="[...selCategorias]"
+          @update:selecionados="selCategorias = new Set($event)"
+        />
+        <GraficoBarrasH
+          v-show="mostrar(ID.clientes)"
+          :class="{ 'em-foco': ui.emFoco(ID.clientes) }"
+          titulo="TOTAL GERAL POR CLIENTE/FORNECEDOR"
+          :subtitulo="rotuloRecorte"
+          :itens="itensEntidade"
+          modo="selecionar"
+          :foco-id="ID.clientes"
+          :selecionados="[...selEntidades]"
+          @update:selecionados="selEntidades = new Set($event)"
+        />
+      </div>
+
+      <!-- Segunda fileira: calendário e a coluna de resumo. É o mesmo arranjo
+           das abas de contas — aqui deixou de ser exclusivo do layout lateral. -->
+      <div v-show="mostrar(ID.calendario) || mostrar(ID.resumo)" class="fc-grid">
+        <section v-show="mostrar(ID.calendario)"
+                 :class="['fc-card', 'fc-card--cal', { 'em-foco': ui.emFoco(ID.calendario) }]">
           <div class="fc-card-head">
             <div>
               <div class="fc-card-title">{{ tituloCalendario }}</div>
@@ -17,9 +56,12 @@
                 <template v-if="completo"> · Ctrl+clique soma dias</template>
               </div>
             </div>
-            <button v-if="selDias.size" class="fc-btn" @click="selDias = new Set()">
-              Ver mês inteiro
-            </button>
+            <div class="fc-card-acoes">
+              <button v-if="selDias.size" class="fc-btn" @click="selDias = new Set()">
+                Ver mês inteiro
+              </button>
+              <BotaoFoco v-if="completo" :id="ID.calendario" />
+            </div>
           </div>
 
           <div class="cal-semana">
@@ -45,29 +87,7 @@
           </div>
         </section>
 
-        <!-- Categorias e entidades: só no layout completo. Nas abas de contas
-             esses dois gráficos vivem em ContasPorTipo, acima desta tela. -->
-        <template v-if="completo">
-          <GraficoDonut
-            titulo="TOTAL GERAL POR CATEGORIA"
-            :subtitulo="rotuloRecorte"
-            :itens="itensCategoria"
-            modo="selecionar"
-            :selecionados="[...selCategorias]"
-            @update:selecionados="selCategorias = new Set($event)"
-          />
-          <GraficoBarrasH
-            titulo="TOTAL GERAL POR CLIENTE/FORNECEDOR"
-            :subtitulo="rotuloRecorte"
-            :itens="itensEntidade"
-            modo="selecionar"
-            :selecionados="[...selEntidades]"
-            @update:selecionados="selEntidades = new Set($event)"
-          />
-        </template>
-
-        <!-- Lateral: resumo + próximos vencimentos (layout das abas de contas) -->
-        <div v-else class="fc-lateral">
+        <div v-show="mostrar(ID.resumo)" class="fc-lateral">
           <section class="fc-card">
             <ResumoMes :resumo="resumo" :tipo="tipo" :titulo="tituloResumo" :subtitulo="rotuloRecorte" />
           </section>
@@ -78,41 +98,14 @@
         </div>
       </div>
 
-      <!-- No layout completo, resumo e vencimentos ficam atrás de um botão. É o
-           que libera altura para os três gráficos e a tabela intradia caberem na
-           mesma tela — o pedido central desta aba. -->
-      <template v-if="completo">
-        <section class="fc-card fc-card--dobra">
-          <button class="fc-dobra-btn" :aria-expanded="resumoAberto"
-                  @click="resumoAberto = !resumoAberto">
-            <span class="fc-chv">{{ resumoAberto ? '▾' : '▸' }}</span>
-            Resumo do mês e próximos vencimentos
-          </button>
-
-          <!-- Um recorte esquecido explica um número "errado" sem dar pista de
-               onde está. O aviso fica aqui, sempre visível, com a saída ao lado. -->
-          <div v-if="haRecorte" class="fc-recorte">
-            <span class="fc-recorte-txt">{{ rotuloRecorte }}</span>
-            <button class="fc-btn fc-btn--limpar" @click="limparRecorte">✕ Limpar recorte</button>
-          </div>
-
-          <div v-show="resumoAberto" class="fc-dobra-corpo">
-            <div class="fc-dobra-col">
-              <ResumoMes :resumo="resumo" :tipo="tipo" :titulo="tituloResumo" :subtitulo="rotuloRecorte" />
-            </div>
-            <div class="fc-dobra-col">
-              <ProximosVencimentos :itens="dados.proximos_vencimentos" />
-            </div>
-          </div>
-        </section>
-
-        <section class="fc-card">
-          <PivotDiario :transacoes="recortadas" :ano="dados.ano" :mes="dados.mes" />
-        </section>
-      </template>
+      <section v-if="completo" v-show="mostrar(ID.intradia)"
+               :class="['fc-card', { 'em-foco': ui.emFoco(ID.intradia) }]">
+        <PivotDiario :transacoes="recortadas" :ano="dados.ano" :mes="dados.mes" />
+      </section>
 
       <!-- Listagem: realizado e pendente, a coluna Status distingue -->
-      <section class="fc-card">
+      <section v-show="mostrar(ID.transacoes)"
+               :class="['fc-card', { 'em-foco': ui.emFoco(ID.transacoes) }]">
         <div class="fc-card-head">
           <div>
             <div class="fc-card-title">TRANSAÇÕES</div>
@@ -131,6 +124,7 @@
               <option value="pendente">Pendentes</option>
               <option value="atrasada">Atrasadas</option>
             </select>
+            <BotaoFoco v-if="completo" :id="ID.transacoes" />
           </div>
         </div>
 
@@ -173,12 +167,15 @@ import { ref, computed, watch, defineAsyncComponent } from 'vue'
 import { fetchFluxoCaixa, type FluxoCaixaData, type FluxoResumo, type FluxoTransacao } from '@/api/fluxocaixa'
 import type { DashboardParams } from '@/api/dashboard'
 import AppSpinner from '@/components/ui/AppSpinner.vue'
+import BotaoFoco from '@/components/ui/BotaoFoco.vue'
 import ResumoMes from './ResumoMes.vue'
 import ProximosVencimentos from './ProximosVencimentos.vue'
 import { fmtMoeda, fmtCompacto } from '@/utils/formato'
 import { filtrarTransacoes, classeStatus, resumirTransacoes } from '@/utils/fluxo'
 import { aplicarSelecao, alternarNumero, temRecorte, type Selecao } from '@/utils/fluxocruzado'
 import { porCategoria, topEntidades } from '@/utils/agregacao'
+import { deveMostrar } from '@/utils/foco'
+import { useUiStore } from '@/stores/ui'
 
 // Assíncronos: as abas de contas montam este componente no layout 'lateral' e
 // nunca precisam dos três, então não devem pagar o download deles.
@@ -202,6 +199,30 @@ const props = withDefaults(defineProps<{
    */
   layout?: 'lateral' | 'completo'
 }>(), { tipo: 'todos', layout: 'lateral' })
+
+const ui = useUiStore()
+
+/**
+ * Ids dos blocos focáveis desta aba. Reunidos num objeto porque aparecem no
+ * template, no v-show e na classe de cada bloco — soltos como literais, um erro
+ * de digitação esconderia o bloco em silêncio.
+ */
+const ID = {
+  categorias: 'fc-categorias',
+  clientes:   'fc-clientes',
+  calendario: 'fc-calendario',
+  resumo:     'fc-resumo',
+  intradia:   'fc-intradia',
+  transacoes: 'fc-transacoes',
+} as const
+
+/**
+ * O bloco aparece? Sem foco, todos; com foco, só ele. Ver utils/foco.ts.
+ *
+ * No layout lateral (abas de contas) não há botão de foco, mas a função
+ * continua valendo: `ui.foco` é nulo ali, então devolve sempre true.
+ */
+const mostrar = (id: string) => deveMostrar(ui.foco, id)
 
 const completo   = computed(() => props.layout === 'completo')
 const umLadoSo   = computed(() => props.tipo !== 'todos')
@@ -227,7 +248,6 @@ const erro           = ref('')
 const busca          = ref('')
 const filtroTipo     = ref('')
 const filtroSituacao = ref('')
-const resumoAberto   = ref(false)
 
 // ── Recorte cruzado ────────────────────────────────────────────────────────
 // No layout 'lateral' só `selDias` chega a ser usado: os gráficos das abas de
@@ -400,36 +420,26 @@ watch(() => [props.grupoId, props.filtros, props.mes], carregar, { deep: true, i
 }
 .fc-state--erro { color: var(--danger); }
 
-/* O calendário para de crescer em 760px para manter as células compactas; a
-   sobra da largura vai para a coluna lateral, senão viraria vazio à direita. */
+/* Fileiras de dois, como nas abas de contas: categorias e clientes na primeira,
+   calendário e a coluna de resumo na segunda.
+   Havia aqui uma variante de três colunas, com o calendário ao lado dos dois
+   gráficos, e ela obrigava a comprimir o donut para 170px e as células do
+   calendário para 38px. Quem precisa de espaço agora expande o bloco. */
+.fc-graficos {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-4); margin-bottom: var(--sp-4);
+}
 .fc-grid {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--sp-4); align-items: stretch; margin-bottom: var(--sp-4);
 }
-/* Três colunas iguais no layout completo: calendário, categorias e entidades.
-   Segue em três até 1100px — havia um degrau em 1400px que jogava o terceiro
-   gráfico para uma segunda linha e, com ela, empurrava o pivô intradia para
-   fora da tela num notebook de 1366px. Cabendo em três, cabe na dobra. */
-.fc-grid--tres { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @media (max-width: 1100px) {
-  .fc-grid, .fc-grid--tres { grid-template-columns: 1fr; }
+  .fc-graficos, .fc-grid { grid-template-columns: 1fr; }
 }
 
-/*
- * Altura da faixa superior, no layout completo.
- *
- * Medida antes de ser escolhida: a faixa saía com 438px, e nesse ponto o pivô
- * intradia não caberia na dobra de uma tela de 768px — que é o notebook comum.
- * Os dois culpados eram o donut, cujo aspect-ratio 1:1 o faz crescer com a
- * largura da coluna, e as células do calendário, com piso de 56px em seis linhas.
- *
- * Aqui os dois são limitados só nesta aba; nas abas de contas os gráficos e o
- * calendário continuam com o tamanho de antes.
- */
-.fc-grid--tres :deep(.gr-canvas-wrap) { max-height: 170px; }
-.fc-grid--tres :deep(.gr-legenda) { max-height: 190px; }
-.fc-grid--tres .cal-grid { grid-auto-rows: minmax(38px, 1fr); }
-.fc-grid--tres .cal-dia, .fc-grid--tres .cal-vazio { min-height: 38px; }
+/* Um bloco expandido é o único na tela, então a grade de duas colunas deixaria
+   metade vazia à direita. O resto do visual do foco é global, em main.css. */
+.fc-graficos:has(> .em-foco), .fc-grid:has(> .em-foco) { grid-template-columns: 1fr; }
 
 /* O card de vencimentos absorve a altura que sobra, então a coluna lateral
    termina na mesma linha do calendário em qualquer viewport. */
@@ -464,31 +474,16 @@ watch(() => [props.grupoId, props.filtros, props.mes], carregar, { deep: true, i
 }
 .fc-btn { cursor: pointer; transition: var(--transition); }
 .fc-btn:hover { border-color: var(--primary); color: var(--primary); }
-.fc-filtros { display: flex; gap: 6px; flex-wrap: wrap; }
+.fc-filtros { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+/* Mesma razão do .gr-acoes nos gráficos: o .fc-card-head é space-between, e um
+   segundo botão solto ali ficaria no meio do cabeçalho. */
+.fc-card-acoes { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .fc-input { min-width: 200px; }
 
-/* ── Bloco recolhível (layout completo) ── */
-/* Padding menor que os outros cards: recolhido, ele é uma faixa de comando, e
-   cada pixel aqui é altura que a tabela intradia deixa de ter. */
-.fc-card--dobra { padding: var(--sp-3) var(--sp-4); }
-.fc-dobra-btn {
-  display: flex; align-items: center; gap: 8px;
-  background: none; border: none; padding: 2px 0; cursor: pointer;
-  font-family: var(--font-display); font-size: var(--fs-sm); font-weight: 600;
-  color: var(--text-muted); transition: var(--transition);
-}
-.fc-dobra-btn:hover { color: var(--primary); }
-.fc-chv { font-size: var(--fs-xs); color: var(--text-dim); }
-.fc-dobra-corpo {
-  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--sp-5); margin-top: var(--sp-4);
-}
-@media (max-width: 1100px) { .fc-dobra-corpo { grid-template-columns: 1fr; } }
-.fc-dobra-col { min-width: 0; display: flex; flex-direction: column; }
-
+/* Faixa de recorte: própria, no topo da aba. */
 .fc-recorte {
   display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap;
-  margin-top: 6px;
+  margin-bottom: calc(var(--sp-4) * -1 + 4px);
 }
 .fc-recorte-txt {
   font-family: var(--font-display); font-size: var(--fs-xs); font-weight: 600;

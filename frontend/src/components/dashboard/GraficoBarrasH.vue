@@ -5,9 +5,14 @@
         <div class="gr-title">{{ titulo }}</div>
         <div class="gr-sub">{{ subtitulo }}</div>
       </div>
-      <button v-if="itens.length" class="gr-acao" @click="alternarTodos">
-        {{ rotuloAcao }}
-      </button>
+      <div class="gr-acoes">
+        <button v-if="itens.length" class="gr-acao" @click="alternarTodos">
+          {{ rotuloAcao }}
+        </button>
+        <!-- Só aparece quando o pai pede: as abas de contas montam este mesmo
+             componente sem focoId e seguem sem o botão. -->
+        <BotaoFoco v-if="focoId" :id="focoId" />
+      </div>
     </div>
 
     <p v-if="!itens.length" class="gr-vazio">Nada a exibir no período.</p>
@@ -41,6 +46,7 @@ import { fmtMoeda } from '@/utils/formato'
 import { corDe } from '@/utils/paleta'
 import type { Agregado } from '@/utils/agregacao'
 import { alternarRotulo } from '@/utils/fluxocruzado'
+import BotaoFoco from '@/components/ui/BotaoFoco.vue'
 
 const props = withDefaults(defineProps<{
   titulo: string
@@ -49,6 +55,8 @@ const props = withDefaults(defineProps<{
   /** Ver GraficoDonut.vue: 'ocultar' esconde do gráfico, 'selecionar' recorta a tela. */
   modo?: 'ocultar' | 'selecionar'
   selecionados?: string[]
+  /** Id do bloco no modo foco. Sem ele, o botão de expandir não existe. */
+  focoId?: string
 }>(), { subtitulo: '', modo: 'ocultar', selecionados: () => [] })
 
 const emit = defineEmits<{ (e: 'update:selecionados', v: string[]): void }>()
@@ -132,6 +140,9 @@ function alternarTodos() {
   cursor: pointer; transition: var(--transition); white-space: nowrap;
 }
 .gr-acao:hover { border-color: var(--primary); color: var(--primary); }
+/* Agrupa os botões do cabeçalho. Sem o wrapper, o segundo botão viraria um
+   terceiro filho do .gr-head, que é space-between, e ficaria solto no meio. */
+.gr-acoes { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 
 .bar-lista { display: flex; flex-direction: column; gap: 3px; }
 .bar-item {
