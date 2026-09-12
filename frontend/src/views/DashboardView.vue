@@ -205,9 +205,16 @@
          inicial do dashboard, que já é o maior da aplicação. -->
     <ResultadoPivot v-else-if="aba === 'resultado'" :grupo-id="grupoIDAtivo"
                     :filtros="filtrosAtivos" :meses="mesesVisiveis" />
-    <FluxoCaixa v-else-if="aba === 'fluxo'" :grupo-id="grupoIDAtivo" :filtros="filtrosAtivos" :mes="mesSelecionado" layout="completo" />
-    <ContasPorTipo v-else-if="aba === 'receber'" :grupo-id="grupoIDAtivo" :filtros="filtrosAtivos" :mes="mesSelecionado" tipo="receita" />
-    <ContasPorTipo v-else-if="aba === 'pagar'"   :grupo-id="grupoIDAtivo" :filtros="filtrosAtivos" :mes="mesSelecionado" tipo="despesa" />
+    <!-- As três abas montam o MESMO componente, variando só o recorte por tipo e
+         a presença da tabela intradia. Recebíveis e pagamentos passavam antes por
+         um ContasPorTipo, que segurava os gráficos do lado de fora — e era por
+         isso que o calendário deles não filtrava os gráficos. -->
+    <FluxoCaixa v-else-if="aba === 'fluxo'" :grupo-id="grupoIDAtivo"
+                :filtros="filtrosAtivos" :mes="mesSelecionado" pivo-intradia />
+    <FluxoCaixa v-else-if="aba === 'receber'" :grupo-id="grupoIDAtivo"
+                :filtros="filtrosAtivos" :mes="mesSelecionado" tipo="receita" />
+    <FluxoCaixa v-else-if="aba === 'pagar'" :grupo-id="grupoIDAtivo"
+                :filtros="filtrosAtivos" :mes="mesSelecionado" tipo="despesa" />
 
     <!-- Conteúdo -->
     <div v-else-if="dados" class="dash-content">
@@ -347,9 +354,6 @@ const ResultadoPivot = defineAsyncComponent(
 )
 const FluxoCaixa = defineAsyncComponent(
   () => import('@/components/dashboard/FluxoCaixa.vue')
-)
-const ContasPorTipo = defineAsyncComponent(
-  () => import('@/components/dashboard/ContasPorTipo.vue')
 )
 
 const abas = [

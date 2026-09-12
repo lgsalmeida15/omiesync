@@ -10,22 +10,21 @@
            Morava no bloco recolhível, que saiu junto com o layout de três
            colunas. Não podia sair junto: um recorte esquecido explica um número
            "errado" sem dar pista de onde está. -->
-      <div v-if="completo && haRecorte && !ui.haFoco" class="fc-recorte">
+      <div v-if="haRecorte && !ui.haFoco" class="fc-recorte">
         <span class="fc-recorte-txt">{{ rotuloRecorte }}</span>
         <button class="fc-btn fc-btn--limpar" @click="limparRecorte">✕ Limpar recorte</button>
       </div>
 
-      <!-- Primeira fileira, só no layout completo: categorias e clientes lado a
-           lado, como nas abas de contas. Nelas esses dois gráficos vivem em
-           ContasPorTipo, acima desta tela. -->
-      <div v-if="completo" v-show="mostrar(ID.categorias) || mostrar(ID.clientes)" class="fc-graficos">
+      <!-- Primeira fileira: categorias e clientes lado a lado. Vivem AQUI
+           dentro, e não num componente acima, porque é o que os faz participar
+           do recorte cruzado — fora daqui o calendário não os alcançaria. -->
+      <div v-show="mostrar(ID.categorias) || mostrar(ID.clientes)" class="fc-graficos">
         <GraficoDonut
           v-show="mostrar(ID.categorias)"
           :class="{ 'em-foco': ui.emFoco(ID.categorias) }"
-          titulo="TOTAL GERAL POR CATEGORIA"
+          :titulo="rotulos.donut"
           :subtitulo="rotuloRecorte"
           :itens="itensCategoria"
-          modo="selecionar"
           :foco-id="ID.categorias"
           :selecionados="[...selCategorias]"
           @update:selecionados="selCategorias = new Set($event)"
@@ -33,10 +32,9 @@
         <GraficoBarrasH
           v-show="mostrar(ID.clientes)"
           :class="{ 'em-foco': ui.emFoco(ID.clientes) }"
-          titulo="TOTAL GERAL POR CLIENTE/FORNECEDOR"
+          :titulo="rotulos.barras"
           :subtitulo="rotuloRecorte"
           :itens="itensEntidade"
-          modo="selecionar"
           :foco-id="ID.clientes"
           :selecionados="[...selEntidades]"
           @update:selecionados="selEntidades = new Set($event)"
@@ -53,14 +51,14 @@
               <div class="fc-card-title">{{ tituloCalendario }}</div>
               <div class="fc-card-sub">
                 {{ nomeMes[dados.mes - 1] }} de {{ dados.ano }}
-                <template v-if="completo"> · Ctrl+clique soma dias</template>
+                 · Ctrl+clique soma dias
               </div>
             </div>
             <div class="fc-card-acoes">
               <button v-if="selDias.size" class="fc-btn" @click="selDias = new Set()">
                 Ver mês inteiro
               </button>
-              <BotaoFoco v-if="completo" :id="ID.calendario" />
+              <BotaoFoco :id="ID.calendario" />
             </div>
           </div>
 
@@ -98,7 +96,7 @@
         </div>
       </div>
 
-      <section v-if="completo" v-show="mostrar(ID.intradia)"
+      <section v-if="pivoIntradia" v-show="mostrar(ID.intradia)"
                :class="['fc-card', { 'em-foco': ui.emFoco(ID.intradia) }]">
         <PivotDiario :transacoes="recortadas" :ano="dados.ano" :mes="dados.mes" />
       </section>
@@ -124,7 +122,7 @@
               <option value="pendente">Pendentes</option>
               <option value="atrasada">Atrasadas</option>
             </select>
-            <BotaoFoco v-if="completo" :id="ID.transacoes" />
+            <BotaoFoco :id="ID.transacoes" />
           </div>
         </div>
 
@@ -175,6 +173,7 @@ import { filtrarTransacoes, classeStatus, resumirTransacoes } from '@/utils/flux
 import { aplicarSelecao, alternarNumero, temRecorte, type Selecao } from '@/utils/fluxocruzado'
 import { porCategoria, topEntidades } from '@/utils/agregacao'
 import { deveMostrar } from '@/utils/foco'
+import { rotulosGraficos } from '@/utils/rotulos'
 import { useUiStore } from '@/stores/ui'
 
 // Assíncronos: as abas de contas montam este componente no layout 'lateral' e
@@ -190,15 +189,14 @@ const props = withDefaults(defineProps<{
   /** Restringe a visão a um lado: abas Contas a Receber e Contas a Pagar. */
   tipo?: 'todos' | 'receita' | 'despesa'
   /**
-   * 'lateral'  — calendário + resumo/vencimentos ao lado (abas de contas).
-   * 'completo' — três gráficos no topo, resumo recolhível e pivô intradia
-   *              (aba Fluxo de Caixa).
+   * Acrescenta a tabela intradia (categoria × dia), abaixo do calendário.
    *
-   * Prop, e não componente separado, porque o recorte cruzado precisa alcançar
-   * o calendário, o resumo e a listagem, que vivem aqui dentro.
+   * É a única diferença entre as três abas que montam este componente — antes
+   * era um enum `layout` que ligava sete coisas de uma vez, e seis delas
+   * passaram a valer para todas.
    */
-  layout?: 'lateral' | 'completo'
-}>(), { tipo: 'todos', layout: 'lateral' })
+  pivoIntradia?: boolean
+}>(), { tipo: 'todos', pivoIntradia: false })
 
 const ui = useUiStore()
 
@@ -224,7 +222,7 @@ const ID = {
  */
 const mostrar = (id: string) => deveMostrar(ui.foco, id)
 
-const completo   = computed(() => props.layout === 'completo')
+
 const umLadoSo   = computed(() => props.tipo !== 'todos')
 
 const tituloCalendario = computed(() => ({
@@ -232,6 +230,9 @@ const tituloCalendario = computed(() => ({
   receita: 'CALENDÁRIO DE RECEBIMENTOS',
   despesa: 'CALENDÁRIO DE PAGAMENTOS',
 }[props.tipo]))
+
+/** Cliente ou fornecedor conforme o lado. Ver utils/rotulos.ts. */
+const rotulos = computed(() => rotulosGraficos(props.tipo))
 
 const rotuloCarregando = computed(() => ({
   todos:   'fluxo de caixa',
@@ -298,11 +299,6 @@ const dados = computed<FluxoCaixaData | null>(() => {
     proximos_vencimentos: bruto.value.proximos_vencimentos.filter(doLado),
   }
 })
-
-// Emite as transações do MÊS INTEIRO, sem o recorte cruzado: é o que a aba
-// Contas a Receber consome para os gráficos dela, que têm interação própria.
-const emit = defineEmits<{ (e: 'dados', d: FluxoCaixaData | null): void }>()
-watch(dados, d => emit('dados', d), { immediate: true })
 
 // ── As quatro visões do mesmo conjunto ─────────────────────────────────────
 // Cada bloco ignora a própria dimensão. Ver utils/fluxocruzado.ts: sem isso,
