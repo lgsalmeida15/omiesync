@@ -69,3 +69,26 @@ export function montarCascata(
 
   return passos
 }
+
+/**
+ * O número que o passo exibe: a POSIÇÃO na abertura e no total, a VARIAÇÃO nos
+ * meses. O rótulo e o lado em que ele é desenhado saem os dois daqui — senão um
+ * diria uma coisa e o outro se posicionaria por outra.
+ */
+export function valorDoPasso(p: PassoCascata): number {
+  return p.tipo === 'abertura' || p.tipo === 'total' ? p.ate : p.valor
+}
+
+/**
+ * De que lado da barra o rótulo fica: acima quando o valor é positivo, abaixo
+ * quando é negativo. Nunca dentro.
+ *
+ * A regra era pelo TIPO do passo — 'reducao' embaixo, o resto em cima — e
+ * errava nos dois casos em que tipo e sinal discordam: saldo de abertura
+ * negativo e total negativo. Nesses, a barra desce a partir do zero, a âncora
+ * do rótulo fica na ponta de baixo, e mandá-lo "para cima" o jogava para dentro
+ * da própria barra, na mesma cor dela. Pelo SINAL, a conta fecha sozinha.
+ */
+export function alinhamentoDoPasso(p: PassoCascata): 'top' | 'bottom' {
+  return valorDoPasso(p) < 0 ? 'bottom' : 'top'
+}

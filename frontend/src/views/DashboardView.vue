@@ -335,7 +335,7 @@ import AppSpinner from '@/components/ui/AppSpinner.vue'
 import { fmtMoeda, fmtMoedaExata, fmtCompacto } from '@/utils/formato'
 import { coresGrafico, comAlfa } from '@/utils/tema'
 import { cardsDoRecorte, saldoDoRecorte, cardResultado, margemDoRecorte } from '@/utils/visaogeral'
-import { montarCascata } from '@/utils/cascata'
+import { montarCascata, valorDoPasso, alinhamentoDoPasso } from '@/utils/cascata'
 import { alternarNumero } from '@/utils/fluxocruzado'
 import {
   IconArrowUpRight, IconArrowDownRight, IconLineChart, IconCreditCard,
@@ -937,6 +937,7 @@ function buildChartAcum() {
   const corDoPasso = (t: string) =>
     t === 'aumento' ? c.receita : t === 'reducao' ? c.despesa : c.acento
 
+
   chartAcum = new Chart(canvasAcum.value, {
     type: 'bar',
     data: {
@@ -973,16 +974,17 @@ function buildChartAcum() {
           // um rótulo "R$ 0" flutuando ali só sujaria.
           display: ctx => passos[ctx.dataIndex].tipo !== 'aumento'
             || passos[ctx.dataIndex].valor !== 0,
-          font: { family: c.fonte, size: 9, weight: 'bold' },
-          formatter: (_v, ctx) => {
-            const p = passos[ctx.dataIndex]
-            return fmtK(p.tipo === 'abertura' || p.tipo === 'total' ? p.ate : p.valor)
-          },
+          font: { family: c.fonte, size: 12, weight: 'bold' },
+          formatter: (_v, ctx) => fmtK(valorDoPasso(passos[ctx.dataIndex])),
           anchor: 'end',
-          // Redução cresce para baixo: o rótulo acompanha, senão cai em cima da barra.
-          align: ctx => passos[ctx.dataIndex].tipo === 'reducao' ? 'bottom' : 'top',
+          // Acima quando positivo, abaixo quando negativo, nunca dentro da
+          // barra. A regra e o porquê estão em utils/cascata.ts, com testes —
+          // é o tipo de posição que não dá para conferir olhando o canvas.
+          align: ctx => alinhamentoDoPasso(passos[ctx.dataIndex]),
           color: ctx => corDoPasso(passos[ctx.dataIndex].tipo),
-          offset: 2,
+          // 2px encostava o texto na barra; com o corner radius de 4px parecia
+          // estar dentro dela.
+          offset: 6,
         },
       },
       scales: {
@@ -997,7 +999,9 @@ function buildChartAcum() {
           border: { display: false },
         },
       },
-      layout: { padding: { top: 24, bottom: 24 } },
+      // Folga para o rótulo, que agora é maior e fica 6px fora da barra. Sem
+      // ela, o de cima e o de baixo saem cortados na borda do gráfico.
+      layout: { padding: { top: 32, bottom: 32 } },
     },
   })
 }

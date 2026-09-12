@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { montarCascata, type PassoCascata } from './cascata'
+import { montarCascata, valorDoPasso, alinhamentoDoPasso, type PassoCascata } from './cascata'
 import type { GraficoAcumulado } from '@/api/dashboard'
 
 const NOMES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
@@ -139,5 +139,61 @@ describe('montarCascata em casos de borda', () => {
   it('rótulos de abertura e total são configuráveis', () => {
     const p = montarCascata(1, [], new Set(), 'Inicial', 'Final')
     expect(p.map(x => x.rotulo)).toEqual(['Inicial', 'Final'])
+  })
+})
+
+// ── Rótulo de cada barra ───────────────────────────────────────────────────
+// O rótulo é desenhado na cor da própria barra; caindo DENTRO dela, some. Não
+// dá para conferir isso no canvas, então a regra de posição é travada aqui.
+
+describe('valorDoPasso', () => {
+  const passos = montarCascata(10000, serie({ 1: 5000, 2: -2000 }))
+
+  it('abertura e total mostram a POSIÇÃO acumulada', () => {
+    expect(valorDoPasso(porRotulo(passos, 'Saldo'))).toBe(10000)
+    expect(valorDoPasso(porRotulo(passos, 'Total'))).toBe(13000)
+  })
+
+  it('os meses mostram a VARIAÇÃO, não o acumulado', () => {
+    expect(valorDoPasso(porRotulo(passos, 'Jan'))).toBe(5000)
+    expect(valorDoPasso(porRotulo(passos, 'Fev'))).toBe(-2000)
+  })
+})
+
+describe('alinhamentoDoPasso', () => {
+  it('mês positivo em cima, negativo embaixo', () => {
+    const p = montarCascata(10000, serie({ 1: 5000, 2: -2000 }))
+    expect(alinhamentoDoPasso(porRotulo(p, 'Jan'))).toBe('top')
+    expect(alinhamentoDoPasso(porRotulo(p, 'Fev'))).toBe('bottom')
+  })
+
+  /*
+   * Os dois casos que a regra antiga, baseada no TIPO do passo, errava: a
+   * abertura e o total não são 'reducao' nem quando são negativos, então iam
+   * para cima — e para cima, a partir da ponta de baixo da barra, é para
+   * dentro dela.
+   */
+  it('saldo de abertura negativo vai para baixo', () => {
+    const p = montarCascata(-8000, serie({}))
+    expect(alinhamentoDoPasso(porRotulo(p, 'Saldo'))).toBe('bottom')
+  })
+
+  it('total negativo vai para baixo', () => {
+    const p = montarCascata(-8000, serie({ 1: 5000, 2: -6000, 3: 2000 }))
+    expect(porRotulo(p, 'Total').ate).toBe(-7000)
+    expect(alinhamentoDoPasso(porRotulo(p, 'Total'))).toBe('bottom')
+  })
+
+  it('abertura e total positivos vão para cima', () => {
+    const p = montarCascata(10000, serie({ 1: 5000 }))
+    expect(alinhamentoDoPasso(porRotulo(p, 'Saldo'))).toBe('top')
+    expect(alinhamentoDoPasso(porRotulo(p, 'Total'))).toBe('top')
+  })
+
+  // Degrau de altura zero não é desenhado, mas a função não pode devolver algo
+  // sem sentido se alguém passar por ele.
+  it('valor zero conta como positivo', () => {
+    const p = montarCascata(1000, serie({ 5: 0 }))
+    expect(alinhamentoDoPasso(porRotulo(p, 'Mai'))).toBe('top')
   })
 })
