@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { proximoFoco, type IdFoco } from '@/utils/foco'
 
 export type Tema = 'dark' | 'light'
 
@@ -41,18 +42,32 @@ export const useUiStore = defineStore('ui', () => {
   }
 
   /**
-   * Modo foco da tabela: some a faixa de abas e a barra de botoes do pivo, para
-   * a tabela ocupar o maximo da pagina. Barra superior, lateral e o botao de
+   * Modo foco: QUAL bloco está expandido, ocupando a página sozinho. Some a
+   * faixa de abas e os blocos irmãos; barra superior, lateral e o botão de
    * filtros permanecem.
    *
-   * Nao persiste: e um modo de trabalho, nao preferencia. Voltar dias depois a
-   * uma tela sem abas, sem lembrar como entrou, seria uma armadilha — e a saida
-   * so existe dentro do proprio modo.
+   * Era um booleano enquanto só a tabela do Resultado tinha o modo. Virou um id
+   * quando os blocos da aba Fluxo de Caixa ganharam o mesmo botão: com um
+   * booleano por bloco, nada impediria dois expandidos ao mesmo tempo, e cada
+   * tela teria a própria versão da regra.
+   *
+   * Não persiste: é modo de trabalho, não preferência. Voltar dias depois a uma
+   * tela sem abas, sem lembrar como entrou, seria uma armadilha.
    */
-  const focoTabela = ref(false)
+  const foco = ref<IdFoco | null>(null)
 
-  function toggleFoco() {
-    focoTabela.value = !focoTabela.value
+  const haFoco = computed(() => foco.value !== null)
+
+  function emFoco(id: IdFoco) {
+    return foco.value === id
+  }
+
+  function alternarFoco(id: IdFoco) {
+    foco.value = proximoFoco(foco.value, id)
+  }
+
+  function sairDoFoco() {
+    foco.value = null
   }
 
   function toggleFiltros() {
@@ -77,6 +92,7 @@ export const useUiStore = defineStore('ui', () => {
     theme.value = theme.value === 'dark' ? 'light' : 'dark'
   }
 
-  return { theme, filtrosAbertos, mostrarCentavos, focoTabela,
-           toggleTheme, toggleFiltros, toggleCentavos, toggleFoco }
+  return { theme, filtrosAbertos, mostrarCentavos, foco, haFoco,
+           toggleTheme, toggleFiltros, toggleCentavos,
+           emFoco, alternarFoco, sairDoFoco }
 })
