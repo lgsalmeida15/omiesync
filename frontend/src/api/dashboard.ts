@@ -5,6 +5,9 @@ export interface DashboardCards {
   despesa_total: number
   resultado: number
   saldo_contas_correntes: number
+  /** Soma dos saldos iniciais cadastrados, antes de qualquer movimento. É a
+      abertura da cascata. */
+  saldo_inicial: number
 }
 
 export interface GraficoMensal {
@@ -20,6 +23,17 @@ export interface GraficoAcumulado {
   mes_nome: string
   resultado_mes: number
   acumulado: number
+}
+
+/**
+ * Saldo das contas correntes ao FIM de cada mês: saldo inicial cadastrado mais
+ * os movimentos já realizados até ali. Só realizado — provisão do extrato daria
+ * saldo previsto, e faria o saldo de dezembro parecer dinheiro em caixa hoje.
+ */
+export interface SaldoMes {
+  mes: number
+  mes_nome: string
+  saldo: number
 }
 
 export interface ContaCorrenteItem {
@@ -49,6 +63,8 @@ export interface DashboardData {
   cards: DashboardCards
   grafico_mensal: GraficoMensal[]
   grafico_resultado_acumulado: GraficoAcumulado[]
+  /** Os doze saldos de uma vez, para recortar meses sem ir ao servidor. */
+  saldos_mensais: SaldoMes[]
   filtros_disponiveis: FiltrosDisponiveis
 }
 

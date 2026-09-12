@@ -81,7 +81,7 @@ describe('coresGrafico', () => {
 
   it('preenche todos os campos mesmo sem CSS carregado', () => {
     const c = coresGrafico()
-    const esperados = ['receita', 'despesa', 'linha', 'grade', 'tick', 'rotulo',
+    const esperados = ['receita', 'despesa', 'linha', 'acento', 'grade', 'tick', 'rotulo',
                        'fundo', 'tooltipFundo', 'tooltipBorda', 'tooltipTexto', 'fonte']
     expect(Object.keys(c).sort()).toEqual(esperados.sort())
   })

@@ -37,6 +37,9 @@ export interface CoresGrafico {
   receita: string
   despesa: string
   linha: string
+  /** Cor de posição — saldo e total da cascata. Distinta de receita e despesa,
+      que marcam variação. */
+  acento: string
   grade: string
   tick: string
   rotulo: string
@@ -57,6 +60,7 @@ export function coresGrafico(raiz?: Element): CoresGrafico {
     receita:      token('--success',      '#22c55e', raiz),
     despesa:      token('--danger',       '#ef4444', raiz),
     linha:        token('--primary',      '#7c4ddc', raiz),
+    acento:       token('--accent',       '#22d3ee', raiz),
     grade:        token('--chart-grid',   'rgba(255,255,255,0.04)', raiz),
     tick:         token('--text-dim',     '#7a90a8', raiz),
     rotulo:       token('--text-muted',   '#a8b8cc', raiz),

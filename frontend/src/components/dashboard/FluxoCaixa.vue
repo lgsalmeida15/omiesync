@@ -177,7 +177,7 @@ import ResumoMes from './ResumoMes.vue'
 import ProximosVencimentos from './ProximosVencimentos.vue'
 import { fmtMoeda, fmtCompacto } from '@/utils/formato'
 import { filtrarTransacoes, classeStatus, resumirTransacoes } from '@/utils/fluxo'
-import { aplicarSelecao, alternarDia, temRecorte, type Selecao } from '@/utils/fluxocruzado'
+import { aplicarSelecao, alternarNumero, temRecorte, type Selecao } from '@/utils/fluxocruzado'
 import { porCategoria, topEntidades } from '@/utils/agregacao'
 
 // Assíncronos: as abas de contas montam este componente no layout 'lateral' e
@@ -245,7 +245,7 @@ const selecao = computed<Selecao>(() => ({
 const haRecorte = computed(() => temRecorte(selecao.value))
 
 function cliqueDia(dia: number, ev: MouseEvent) {
-  selDias.value = alternarDia(selDias.value, dia, ev.ctrlKey || ev.metaKey)
+  selDias.value = alternarNumero(selDias.value, dia, ev.ctrlKey || ev.metaKey)
 }
 
 function limparRecorte() {

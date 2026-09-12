@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  selecaoVazia, temRecorte, aplicarSelecao, alternarDia, alternarRotulo,
+  selecaoVazia, temRecorte, aplicarSelecao, alternarNumero, alternarRotulo,
   type Selecao,
 } from './fluxocruzado'
 import type { FluxoTransacao } from '@/api/fluxocaixa'
@@ -120,33 +120,33 @@ describe('aplicarSelecao', () => {
   })
 })
 
-describe('alternarDia', () => {
+describe('alternarNumero', () => {
   it('clique simples substitui a seleção', () => {
-    expect([...alternarDia(new Set([3, 10]), 20, false)]).toEqual([20])
+    expect([...alternarNumero(new Set([3, 10]), 20, false)]).toEqual([20])
   })
 
   // Mantém o toggle que a tela já tinha: reclicar o dia marcado volta ao mês.
   it('reclicar o único dia marcado limpa', () => {
-    expect(alternarDia(new Set([3]), 3, false).size).toBe(0)
+    expect(alternarNumero(new Set([3]), 3, false).size).toBe(0)
   })
 
   it('reclicar um dia entre vários apenas isola aquele', () => {
-    expect([...alternarDia(new Set([3, 10]), 3, false)]).toEqual([3])
+    expect([...alternarNumero(new Set([3, 10]), 3, false)]).toEqual([3])
   })
 
   it('com ctrl adiciona', () => {
-    expect([...alternarDia(new Set([3]), 10, true)].sort((a, b) => a - b)).toEqual([3, 10])
+    expect([...alternarNumero(new Set([3]), 10, true)].sort((a, b) => a - b)).toEqual([3, 10])
   })
 
   it('com ctrl remove o já marcado', () => {
-    expect([...alternarDia(new Set([3, 10]), 3, true)]).toEqual([10])
+    expect([...alternarNumero(new Set([3, 10]), 3, true)]).toEqual([10])
   })
 
   // Mutar o Set recebido não dispararia a reatividade do Vue, e a tela não
   // reagiria ao clique.
   it('não muta o conjunto recebido', () => {
     const antes = new Set([3])
-    alternarDia(antes, 10, true)
+    alternarNumero(antes, 10, true)
     expect([...antes]).toEqual([3])
   })
 })

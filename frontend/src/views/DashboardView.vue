@@ -23,9 +23,10 @@
           </select>
         </div>
 
-        <!-- Meses do Resultado: recorte de exibição da tabela, não filtro de dados.
-             Por isso só aparece nessa aba e não dispara nova consulta. -->
-        <div class="fi" v-if="aba === 'resultado'">
+        <!-- Meses: recorte de exibição, não filtro de dados — por isso não dispara
+             nova consulta. Serve a tabela do Resultado e os cards e gráficos da
+             Visão Geral; nas abas mensais quem manda é o seletor de MÊS ao lado. -->
+        <div class="fi" v-if="abaComMeses">
           <span class="fi-label">MESES</span>
           <div class="fi-multi">
             <button class="fi-select fi-trigger" @click.stop="toggleDropdown('meses', $event)">
@@ -226,7 +227,7 @@
             <span class="kpi-label">Receita total</span>
             <span class="kpi-icon kpi-icon--green"><IconArrowUpRight /></span>
           </div>
-          <div class="kpi-value kpi-value--green">{{ fmtExato(dados.cards.receita_total) }}</div>
+          <div class="kpi-value kpi-value--green">{{ fmtExato(cardsRecorte.receita) }}</div>
           <div class="spark-wrap"><canvas ref="canvasSparkRec" /></div>
         </div>
 
@@ -235,7 +236,7 @@
             <span class="kpi-label">Despesa total</span>
             <span class="kpi-icon kpi-icon--red"><IconArrowDownRight /></span>
           </div>
-          <div class="kpi-value kpi-value--red">{{ fmtDespesa(dados.cards.despesa_total) }}</div>
+          <div class="kpi-value kpi-value--red">{{ fmtDespesa(cardsRecorte.despesa) }}</div>
           <div class="spark-wrap"><canvas ref="canvasSparkDesp" /></div>
         </div>
 
@@ -244,8 +245,8 @@
             <span class="kpi-label">Resultado</span>
             <span class="kpi-icon kpi-icon--accent"><IconLineChart /></span>
           </div>
-          <div class="kpi-value" :class="dados.cards.resultado >= 0 ? 'kpi-value--green' : 'kpi-value--red'">
-            {{ fmtExato(dados.cards.resultado) }}
+          <div class="kpi-value" :class="resultadoRecorte >= 0 ? 'kpi-value--green' : 'kpi-value--red'">
+            {{ fmtExato(resultadoRecorte) }}
           </div>
           <div class="progress"><i :style="{ width: margemBarra }" /></div>
           <div class="kpi-foot">{{ margemTexto }}</div>
@@ -259,24 +260,29 @@
           <!-- Mesma regra do card Resultado ao lado: cor pelo sinal, e os parenteses
                do negativo vem do proprio fmtExato. -->
           <div class="kpi-value"
-               :class="dados.cards.saldo_contas_correntes >= 0 ? 'kpi-value--green' : 'kpi-value--red'">
-            {{ fmtExato(dados.cards.saldo_contas_correntes) }}
+               :class="saldoRecorte >= 0 ? 'kpi-value--green' : 'kpi-value--red'">
+            {{ fmtExato(saldoRecorte) }}
           </div>
           <div class="kpi-foot">
-            <span class="tag tag--ok">{{ contasNoFluxo }}</span> consideradas no fluxo
+            <span class="tag tag--ok">{{ contasNoFluxo }}</span> · {{ rotuloSaldo }}
           </div>
         </div>
       </div>
 
       <!-- Gráficos -->
       <div class="charts-row">
-        <div class="chart-card">
+        <div class="chart-card chart-card--clicavel">
           <div class="chart-header">
             <div>
               <div class="chart-title">Receita vs Despesa</div>
-              <div class="chart-sub">Evolução mensal — {{ filtros.ano }}</div>
+              <div class="chart-sub">
+                {{ rotuloRecorteGeral }} — {{ filtros.ano }} · clique numa barra para recortar
+              </div>
             </div>
             <div class="chart-legend">
+              <button v-if="haRecorteMeses" class="chart-limpar" @click="todosOsMeses">
+                ✕ {{ rotuloMeses }}
+              </button>
               <span class="leg-dot" style="background:var(--success)"></span>Receita
               <span class="leg-dot" style="background:var(--danger)"></span>Despesa
               <span class="leg-dot" style="background:var(--primary)"></span>Resultado
@@ -289,12 +295,14 @@
           <div class="chart-header">
             <div>
               <div class="chart-title">Resultado Acumulado</div>
-              <div class="chart-sub">Progressão mensal — {{ filtros.ano }}</div>
+              <div class="chart-sub">
+                Do saldo em contas ao saldo projetado — {{ rotuloRecorteGeral }}
+              </div>
             </div>
             <div class="chart-legend">
-              <span class="leg-dot" style="background:var(--primary)"></span>Acumulado
-              <span class="leg-dot" style="background:var(--success)"></span>Positivo
-              <span class="leg-dot" style="background:var(--danger)"></span>Negativo
+              <span class="leg-dot" style="background:var(--success)"></span>Aumento
+              <span class="leg-dot" style="background:var(--danger)"></span>Redução
+              <span class="leg-dot" style="background:var(--accent)"></span>Saldo e total
             </div>
           </div>
           <div class="chart-wrap"><canvas ref="canvasAcum"></canvas></div>
@@ -319,6 +327,9 @@ import { fetchDashboard, fetchFiltros, type DashboardData, type FiltrosDisponive
 import AppSpinner from '@/components/ui/AppSpinner.vue'
 import { fmtMoeda, fmtMoedaExata, fmtCompacto } from '@/utils/formato'
 import { coresGrafico, comAlfa } from '@/utils/tema'
+import { cardsDoRecorte, saldoDoRecorte, cardResultado, margemDoRecorte } from '@/utils/visaogeral'
+import { montarCascata } from '@/utils/cascata'
+import { alternarNumero } from '@/utils/fluxocruzado'
 import {
   IconArrowUpRight, IconArrowDownRight, IconLineChart, IconCreditCard,
 } from '@/components/ui/icons'
@@ -357,13 +368,20 @@ const abaMensal = computed(() => abasMensais.includes(aba.value))
 /** Abas que somam a inadimplencia e exibem o seletor correspondente. */
 const abaDeContas = computed(() => aba.value === 'receber' || aba.value === 'pagar')
 
+/** Abas que recortam por conjunto de meses (e não por um mês só). */
+const abaComMeses = computed(() => aba.value === 'resultado' || aba.value === 'geral')
+
 /**
- * Meses exibidos no pivô do Resultado.
+ * Meses exibidos — no pivô do Resultado e, agora, na Visão Geral.
  *
  * Vive fora de `filtrosAtivos` de propósito: o ResultadoPivot observa `filtros`
- * com deep:true e refaz a consulta a cada mudança. Como o servidor já devolve os
- * doze meses, recortar é decisão de exibição — dentro dos filtros, cada clique
- * num mês custaria uma ida ao banco à toa.
+ * com deep:true e refaz a consulta a cada mudança, e `carregar()` faz o mesmo.
+ * Como o servidor já devolve os doze meses, recortar é decisão de exibição —
+ * dentro dos filtros, cada clique num mês custaria uma ida ao banco à toa, e o
+ * clique na barra do gráfico (que escreve aqui) deixaria de ser instantâneo.
+ *
+ * Compartilhado entre as duas abas de propósito: trocar de aba mantendo o
+ * recorte é o que o usuário espera depois de escolher um trimestre.
  */
 const mesesVisiveis = ref<number[]>([1,2,3,4,5,6,7,8,9,10,11,12])
 const mesesVisiveisSet = computed(() => new Set(mesesVisiveis.value))
@@ -643,11 +661,41 @@ function chartColors() {
   }
 }
 
+/**
+ * Alfa do preenchimento das barras, nos dois gráficos da Visão Geral.
+ *
+ * Era 0.25 na receita e 0.20 na despesa, contra 0.70 no gráfico ao lado — lado a
+ * lado, um parecia lavado em relação ao outro, e os dois em relação aos próprios
+ * pontos de legenda, que são opacos. Um valor só, num lugar só, impede a
+ * divergência de voltar.
+ */
+const ALFA_BARRA = 0.7
+/** Barra fora do recorte: presente para comparação, mas claramente secundária. */
+const ALFA_APAGADA = 0.18
+
+/*
+ * Espessura das barras nos dois gráficos.
+ *
+ * Precisam ser declaradas, e diferentes, para PARECEREM iguais: Receita vs
+ * Despesa tem duas barras por mês e a cascata tem uma, então o mesmo par de
+ * percentuais renderiza uma metade da largura da outra. Os valores abaixo foram
+ * medidos no navegador, não estimados — ver a verificação da entrega.
+ */
+const PROPORCAO_PAR   = { categoryPercentage: 0.9,  barPercentage: 0.95 }
+const PROPORCAO_UNICA = { categoryPercentage: 0.55, barPercentage: 0.9 }
+
 function buildChartRecDesp() {
   if (!canvasRecDesp.value || !dados.value) return
   chartRecDesp?.destroy()
   const c  = chartColors()
   const ms = dados.value.grafico_mensal
+
+  // O gráfico NÃO se filtra pela própria dimensão: os doze meses continuam na
+  // tela e o recorte aparece como esmaecimento. Recortando junto, o clique
+  // deixaria uma barra só e não haveria como comparar nem voltar.
+  const dentro = (i: number) => !haRecorteMeses.value || mesesVisiveisSet.value.has(ms[i].mes)
+  const pinta = (cor: string) => ms.map((_, i) => comAlfa(cor, dentro(i) ? ALFA_BARRA : ALFA_APAGADA))
+  const borda = (cor: string) => ms.map((_, i) => dentro(i) ? cor : comAlfa(cor, 0.35))
 
   chartRecDesp = new Chart(canvasRecDesp.value, {
     type: 'bar',
@@ -657,14 +705,16 @@ function buildChartRecDesp() {
         {
           label: 'Receita', type: 'bar',
           data: ms.map(m => m.receita),
-          backgroundColor: comAlfa(c.receita, 0.25),
-          borderColor: c.receita, borderWidth: 1.5, borderRadius: 4, order: 2,
+          backgroundColor: pinta(c.receita),
+          borderColor: borda(c.receita), borderWidth: 1.5, borderRadius: 4, order: 2,
+          ...PROPORCAO_PAR,
         },
         {
           label: 'Despesa', type: 'bar',
           data: ms.map(m => m.despesa),
-          backgroundColor: comAlfa(c.despesa, 0.2),
-          borderColor: c.despesa, borderWidth: 1.5, borderRadius: 4, order: 2,
+          backgroundColor: pinta(c.despesa),
+          borderColor: borda(c.despesa), borderWidth: 1.5, borderRadius: 4, order: 2,
+          ...PROPORCAO_PAR,
         },
         {
           label: 'Resultado', type: 'line',
@@ -678,6 +728,25 @@ function buildChartRecDesp() {
     },
     options: {
       responsive: true, maintainAspectRatio: false,
+      // Clique na barra recorta a tela. `index` e não `nearest`: o alvo é o mês,
+      // não a série, então clicar na receita ou na despesa de março dá no mesmo.
+      onClick: (ev, _els, chart) => {
+        // `ev`, e não `ev.native`: o evento normalizado já carrega x/y relativos
+        // à área do gráfico, calculados pelo próprio Chart.js. Com o nativo ele
+        // os recalcula a partir de `event.target` e do getBoundingClientRect —
+        // uma volta ao DOM desnecessária, e que falha se o alvo não estiver lá.
+        const alvo = chart.getElementsAtEventForMode(
+          ev as unknown as Event, 'index', { intersect: false }, false)
+        if (!alvo.length) return
+        const mes = ms[alvo[0].index]?.mes
+        if (!mes) return
+        const e = ev.native as MouseEvent
+        mesesVisiveis.value = [...alternarNumero(
+          mesesVisiveisSet.value, mes, e.ctrlKey || e.metaKey)].sort((a, b) => a - b)
+        // Conjunto vazio significaria "nenhum mês" e esvaziaria os cards; aqui o
+        // gesto de desmarcar o único mês quer dizer "voltar ao ano inteiro".
+        if (!mesesVisiveis.value.length) todosOsMeses()
+      },
       plugins: {
         legend: { display: false },
         tooltip: {
@@ -767,13 +836,52 @@ function buildSparklines() {
 }
 
 /**
+ * Cards recomputados pelo recorte de meses.
+ *
+ * Os valores prontos em `dados.cards` continuam existindo e valem o ano inteiro;
+ * com um recorte ativo eles deixariam de corresponder ao que os gráficos abaixo
+ * mostram. A aritmética está em utils/visaogeral.ts, testada — número errado num
+ * card continua parecendo um número.
+ */
+const cardsRecorte = computed(() =>
+  cardsDoRecorte(dados.value?.grafico_mensal ?? [], mesesVisiveisSet.value))
+
+/** Saldo do último mês marcado. Ver saldoDoRecorte: saldo é instante, não soma. */
+const saldoRecorte = computed(() =>
+  saldoDoRecorte(dados.value?.saldos_mensais ?? [], mesesVisiveisSet.value))
+
+const resultadoRecorte = computed(() => cardResultado(cardsRecorte.value, saldoRecorte.value))
+
+/** Há recorte quando nem todos os doze meses estão marcados. */
+const haRecorteMeses = computed(() => mesesVisiveis.value.length !== 12)
+
+/** Descreve o recorte em uma linha, para os subtítulos dos gráficos. */
+const rotuloRecorteGeral = computed(() => {
+  const ms = mesesVisiveis.value
+  if (ms.length === 12) return 'Ano inteiro'
+  if (ms.length === 0)  return 'Nenhum mês'
+  if (ms.length === 1)  return mesesDoAno[ms[0] - 1].n
+  return `${ms.length} meses`
+})
+
+/**
+ * Rodapé do card de saldo. Diz a QUE DATA o saldo se refere — sem isso o número
+ * muda ao trocar de mês sem nada na tela explicando por quê.
+ */
+const rotuloSaldo = computed(() => {
+  const ms = mesesVisiveis.value
+  if (!ms.length) return 'sem período'
+  const ultimo = ms[ms.length - 1]
+  return `saldo ao fim de ${mesesDoAno[ultimo - 1].n.toLowerCase()}`
+})
+
+/**
  * Margem sobre a receita. Receita zero devolve 0 em vez de dividir: o período
  * pode não ter faturamento e uma divisão por zero pintaria "NaN%" no card.
  */
 const margemPct = computed(() => {
-  const r = dados.value?.cards.receita_total ?? 0
-  if (r <= 0) return 0
-  return (dados.value!.cards.resultado / r) * 100
+  const m = margemDoRecorte(resultadoRecorte.value, cardsRecorte.value.receita)
+  return m === null ? 0 : m * 100
 })
 
 // A barra é limitada a 0–100%: resultado acima da receita (por conta do saldo
@@ -781,7 +889,7 @@ const margemPct = computed(() => {
 const margemBarra = computed(() => `${Math.max(0, Math.min(100, margemPct.value))}%`)
 
 const margemTexto = computed(() => {
-  const r = dados.value?.cards.receita_total ?? 0
+  const r = cardsRecorte.value.receita
   if (r <= 0) return 'Sem receita no período'
   return `Margem de ${margemPct.value.toFixed(1).replace('.', ',')}% sobre a receita`
 })
@@ -796,33 +904,47 @@ const contasNoFluxo = computed(() => {
   return `${n} ${n === 1 ? 'conta' : 'contas'}`
 })
 
+/**
+ * Cascata do resultado: do saldo em contas ao saldo projetado.
+ *
+ * Substituiu barras ancoradas no zero mais uma linha de acumulado. Ali a relação
+ * entre um mês e o seguinte ficava por conta do leitor; aqui cada mês parte de
+ * onde o anterior parou, e a escada É o acumulado — por isso a linha saiu, em vez
+ * de ficar sobreposta dizendo a mesma coisa.
+ *
+ * Barra flutuante no Chart.js é `data: [[base, topo]]`. Não precisa de plugin.
+ *
+ * A aritmética dos degraus está em utils/cascata.ts, testada: um degrau fora do
+ * lugar ainda parece um gráfico correto, e não dá para conferir no canvas.
+ */
 function buildChartAcum() {
   if (!canvasAcum.value || !dados.value) return
   chartAcum?.destroy()
-  const c  = chartColors()
-  const ac = dados.value.grafico_resultado_acumulado
+  const c = chartColors()
+
+  const passos = montarCascata(
+    dados.value.cards.saldo_inicial,
+    dados.value.grafico_resultado_acumulado,
+    mesesVisiveisSet.value,
+  )
+
+  // Abertura e total em --accent, a cor distinta que marca posição (e não
+  // variação) — é o papel que a barra Total tem num waterfall.
+  const corDoPasso = (t: string) =>
+    t === 'aumento' ? c.receita : t === 'reducao' ? c.despesa : c.acento
 
   chartAcum = new Chart(canvasAcum.value, {
     type: 'bar',
     data: {
-      labels: ac.map(m => m.mes_nome),
-      datasets: [
-        {
-          label: 'Resultado mês', type: 'bar',
-          data: ac.map(m => m.resultado_mes),
-          backgroundColor: ac.map(m => comAlfa(m.resultado_mes >= 0 ? c.receita : c.despesa, 0.7)),
-          borderColor:     ac.map(m => m.resultado_mes >= 0 ? c.receita : c.despesa),
-          borderWidth: 1.5, borderRadius: 4, order: 2,
-        },
-        {
-          label: 'Acumulado', type: 'line',
-          data: ac.map(m => m.acumulado),
-          borderColor: c.linha, borderWidth: 2.5,
-          backgroundColor: comAlfa(c.linha, 0.12), fill: true, tension: 0.4,
-          pointRadius: 4, pointBackgroundColor: c.linha,
-          pointBorderColor: c.bg, pointBorderWidth: 2, order: 1,
-        },
-      ],
+      labels: passos.map(p => p.rotulo),
+      datasets: [{
+        label: 'Cascata',
+        data: passos.map(p => [p.de, p.ate] as [number, number]),
+        backgroundColor: passos.map(p => comAlfa(corDoPasso(p.tipo), ALFA_BARRA)),
+        borderColor:     passos.map(p => corDoPasso(p.tipo)),
+        borderWidth: 1.5, borderRadius: 4,
+        ...PROPORCAO_UNICA,
+      }],
     },
     options: {
       responsive: true, maintainAspectRatio: false,
@@ -831,18 +953,31 @@ function buildChartAcum() {
         tooltip: {
           backgroundColor: c.tooltip, borderColor: c.tooltipBorder, borderWidth: 1,
           titleColor: c.tick, bodyColor: c.tooltipText, padding: 12,
-          callbacks: { label: ctx => ` ${ctx.dataset.label}: ${fmtK(ctx.parsed.y)}` },
+          callbacks: {
+            // O tooltip mostra o VALOR do passo, não o par base/topo que o
+            // Chart.js traria por padrão — o par não significa nada para quem lê.
+            label: ctx => {
+              const p = passos[ctx.dataIndex]
+              return p.tipo === 'abertura' || p.tipo === 'total'
+                ? ` ${p.rotulo}: ${fmtK(p.ate)}`
+                : ` ${p.rotulo}: ${fmtK(p.valor)}  (acumulado ${fmtK(p.ate)})`
+            },
+          },
         },
         datalabels: {
-          display: (ctx) => (ctx.parsed?.y ?? 0) !== 0,
+          // Degrau de altura zero é informação (o mês não mexeu no saldo), mas
+          // um rótulo "R$ 0" flutuando ali só sujaria.
+          display: ctx => passos[ctx.dataIndex].tipo !== 'aumento'
+            || passos[ctx.dataIndex].valor !== 0,
           font: { family: c.fonte, size: 9, weight: 'bold' },
-          formatter: (v: number) => fmtK(v),
-          anchor: 'end',
-          align:  (ctx) => ctx.dataset.label === 'Acumulado' ? 'top' : ((ctx.parsed?.y ?? 0) >= 0 ? 'top' : 'bottom'),
-          color: (ctx) => {
-            if (ctx.dataset.label === 'Acumulado') return c.linha
-            return (ctx.parsed?.y ?? 0) >= 0 ? c.receita : c.despesa
+          formatter: (_v, ctx) => {
+            const p = passos[ctx.dataIndex]
+            return fmtK(p.tipo === 'abertura' || p.tipo === 'total' ? p.ate : p.valor)
           },
+          anchor: 'end',
+          // Redução cresce para baixo: o rótulo acompanha, senão cai em cima da barra.
+          align: ctx => passos[ctx.dataIndex].tipo === 'reducao' ? 'bottom' : 'top',
+          color: ctx => corDoPasso(passos[ctx.dataIndex].tipo),
           offset: 2,
         },
       },
@@ -878,6 +1013,24 @@ watch(dados, () => {
     buildSparklines()
   }, 50)
 }, { flush: 'post' })
+
+/*
+ * Reconstrói ao mudar o recorte de meses.
+ *
+ * Os cards são computeds e se atualizam sozinhos; os gráficos, não — vivem num
+ * canvas e só mudam quando alguém os reconstrói. Sem este watcher, marcar um mês
+ * atualizava os quatro cards e deixava a cascata e o realce das barras mostrando
+ * o recorte anterior — as duas metades da tela discordando, sem erro nenhum.
+ *
+ * Só faz sentido na Visão Geral: na aba Resultado o recorte vai por prop ao
+ * componente do pivô, que cuida da própria renderização. Não há sparkline aqui
+ * de propósito — ela desenha a série do ano inteiro, que é o pano de fundo
+ * contra o qual o recorte é lido.
+ */
+watch(mesesVisiveis, () => {
+  if (aba.value !== 'geral' || !dados.value) return
+  nextTick(() => { buildChartRecDesp(); buildChartAcum() })
+})
 
 // Reconstrói ao trocar tema.
 //
@@ -1298,12 +1451,14 @@ onBeforeUnmount(() => {
 .tag--ok { background: var(--success-weak); color: var(--success); }
 
 /* ── Gráficos ──────────────────────────────────────────────────────────── */
+/* Uma coluna: cada gráfico ocupa a largura inteira. Lado a lado, as doze barras
+   de Receita vs Despesa ficavam estreitas demais para serem alvo de clique, e a
+   cascata não tinha espaço para os degraus mais o Total. */
 .charts-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 18px;
 }
-@media (max-width: 1100px) { .charts-row { grid-template-columns: 1fr; } }
 
 .chart-card {
   background: var(--surface); border: 1px solid var(--border);
@@ -1322,5 +1477,17 @@ onBeforeUnmount(() => {
 }
 .leg-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 3px; }
 
-.chart-wrap { position: relative; height: 300px; }
+.chart-wrap { position: relative; height: 320px; }
+/* O gráfico de Receita vs Despesa recorta a tela ao clique — o cursor precisa
+   dizer isso antes de o usuário descobrir por acidente. */
+.chart-card--clicavel .chart-wrap { cursor: pointer; }
+
+.chart-limpar {
+  background: var(--primary-weak); color: var(--primary);
+  border: 1px solid var(--primary); border-radius: 20px;
+  padding: 2px 10px; margin-right: var(--sp-3);
+  font-family: var(--font-display); font-size: var(--fs-xs); font-weight: 600;
+  cursor: pointer; transition: var(--transition); white-space: nowrap;
+}
+.chart-limpar:hover { background: var(--primary); color: var(--text-oncolor); }
 </style>

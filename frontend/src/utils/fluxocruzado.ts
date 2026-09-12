@@ -57,25 +57,28 @@ export function aplicarSelecao(
 }
 
 /**
- * Clique num dia do calendário.
+ * Clique num período numerado: um dia no calendário do Fluxo de Caixa, um mês na
+ * barra do gráfico da Visão Geral. Chamava-se `alternarDia` enquanto só existia
+ * o calendário; o nome genérico veio quando o segundo caso apareceu, para não
+ * ter duas cópias da mesma regra divergindo.
  *
- * Sem Ctrl o clique SUBSTITUI a seleção, e reclicar o único dia marcado limpa —
- * é o comportamento de toggle que a tela já tinha, e mantê-lo evita que quem só
- * navega dia a dia precise aprender a nova mecânica.
+ * Sem Ctrl o clique SUBSTITUI a seleção, e reclicar o único marcado limpa — é o
+ * comportamento de toggle que o calendário já tinha, e mantê-lo evita que quem
+ * navega item a item precise aprender uma mecânica nova.
  *
- * Com Ctrl (ou ⌘) adiciona e remove, permitindo comparar dois vencimentos
- * distantes sem passar por todos os dias entre eles.
+ * Com Ctrl (ou ⌘) adiciona e remove, permitindo comparar dois períodos distantes
+ * sem passar por todos os que estão entre eles.
  *
  * Devolve um Set novo: mutar o recebido não dispararia a reatividade do Vue.
  */
-export function alternarDia(atual: Set<number>, dia: number, comCtrl: boolean): Set<number> {
+export function alternarNumero(atual: Set<number>, n: number, comCtrl: boolean): Set<number> {
   if (comCtrl) {
     const proximo = new Set(atual)
-    proximo.has(dia) ? proximo.delete(dia) : proximo.add(dia)
+    proximo.has(n) ? proximo.delete(n) : proximo.add(n)
     return proximo
   }
-  const soEle = atual.size === 1 && atual.has(dia)
-  return soEle ? new Set() : new Set([dia])
+  const soEle = atual.size === 1 && atual.has(n)
+  return soEle ? new Set() : new Set([n])
 }
 
 /**

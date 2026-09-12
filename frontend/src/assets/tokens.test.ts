@@ -120,7 +120,13 @@ describe('tokens: erradicação de cor fixa', () => {
   // Teto que só desce. Serve de catraca: uma cor fixa nova quebra o teste, e
   // cada arquivo migrado permite baixar o número — sem exigir a limpeza toda
   // de uma vez.
-  const TETO_HEX  = 22
+  //
+  // Subiu uma vez, de 22 para 23, e fica o registro do porquê: o fallback de
+  // `--accent` em utils/tema.ts, acrescentado junto com a cascata. Aquele
+  // arquivo é o único lugar sancionado para cor fixa — os fallbacks existem
+  // justamente para o caso de o CSS não ter carregado, e sem eles o gráfico sai
+  // preto. Subir por causa de um componente, não.
+  const TETO_HEX  = 23
   const TETO_RGBA = 12
 
   const conta = (re: RegExp) => fontes.reduce((soma, arq) => {
