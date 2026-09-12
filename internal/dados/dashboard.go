@@ -113,6 +113,15 @@ func QueryDashboard(ctx context.Context, pool *pgxpool.Pool, p DashboardParams) 
 		return nil, fmt.Errorf("dados.QueryDashboard saldo_cc: %w", err)
 	}
 
+	realizadoMes, err := queryRealizadoPorMes(ctx, pool, safe, view, p)
+	if err != nil {
+		if isViewNaoPopulada(err) {
+			return nil, ErrViewNaoPopulada
+		}
+		return nil, fmt.Errorf("dados.QueryDashboard realizado_mes: %w", err)
+	}
+	saldosMensais := acumularSaldos(saldo, realizadoMes)
+
 	filtros, err := queryFiltrosDisponiveis(ctx, pool, safe, view, p)
 	if err != nil {
 		if isViewNaoPopulada(err) {
@@ -143,13 +152,18 @@ func QueryDashboard(ctx context.Context, pool *pgxpool.Pool, p DashboardParams) 
 
 	return &DashboardResponse{
 		Cards: CardMetrics{
-			ReceitaTotal:         receitaTotal,
-			DespesaTotal:         despesaTotal,
-			Resultado:            receitaTotal - despesaTotal + saldo,
-			SaldoContasCorrentes: saldo,
+			ReceitaTotal: receitaTotal,
+			DespesaTotal: despesaTotal,
+			// A fórmula soma posição de caixa a fluxo do período e infla a margem
+			// exibida no card — sinalizado ao usuário, aguardando decisão dele.
+			// Mantida como estava para não mudar um número em silêncio.
+			Resultado:            receitaTotal - despesaTotal + saldosMensais[11].Saldo,
+			SaldoContasCorrentes: saldosMensais[11].Saldo,
+			SaldoInicial:         saldo,
 		},
 		GraficoMensal:             mensal,
 		GraficoResultadoAcumulado: acumulado,
+		SaldosMensais:             saldosMensais,
 		FiltrosDisponiveis:        filtros,
 	}, nil
 }
@@ -280,6 +294,74 @@ func querySaldoContasCorrentes(ctx context.Context, pool *pgxpool.Pool, safe str
 	var saldo float64
 	err := pool.QueryRow(ctx, sql, args...).Scan(&saldo)
 	return saldo, err
+}
+
+/*
+queryRealizadoPorMes devolve o resultado REALIZADO de cada mês (índice 0 = janeiro).
+
+Separada de queryGraficoMensal, que soma realizado e previsto juntos: aquele
+número responde "quanto entrou e saiu no mês", este responde "quanto disso já
+tocou a conta". Saldo em caixa só pode ser construído com o segundo — incluir as
+provisões do extrato faria o saldo de dezembro aparecer como dinheiro disponível
+hoje.
+
+Usa os mesmos filtros do resto do dashboard (buildFiltroAno), senão o saldo
+divergiria dos cards ao lado sob o mesmo recorte.
+*/
+func queryRealizadoPorMes(ctx context.Context, pool *pgxpool.Pool, safe, view string, p DashboardParams) ([12]float64, error) {
+	var out [12]float64
+
+	where, args := buildFiltroAno(p)
+	sql := fmt.Sprintf(`
+		SELECT
+			mes,
+			COALESCE(SUM(CASE WHEN ajuste_receita_despesa = 1 THEN valor_final ELSE -valor_final END), 0) AS realizado
+		FROM %s.%s
+		WHERE %s
+		  AND mov_ou_extrato = 'mov'
+		GROUP BY mes
+	`, safe, view, where)
+
+	rows, err := pool.Query(ctx, sql, args...)
+	if err != nil {
+		return out, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var mes int
+		var valor float64
+		if err := rows.Scan(&mes, &valor); err != nil {
+			return out, err
+		}
+		if mes >= 1 && mes <= 12 {
+			out[mes-1] = valor
+		}
+	}
+	return out, rows.Err()
+}
+
+/*
+acumularSaldos transforma o realizado de cada mês no saldo ao FIM de cada mês.
+
+Função separada e sem banco de propósito: é a única aritmética desta parte, e é
+onde um erro de acumulação passaria despercebido — o número continuaria
+plausível na tela.
+
+ATENÇÃO à âncora: saldoInicial é a soma de contas_correntes.saldo_inicial, que é
+campo de cadastro do Omie, sem data. A conta só fecha se esse valor representar o
+saldo no começo do período coberto pela view. Se a conta é antiga e o
+saldo_inicial for de anos atrás, o resultado será o saldo daquela data mais os
+movimentos deste ano — plausível, e errado.
+*/
+func acumularSaldos(saldoInicial float64, realizadoPorMes [12]float64) []SaldoMes {
+	out := make([]SaldoMes, 12)
+	acc := saldoInicial
+	for i := 0; i < 12; i++ {
+		acc += realizadoPorMes[i]
+		out[i] = SaldoMes{Mes: i + 1, MesNome: nomeMes[i+1], Saldo: acc}
+	}
+	return out
 }
 
 // queryFiltrosDisponiveis monta as opções de cada filtro em CASCATA: cada lista é

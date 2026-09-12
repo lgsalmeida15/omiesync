@@ -144,3 +144,67 @@ func TestBuildFiltro_ListasVaziasNaoEntram(t *testing.T) {
 		t.Errorf("esperado só o ano, veio %d args", len(args))
 	}
 }
+
+// ── acumularSaldos ──────────────────────────────────────────────────────────
+// É a única aritmética do saldo mensal, e um erro aqui produziria um número
+// plausível na tela — o tipo de defeito que não se acha olhando.
+
+func TestAcumularSaldos_SemMovimentoRepeteOSaldoInicial(t *testing.T) {
+	s := acumularSaldos(10000, [12]float64{})
+
+	if len(s) != 12 {
+		t.Fatalf("esperados 12 meses, vieram %d", len(s))
+	}
+	for _, m := range s {
+		if m.Saldo != 10000 {
+			t.Errorf("mês %d: sem movimento o saldo deveria seguir 10000, veio %v", m.Mes, m.Saldo)
+		}
+	}
+}
+
+func TestAcumularSaldos_AcumulaMesAMes(t *testing.T) {
+	// jan +5000, fev −2000, mar +1000, resto zero.
+	s := acumularSaldos(10000, [12]float64{5000, -2000, 1000})
+
+	esperado := []float64{15000, 13000, 14000, 14000}
+	for i, e := range esperado {
+		if s[i].Saldo != e {
+			t.Errorf("mês %d: esperado %v, veio %v", i+1, e, s[i].Saldo)
+		}
+	}
+}
+
+// O saldo do último mês é o saldo inicial mais TODO o realizado do ano. Se
+// deixasse de ser, o card com "ano inteiro" marcado divergiria da soma.
+func TestAcumularSaldos_DezembroFechaComOAnoInteiro(t *testing.T) {
+	mov := [12]float64{100, -50, 25, 0, 0, 0, 0, 0, 0, 0, 0, -75}
+	s := acumularSaldos(1000, mov)
+
+	var soma float64
+	for _, v := range mov {
+		soma += v
+	}
+	if s[11].Saldo != 1000+soma {
+		t.Errorf("dezembro deveria ser 1000%+v = %v, veio %v", soma, 1000+soma, s[11].Saldo)
+	}
+}
+
+// Saldo inicial negativo é conta no vermelho, não erro — não pode ser zerado.
+func TestAcumularSaldos_SaldoInicialNegativo(t *testing.T) {
+	s := acumularSaldos(-500, [12]float64{200})
+
+	if s[0].Saldo != -300 {
+		t.Errorf("janeiro: esperado -300, veio %v", s[0].Saldo)
+	}
+}
+
+func TestAcumularSaldos_NomeDoMesAcompanha(t *testing.T) {
+	s := acumularSaldos(0, [12]float64{})
+
+	if s[0].MesNome != "Jan" || s[11].MesNome != "Dez" {
+		t.Errorf("nomes fora de ordem: %q..%q", s[0].MesNome, s[11].MesNome)
+	}
+	if s[0].Mes != 1 || s[11].Mes != 12 {
+		t.Errorf("numeração fora de ordem: %d..%d", s[0].Mes, s[11].Mes)
+	}
+}
