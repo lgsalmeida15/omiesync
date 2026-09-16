@@ -101,6 +101,44 @@ func (a *Anonimizador) Restaurar(texto string) string {
 }
 
 /*
+Ocultar é o caminho de volta do Restaurar: troca nomes reais por rótulos num
+texto que já foi restaurado uma vez.
+
+Existe por causa do histórico. A conversa é gravada com os nomes reais — é o que
+a tela precisa mostrar — e esse mesmo texto é reenviado ao provedor como
+contexto na pergunta seguinte. Sem isto, a pseudonimização protegeria apenas a
+primeira pergunta de cada conversa.
+
+Só troca o que já está no mapa, então depende de Rotular ter sido chamado antes
+(ver Executor.PrepararRotulos). Um nome desconhecido fica como está — e é por
+isso que a pré-população não é um detalhe de desempenho.
+
+A ordem é do nome MAIS LONGO para o mais curto, pelo mesmo motivo do Restaurar:
+"Alpha" casaria dentro de "Alpha Comercio" e deixaria "Cliente B Comercio".
+*/
+func (a *Anonimizador) Ocultar(texto string) string {
+	if texto == "" || len(a.paraRotulo) == 0 {
+		return texto
+	}
+
+	nomes := make([]string, 0, len(a.paraRotulo))
+	for n := range a.paraRotulo {
+		nomes = append(nomes, n)
+	}
+	sort.Slice(nomes, func(i, j int) bool {
+		if len(nomes[i]) != len(nomes[j]) {
+			return len(nomes[i]) > len(nomes[j])
+		}
+		return nomes[i] < nomes[j]
+	})
+
+	for _, n := range nomes {
+		texto = strings.ReplaceAll(texto, n, a.paraRotulo[n])
+	}
+	return texto
+}
+
+/*
 sufixo numera em letras: A..Z, depois AA, AB…
 
 Letras e não números porque "Cliente 1" convive mal com valores no mesmo texto —

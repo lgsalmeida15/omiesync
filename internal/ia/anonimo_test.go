@@ -174,3 +174,84 @@ func TestAnonimizador_NenhumNomeRealVazaNaSaida(t *testing.T) {
 		}
 	}
 }
+
+/*
+O furo que este método fecha.
+
+A resposta é gravada no histórico com os nomes REAIS — é o que a tela precisa
+mostrar. Esse mesmo texto volta ao provedor como contexto na pergunta seguinte.
+Sem Ocultar, a pseudonimização protegia só a primeira pergunta de cada conversa,
+e da segunda em diante o nome do cliente ia em claro para fora.
+*/
+func TestOcultar_HistoricoNaoVazaNomeReal(t *testing.T) {
+	a := NovoAnonimizador()
+	rotulo := a.Rotular("Cliente", "Constrimax LTDA")
+
+	// Simula uma resposta já gravada, com o nome restaurado.
+	gravado := "O maior faturamento veio de **Constrimax LTDA**, com R$ 1,2 mi."
+
+	saida := a.Ocultar(gravado)
+
+	if strings.Contains(saida, "Constrimax") {
+		t.Fatalf("o nome real sobreviveu e iria para o provedor: %q", saida)
+	}
+	if !strings.Contains(saida, rotulo) {
+		t.Fatalf("não colocou o rótulo no lugar: %q", saida)
+	}
+	// O resto do texto tem de continuar inteiro, senão o contexto se perde.
+	if !strings.Contains(saida, "R$ 1,2 mi") {
+		t.Fatalf("estragou o texto em volta: %q", saida)
+	}
+}
+
+// Ida e volta: ocultar o que foi restaurado devolve exatamente o rótulo de
+// origem. É o que mantém um vocabulário só na conversa inteira.
+func TestOcultar_EhOInversoDeRestaurar(t *testing.T) {
+	a := NovoAnonimizador()
+	a.Rotular("Cliente", "Alpha Comercio")
+
+	original := "Cliente A cresceu."
+	restaurado := a.Restaurar(original)
+	if restaurado == original {
+		t.Fatal("Restaurar não fez nada — teste inválido")
+	}
+
+	if volta := a.Ocultar(restaurado); volta != original {
+		t.Fatalf("Ocultar(Restaurar(x)) = %q, esperava %q", volta, original)
+	}
+}
+
+/*
+Nome curto contido em nome longo.
+
+"Alpha" está dentro de "Alpha Comercio". Sem ordenar do mais longo para o mais
+curto, "Alpha Comercio" viraria "Cliente B Comercio" — um nome que não existe,
+numa conversa sobre dinheiro. É o mesmo cuidado que Restaurar já tomava, na
+outra direção.
+*/
+func TestOcultar_NomeCurtoDentroDeNomeLongo(t *testing.T) {
+	a := NovoAnonimizador()
+	rotuloLongo := a.Rotular("Cliente", "Alpha Comercio")
+	a.Rotular("Cliente", "Alpha")
+
+	saida := a.Ocultar("Faturamento de Alpha Comercio no mês.")
+
+	if !strings.Contains(saida, rotuloLongo) {
+		t.Fatalf("não casou o nome longo: %q", saida)
+	}
+	if strings.Contains(saida, "Comercio") {
+		t.Fatalf("partiu o nome ao meio: %q", saida)
+	}
+}
+
+// Nome que nunca foi rotulado fica como está: é o que torna a pré-população
+// (Executor.PrepararRotulos) parte da proteção, e não um detalhe de desempenho.
+func TestOcultar_NomeDesconhecidoNaoMuda(t *testing.T) {
+	a := NovoAnonimizador()
+	a.Rotular("Cliente", "Alpha Comercio")
+
+	texto := "Beta Servicos apareceu."
+	if saida := a.Ocultar(texto); saida != texto {
+		t.Fatalf("mexeu num nome que não conhece: %q", saida)
+	}
+}

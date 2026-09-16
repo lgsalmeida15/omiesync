@@ -65,6 +65,35 @@
           </div>
         </div>
 
+        <div class="field ic-larga ic-prompt">
+          <label for="prompt">INSTRUÇÕES DO ASSISTENTE</label>
+          <textarea
+            id="prompt"
+            v-model="form.system_prompt"
+            class="input-el ic-textarea"
+            rows="12"
+            spellcheck="false"
+            placeholder="Vazio usa as instruções padrão do sistema."
+          />
+          <p class="ic-dica">
+            <template v-if="usandoPadrao">Usando as instruções padrão do sistema.</template>
+            <template v-else>Instruções personalizadas — substituem o padrão por inteiro.</template>
+            <button class="ic-link" type="button" @click="restaurarPadrao">
+              carregar o texto padrão
+            </button>
+          </p>
+          <!--
+            O aviso é específico e não decorativo: a pseudonimização e o limite de
+            escopo são estruturais e não dependem deste texto. O que depende dele
+            é o modelo não inventar números — e é isso que precisa sobreviver a
+            qualquer reescrita.
+          -->
+          <p v-if="!usandoPadrao && !form.system_prompt.includes('NUNCA invente')" class="ic-alerta">
+            As instruções não contêm a regra que proíbe o assistente de inventar
+            valores. Sem ela, ele tende a preencher lacunas com números plausíveis.
+          </p>
+        </div>
+
         <label class="ic-switch">
           <input type="checkbox" v-model="form.ativo" />
           <span>Assistente ativo na plataforma</span>
@@ -145,7 +174,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { iaConfigApi, type ConfigIA, type GrupoIA } from '@/api/ia'
 
 const carregando = ref(true)
@@ -169,6 +198,7 @@ const form = reactive({
   max_tokens: 2048,
   teto_tokens_dia: 200000,
   ativo: false,
+  system_prompt: '',
 })
 
 function aplicar(c: ConfigIA) {
@@ -179,7 +209,24 @@ function aplicar(c: ConfigIA) {
   form.max_tokens = c.max_tokens
   form.teto_tokens_dia = c.teto_tokens_dia
   form.ativo = c.ativo
+  form.system_prompt = c.system_prompt ?? ''
 }
+
+/*
+ * Restaurar o padrão preenche o campo com o texto versionado, em vez de só
+ * esvaziá-lo.
+ *
+ * Vazio também usaria o padrão — a regra é essa no servidor — mas deixaria o
+ * administrador olhando para uma caixa em branco sem saber o que passou a valer.
+ * Preenchido, ele vê o que recuperou e pode editar a partir dali. Ainda precisa
+ * salvar: restaurar sem confirmar descartaria o texto dele num clique.
+ */
+function restaurarPadrao() {
+  form.system_prompt = cfg.value?.system_prompt_padrao ?? ''
+  salvo.value = false
+}
+
+const usandoPadrao = computed(() => form.system_prompt.trim() === '')
 
 async function carregar() {
   carregando.value = true
@@ -283,6 +330,22 @@ label {
   transition: border-color var(--transition);
 }
 .input-el:focus { border-color: var(--primary); }
+
+.ic-prompt { margin-top: var(--sp-4); }
+
+/* O prompt é um texto longo que se lê linha a linha: monoespaçado ajuda a
+   perceber a indentação das listas, e o redimensionamento vertical deixa quem
+   edita escolher quanto quer ver de uma vez. */
+.ic-textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--fs-xs);
+  line-height: 1.55;
+  resize: vertical;
+  min-height: 180px;
+  white-space: pre;
+  overflow-wrap: normal;
+  overflow-x: auto;
+}
 
 .ic-dica { font-size: var(--fs-xs); color: var(--text-dim); margin: 0; line-height: 1.5; }
 .ic-espaco { margin-bottom: 12px; }

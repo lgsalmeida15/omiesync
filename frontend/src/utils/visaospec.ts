@@ -42,17 +42,28 @@ export interface SerieSpec {
 
 export interface VisaoSpec {
   titulo: string
-  tipo: 'barra' | 'barra_horizontal' | 'linha' | 'rosca'
+  tipo: 'barra' | 'barra_horizontal' | 'linha' | 'rosca' | 'numero'
   rotulos: string[]
   series: SerieSpec[]
   formato: 'moeda' | 'numero'
 }
 
-const TIPOS: Record<VisaoSpec['tipo'], ChartType> = {
+/*
+ * `numero` fica FORA deste mapa de propósito: é um card de indicador, não um
+ * gráfico, e quem o desenha é ChatNumero.vue. Ter uma entrada aqui faria
+ * configDoGrafico devolver uma config de Chart.js para algo que não tem eixo,
+ * série nem canvas.
+ */
+const TIPOS: Record<Exclude<VisaoSpec['tipo'], 'numero'>, ChartType> = {
   barra: 'bar',
   barra_horizontal: 'bar',
   linha: 'line',
   rosca: 'doughnut',
+}
+
+/** Tipos que viram Chart.js. O card de indicador não é um deles. */
+export function ehGrafico(s: VisaoSpec): boolean {
+  return s.tipo !== 'numero'
 }
 
 /**
@@ -67,7 +78,7 @@ export function specValida(s: unknown): s is VisaoSpec {
   if (!s || typeof s !== 'object') return false
   const v = s as Partial<VisaoSpec>
 
-  if (typeof v.tipo !== 'string' || !(v.tipo in TIPOS)) return false
+  if (typeof v.tipo !== 'string' || !(v.tipo === 'numero' || v.tipo in TIPOS)) return false
   if (!Array.isArray(v.rotulos) || v.rotulos.length === 0) return false
   if (!Array.isArray(v.series) || v.series.length === 0) return false
 
@@ -80,6 +91,26 @@ export function specValida(s: unknown): s is VisaoSpec {
   )
 }
 
+/*
+ * O que o Chart.js entrega ao tooltip muda conforme o tipo, e é aqui que mora um
+ * defeito que passou despercebido.
+ *
+ * Em barra e linha, `parsed` é um objeto {x, y}. Em doughnut é um NÚMERO — a
+ * fatia não tem duas coordenadas. Lendo `parsed.y` numa rosca o resultado era
+ * `undefined`, e o tooltip mostrava "R$ NaN" em cima de um valor financeiro. O
+ * tipo estava declarado à mão no callback, então o TypeScript não tinha como
+ * reclamar.
+ */
+type ItemTooltip = {
+  dataset: { label?: string }
+  parsed: number | { x: number; y: number }
+}
+
+function valorDoTooltip(item: ItemTooltip, horizontal: boolean): number {
+  if (typeof item.parsed === 'number') return item.parsed
+  return horizontal ? item.parsed.x : item.parsed.y
+}
+
 const fmtMoeda = new Intl.NumberFormat('pt-BR', {
   style: 'currency', currency: 'BRL', maximumFractionDigits: 0,
 })
@@ -88,6 +119,11 @@ const fmtNumero = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 })
 function formatar(v: number, formato: VisaoSpec['formato']): string {
   return formato === 'numero' ? fmtNumero.format(v) : fmtMoeda.format(v)
 }
+
+// Exportado para ChatNumero.vue formatar do mesmo jeito que os eixos e os
+// tooltips — um card que arredondasse diferente do gráfico ao lado seria pior
+// que não ter card.
+export { formatar as formatarValor }
 
 /**
  * Monta a configuração. Devolve `null` para spec inválida — desenhar um gráfico
@@ -102,6 +138,16 @@ export function configDoGrafico(entrada: unknown, raiz?: Element): ConfigVisao |
   // funções aninhadas (escalas(), abaixo), porque um parâmetro poderia ser
   // reatribuído no meio do caminho.
   const spec = entrada
+
+  /*
+   * Card de indicador não tem config de Chart.js — quem o desenha é
+   * ChatNumero.vue. Ver ehGrafico.
+   *
+   * O teste precisa vir DEPOIS do `const`: sobre o parâmetro, o estreitamento
+   * não sobrevive até o `TIPOS[spec.tipo]` lá embaixo, e 'numero' não é chave
+   * daquele mapa.
+   */
+  if (spec.tipo === 'numero') return null
 
   const c = coresGrafico(raiz)
   const horizontal = spec.tipo === 'barra_horizontal'
@@ -184,10 +230,9 @@ export function configDoGrafico(entrada: unknown, raiz?: Element): ConfigVisao |
           titleFont: { family: c.fonte },
           bodyFont: { family: c.fonte },
           callbacks: {
-            label: (item: { dataset: { label?: string }; parsed: { x: number; y: number } }) => {
-              const v = horizontal ? item.parsed.x : item.parsed.y
+            label: (item: ItemTooltip) => {
               const nome = item.dataset.label ? `${item.dataset.label}: ` : ''
-              return nome + formatar(v, spec.formato)
+              return nome + formatar(valorDoTooltip(item, horizontal), spec.formato)
             },
           },
         },

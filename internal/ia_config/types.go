@@ -19,6 +19,9 @@ type Config struct {
 	MaxTokens     int32  `json:"max_tokens"`
 	TetoTokensDia int32  `json:"teto_tokens_dia"`
 	Ativo         bool   `json:"ativo"`
+	// SystemPrompt vazio usa o texto versionado em internal/ia/prompt.go.
+	// Preenchido, substitui o padrão por inteiro.
+	SystemPrompt string `json:"system_prompt"`
 
 	UpdatedAt      time.Time `json:"updated_at"`
 	UpdatedByEmail string    `json:"updated_by_email,omitempty"`
@@ -45,6 +48,13 @@ type Response struct {
 	TetoTokensDia int32 `json:"teto_tokens_dia"`
 	Ativo         bool  `json:"ativo"`
 
+	// SystemPrompt é o texto em vigor (vazio = o padrão está em uso).
+	SystemPrompt string `json:"system_prompt"`
+	// SystemPromptPadrao acompanha a resposta para a tela poder oferecer
+	// "restaurar padrão" mostrando o que vai ser recuperado. Sem isto o
+	// administrador teria de confiar num botão que não mostra o que faz.
+	SystemPromptPadrao string `json:"system_prompt_padrao"`
+
 	UpdatedAt      time.Time `json:"updated_at"`
 	UpdatedByEmail string    `json:"updated_by_email,omitempty"`
 }
@@ -68,6 +78,7 @@ type UpdateRequest struct {
 	MaxTokens     int32  `json:"max_tokens"`
 	TetoTokensDia int32  `json:"teto_tokens_dia"`
 	Ativo         bool   `json:"ativo"`
+	SystemPrompt  string `json:"system_prompt"`
 }
 
 // GrupoIA é a linha da tela de liga/desliga: um grupo e o estado do recurso.
@@ -111,6 +122,7 @@ func toResponse(c *Config) Response {
 		MaxTokens:       c.MaxTokens,
 		TetoTokensDia:   c.TetoTokensDia,
 		Ativo:           c.Ativo,
+		SystemPrompt:    c.SystemPrompt,
 		UpdatedAt:       c.UpdatedAt,
 		UpdatedByEmail:  c.UpdatedByEmail,
 	}

@@ -148,12 +148,52 @@ func (s *service) Perguntar(ctx context.Context, grupoID, usuarioID string, req 
 	return resp, nil
 }
 
+/*
+fonteResultante escolhe qual consulta a tela mostra como procedência do número.
+
+Não é simplesmente a última: "opcoes_de_filtro" só lista o que existe e não
+produz valor nenhum: se o modelo a chamasse por último, a tela diria que o
+número veio dela. Prefere-se a última consulta que de fato trouxe números.
+
+Uma resposta que combine duas consultas substantivas ainda mostra só uma — o
+contrato de Fonte é um objeto, e alargá-lo mexeria também no que já está gravado
+no histórico. Fica registrado como limitação conhecida.
+*/
+func fonteResultante(fontes []Fonte) *Fonte {
+	if len(fontes) == 0 {
+		return nil
+	}
+	for i := len(fontes) - 1; i >= 0; i-- {
+		if fontes[i].Ferramenta != "opcoes_de_filtro" {
+			f := fontes[i]
+			return &f
+		}
+	}
+	f := fontes[len(fontes)-1]
+	return &f
+}
+
 func (s *service) conversar(ctx context.Context, cfg *ia_config.Config, conversaID, grupoID string, req PerguntaRequest) (*Resposta, error) {
 	anon := NovoAnonimizador()
 	exec := NovoExecutor(s.pool, grupoID, req.Contexto, anon)
 	cli := NovoClient(cfg.BaseURL, cfg.APIKey, cfg.Modelo)
 
-	msgs := []MsgChat{{Papel: "system", Texto: SystemPrompt(exec.ctxTela.Ano, exec.ctxTela.Mes)}}
+	/*
+	 * Os rótulos são preparados ANTES de montar as mensagens.
+	 *
+	 * O histórico é gravado com os nomes reais já restaurados — é o que a tela
+	 * precisa mostrar. Sem o mapa pronto aqui, esses nomes voltariam em claro
+	 * ao provedor a partir da segunda pergunta da conversa, e a pseudonimização
+	 * protegeria só a primeira.
+	 *
+	 * Falhar aqui não custa a resposta: sem a pré-população a conversa fica
+	 * pior, mas os resultados das ferramentas seguem pseudonimizados.
+	 */
+	if err := exec.PrepararRotulos(ctx); err != nil {
+		s.log.Warn().Err(err).Msg("ia: não foi possível pré-carregar os rótulos")
+	}
+
+	msgs := []MsgChat{{Papel: "system", Texto: SystemPrompt(cfg.SystemPrompt, exec.ctxTela.Ano, exec.ctxTela.Mes)}}
 
 	// Histórico como contexto: é o que faz "e no mês passado?" funcionar.
 	anteriores, err := s.repo.Historico(ctx, conversaID, maxHistorico)
@@ -163,15 +203,29 @@ func (s *service) conversar(ctx context.Context, cfg *ia_config.Config, conversa
 			if m.Papel == "assistente" {
 				papel = "assistant"
 			}
-			msgs = append(msgs, MsgChat{Papel: papel, Texto: m.Conteudo})
+			// Pseudonimiza de novo na saída: o que está gravado tem os nomes
+			// reais, e é daqui que eles iriam para fora.
+			msgs = append(msgs, MsgChat{Papel: papel, Texto: anon.Ocultar(m.Conteudo)})
 		}
 	}
 
 	var tokens int32
-	var fonte *Fonte
+	var fontes []Fonte
 
 	for rodada := 0; rodada < maxRodadas; rodada++ {
-		ret, err := cli.Completar(ctx, msgs, Catalogo(), cfg.MaxTokens)
+		/*
+		 * Na última rodada o modelo é obrigado a responder em texto.
+		 *
+		 * Antes ele podia pedir ferramenta aqui: as consultas rodavam, custavam
+		 * banco e tempo, e o laço terminava sem nunca devolver os resultados a
+		 * ele. Eram 4 rodadas contratadas e 3 úteis.
+		 */
+		escolha := ""
+		if rodada == maxRodadas-1 {
+			escolha = ToolChoiceNenhuma
+		}
+
+		ret, err := cli.Completar(ctx, msgs, Catalogo(), cfg.MaxTokens, escolha)
 		if err != nil {
 			return nil, fmt.Errorf("ia.service.conversar: %w", err)
 		}
@@ -179,7 +233,25 @@ func (s *service) conversar(ctx context.Context, cfg *ia_config.Config, conversa
 
 		// Sem pedido de ferramenta, é a resposta final.
 		if len(ret.Mensagem.ToolCalls) == 0 {
-			texto, spec := ExtrairGrafico(anon.Restaurar(ret.Mensagem.Texto))
+			bruto := ret.Mensagem.Texto
+			if ret.Truncada {
+				/*
+				 * O provedor cortou a resposta no limite de tokens. Isso chegava
+				 * ao usuário como resposta normal, cortada no meio da frase — e,
+				 * quando o corte caía dentro do bloco de gráfico, o JSON ia
+				 * inteiro para a tela.
+				 */
+				s.log.Warn().Int32("max_tokens", cfg.MaxTokens).Msg("ia: resposta truncada pelo limite de tokens")
+				bruto = LimparBlocoAberto(bruto) + "\n\n_A resposta foi cortada por atingir o limite de tamanho. Peça um recorte menor para ver o restante._"
+			}
+
+			texto, spec, descarte := ExtrairGrafico(anon.Restaurar(bruto))
+			if descarte != "" {
+				// Antes isso sumia sem rastro: o modelo tentava desenhar, a spec
+				// era recusada, e ninguém — nem o usuário, nem o log — ficava
+				// sabendo. É a informação que diz se o prompt precisa de ajuste.
+				s.log.Warn().Str("motivo", descarte).Msg("ia: especificação de gráfico descartada")
+			}
 			tipo := RespostaTexto
 			if spec != nil {
 				tipo = RespostaGrafico
@@ -187,7 +259,7 @@ func (s *service) conversar(ctx context.Context, cfg *ia_config.Config, conversa
 			if texto == "" && spec == nil {
 				return nil, apperror.Unprocessable("o assistente não conseguiu formular uma resposta")
 			}
-			return &Resposta{Tipo: tipo, Texto: texto, Grafico: spec, Fonte: fonte, Tokens: tokens}, nil
+			return &Resposta{Tipo: tipo, Texto: texto, Grafico: spec, Fonte: fonteResultante(fontes), Tokens: tokens}, nil
 		}
 
 		msgs = append(msgs, ret.Mensagem)
@@ -211,9 +283,10 @@ func (s *service) conversar(ctx context.Context, cfg *ia_config.Config, conversa
 					resultado = `{"erro":"não foi possível consultar esses dados agora"}`
 				}
 			} else if f != nil {
-				// A última consulta bem-sucedida é a que a tela mostra como
-				// fonte do número.
-				fonte = f
+				// Acumula em vez de substituir: numa comparação entre anos são
+				// várias consultas, e mostrar só a última daria ao usuário uma
+				// procedência incompleta do número que ele está lendo.
+				fontes = append(fontes, *f)
 			}
 
 			msgs = append(msgs, MsgChat{Papel: "tool", ToolCallID: tc.ID, Texto: resultado})

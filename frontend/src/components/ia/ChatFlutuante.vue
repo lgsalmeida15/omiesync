@@ -55,7 +55,12 @@
           </div>
 
           <template v-else>
-            <ChatMensagem v-for="(m, i) in ia.mensagens" :key="m.id ?? i" :msg="m" />
+            <ChatMensagem
+              v-for="(m, i) in ia.mensagens"
+              :key="m.id ?? i"
+              :msg="m"
+              @repetir="repetir(i)"
+            />
           </template>
 
           <div v-if="ia.enviando" class="ia-pensando">
@@ -141,6 +146,24 @@ async function enviar(pergunta?: string) {
   texto.value = ''
   ajustarAltura()
   await ia.perguntar(p, contextoDaTela())
+}
+
+/*
+ * Repetir a pergunta que falhou.
+ *
+ * A bolha de erro fica logo abaixo da pergunta que a causou, então o texto a
+ * reenviar é o da mensagem anterior. Remove-se a bolha de erro antes de tentar
+ * de novo: mantê-la deixaria duas respostas para a mesma pergunta na tela, uma
+ * delas mentindo.
+ */
+async function repetir(indice: number) {
+  const anterior = ia.mensagens[indice - 1]
+  if (!anterior || anterior.papel !== 'usuario' || ia.enviando) return
+
+  const pergunta = anterior.conteudo
+  // A pergunta sai junto porque perguntar() a insere de novo.
+  ia.mensagens.splice(indice - 1, 2)
+  await ia.perguntar(pergunta, contextoDaTela())
 }
 
 async function limpar() {

@@ -55,7 +55,7 @@ func buildRouter(t *testing.T) http.Handler {
 		PermissoesHandler: permissoes.NewHandler(permissoesSvc, jwtSvc),
 		DadosHandler:      dados.NewHandler(nil, jwtSvc),
 		OmieConfigHandler: omie_config.NewHandler(omieConfigSvc, jwtSvc),
-		IAHandler:         ia.NewHandler(&nullIASvc{}, jwtSvc, nil, semLimite),
+		IAHandler:         ia.NewHandler(&nullIASvc{}, jwtSvc, nil, zerolog.Nop(), semLimite),
 		IAConfigHandler:   ia_config.NewHandler(&nullIAConfigSvc{}, jwtSvc),
 		Logger:            zerolog.Nop(),
 	})
@@ -115,7 +115,7 @@ func TestIntegration_AuditMiddlewareRunsOnAllRoutes(t *testing.T) {
 		PermissoesHandler: permissoes.NewHandler(permissoes.NewService(&nullPermissoesRepo{}), jwtSvc),
 		DadosHandler:      dados.NewHandler(nil, jwtSvc),
 		OmieConfigHandler: omie_config.NewHandler(omie_config.NewService(&nullOmieConfigRepo{}), jwtSvc),
-		IAHandler:         ia.NewHandler(&nullIASvc{}, jwtSvc, nil, semLimite),
+		IAHandler:         ia.NewHandler(&nullIASvc{}, jwtSvc, nil, zerolog.Nop(), semLimite),
 		IAConfigHandler:   ia_config.NewHandler(&nullIAConfigSvc{}, jwtSvc),
 		Logger:            zerolog.Nop(),
 	})
@@ -527,7 +527,7 @@ func TestIntegration_AuditoriaRegistraQuemFez(t *testing.T) {
 		PermissoesHandler: permissoes.NewHandler(permissoes.NewService(&nullPermissoesRepo{}), jwtSvc),
 		DadosHandler:      dados.NewHandler(nil, jwtSvc),
 		OmieConfigHandler: omie_config.NewHandler(omie_config.NewService(&nullOmieConfigRepo{}), jwtSvc),
-		IAHandler:         ia.NewHandler(&nullIASvc{}, jwtSvc, nil, semLimite),
+		IAHandler:         ia.NewHandler(&nullIASvc{}, jwtSvc, nil, zerolog.Nop(), semLimite),
 		IAConfigHandler:   ia_config.NewHandler(&nullIAConfigSvc{}, jwtSvc),
 		Logger:            zerolog.Nop(),
 	})
@@ -562,7 +562,7 @@ func TestIntegration_AuditoriaRegistraAutorDeAcessoNegado(t *testing.T) {
 		PermissoesHandler: permissoes.NewHandler(permissoes.NewService(&nullPermissoesRepo{}), jwtSvc),
 		DadosHandler:      dados.NewHandler(nil, jwtSvc),
 		OmieConfigHandler: omie_config.NewHandler(omie_config.NewService(&nullOmieConfigRepo{}), jwtSvc),
-		IAHandler:         ia.NewHandler(&nullIASvc{}, jwtSvc, nil, semLimite),
+		IAHandler:         ia.NewHandler(&nullIASvc{}, jwtSvc, nil, zerolog.Nop(), semLimite),
 		IAConfigHandler:   ia_config.NewHandler(&nullIAConfigSvc{}, jwtSvc),
 		Logger:            zerolog.Nop(),
 	})

@@ -97,11 +97,26 @@ function configurar() {
  * Entrada vazia devolve string vazia — nunca `undefined`, que o Vue renderiza
  * como a palavra "undefined" na tela.
  */
+/*
+ * Bloco de código que é, na verdade, uma especificação de gráfico.
+ *
+ * O servidor extrai e remove esses blocos (internal/ia/spec.go). Isto é a
+ * segunda linha: se um escapar — marcação que a regex de lá não previu, resposta
+ * cortada no meio — o usuário veria um bloco de JSON cru no meio da conversa,
+ * que foi exatamente a reclamação.
+ *
+ * Reconhece pela forma, não pela marcação: um objeto JSON com os campos da spec.
+ * Um trecho de código legítimo que alguém queira ver na tela não se parece com
+ * isso.
+ */
+const BLOCO_SPEC = /```[a-zA-Z]*\s*\{[\s\S]*?("tipo"|"rotulos"|"series")[\s\S]*?```/g
+
 export function renderizarMarkdown(texto: string): string {
   if (!texto) return ''
   configurar()
 
-  const bruto = marked.parse(texto, { async: false }) as string
+  const limpo = texto.replace(BLOCO_SPEC, '')
+  const bruto = marked.parse(limpo, { async: false }) as string
 
   return DOMPurify.sanitize(bruto, {
     ALLOWED_TAGS: TAGS_PERMITIDAS,
