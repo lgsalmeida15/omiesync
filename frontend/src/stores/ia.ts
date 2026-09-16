@@ -13,6 +13,36 @@ import { iaApi, type MensagemChat, type ContextoTela } from '@/api/ia'
  * O que fica em localStorage é só a preferência de o painel estar aberto, que é
  * conveniência e não dado.
  */
+/*
+ * A mensagem que a pessoa lê quando algo falha.
+ *
+ * O servidor agora distingue as causas que dão para agir a respeito — credencial
+ * recusada, provedor ocupado, demora — e manda o texto pronto em `message`.
+ * Quando ele chega, é ele que vale.
+ *
+ * O que sobra aqui é o caso em que NÃO houve resposta: rede caída, conexão
+ * cortada, servidor fora. Antes tudo isso caía em "Não consegui responder
+ * agora" — inclusive as falhas do servidor, que hoje trazem texto próprio —, e
+ * a frase não dizia nem de quem era o problema nem o que fazer.
+ */
+function mensagemDeFalha(e: unknown): string {
+  const err = e as {
+    response?: { status?: number; data?: { message?: string } }
+    code?: string
+  }
+
+  const doServidor = err?.response?.data?.message
+  if (doServidor) return doServidor
+
+  if (err?.code === 'ECONNABORTED') {
+    return 'A resposta demorou demais e a conexão foi encerrada. Tente uma pergunta mais específica.'
+  }
+  if (!err?.response) {
+    return 'Não foi possível falar com o servidor. Verifique a conexão e tente de novo.'
+  }
+  return 'O servidor não conseguiu responder agora. Tente de novo em alguns instantes.'
+}
+
 export const useIaStore = defineStore('ia', () => {
   const aberto = ref(localStorage.getItem('ia_aberto') === 'true')
   const disponivel = ref(false)
@@ -82,8 +112,7 @@ export const useIaStore = defineStore('ia', () => {
         fonte: r.fonte,
       })
     } catch (e: unknown) {
-      const resp = e as { response?: { data?: { message?: string } } }
-      const msg = resp?.response?.data?.message ?? 'Não consegui responder agora.'
+      const msg = mensagemDeFalha(e)
       erro.value = msg
       // A falha entra na conversa como bolha, e não só numa faixa de erro: a
       // pergunta continua visível acima dela, e fica claro o que falhou.

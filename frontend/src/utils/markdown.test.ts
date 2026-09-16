@@ -142,3 +142,47 @@ describe('markdown: entradas de borda', () => {
     expect(() => renderizarMarkdown('**negrito sem fechar e | tabela | pela')).not.toThrow()
   })
 })
+
+/*
+ * O JSON que vazava para a tela.
+ *
+ * O servidor extrai e remove o bloco de gráfico. Isto cobre o que escapa de lá:
+ * marcação que a regex do servidor não previu, ou resposta cortada no meio pelo
+ * limite de tokens. O usuário relatou ver JSON cru na conversa.
+ */
+describe('bloco de especificação residual', () => {
+  it('não renderiza uma spec que escapou do servidor', () => {
+    const texto =
+      'A receita cresceu.\n\n```json\n' +
+      '{"titulo":"Receita","tipo":"barra","rotulos":["Jan"],' +
+      '"series":[{"nome":"Receita","valores":[100]}],"formato":"moeda"}\n```'
+
+    const html = renderizarMarkdown(texto)
+
+    expect(html).not.toContain('rotulos')
+    expect(html).not.toContain('<pre')
+    expect(html).toContain('A receita cresceu')
+  })
+
+  // Sem marcação de linguagem nenhuma — o modelo às vezes abre a crase direto.
+  it('pega o bloco mesmo sem a marcação de linguagem', () => {
+    const html = renderizarMarkdown('Veja.\n\n```\n{"tipo":"rosca","rotulos":["a"]}\n```')
+
+    expect(html).not.toContain('rosca')
+    expect(html).toContain('Veja')
+  })
+
+  /*
+   * Um bloco de código que não é spec continua aparecendo.
+   *
+   * A remoção reconhece a spec pela forma — um objeto com os campos dela. Se
+   * apagasse todo bloco de código, tiraria da tela algo que o usuário pediu para
+   * ver.
+   */
+  it('preserva bloco de código que não é especificação', () => {
+    const html = renderizarMarkdown('Exemplo:\n\n```sql\nSELECT 1 FROM contas\n```')
+
+    expect(html).toContain('SELECT 1')
+    expect(html).toContain('<code')
+  })
+})

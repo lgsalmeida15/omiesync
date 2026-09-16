@@ -40,6 +40,7 @@ func (r *repository) Get(ctx context.Context) (*Config, error) {
 		MaxTokens:      row.MaxTokens,
 		TetoTokensDia:  row.TetoTokensDia,
 		Ativo:          row.Ativo,
+		SystemPrompt:   row.SystemPrompt,
 		UpdatedAt:      row.UpdatedAt.Time,
 		UpdatedByEmail: row.UpdatedByEmail.String,
 	}, nil
@@ -65,6 +66,7 @@ func (r *repository) Update(ctx context.Context, req UpdateRequest, apiKey, usua
 		MaxTokens:     req.MaxTokens,
 		TetoTokensDia: req.TetoTokensDia,
 		Ativo:         req.Ativo,
+		SystemPrompt:  req.SystemPrompt,
 		UpdatedBy:     uid,
 	})
 	if err != nil {

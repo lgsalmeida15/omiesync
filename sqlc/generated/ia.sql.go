@@ -60,7 +60,7 @@ func (q *Queries) ExpurgarIAMensagens(ctx context.Context, dollar_1 int32) (int6
 const getIAConfig = `-- name: GetIAConfig :one
 
 SELECT c.id, c.provedor, c.modelo, c.base_url, c.api_key, c.max_tokens,
-       c.teto_tokens_dia, c.ativo, c.updated_at, c.updated_by,
+       c.teto_tokens_dia, c.ativo, c.system_prompt, c.updated_at, c.updated_by,
        u.email AS updated_by_email
 FROM _etl.ia_config c
 LEFT JOIN _etl.usuarios u ON u.id = c.updated_by
@@ -76,6 +76,7 @@ type GetIAConfigRow struct {
 	MaxTokens      int32              `json:"max_tokens"`
 	TetoTokensDia  int32              `json:"teto_tokens_dia"`
 	Ativo          bool               `json:"ativo"`
+	SystemPrompt   string             `json:"system_prompt"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 	UpdatedBy      pgtype.UUID        `json:"updated_by"`
 	UpdatedByEmail pgtype.Text        `json:"updated_by_email"`
@@ -96,6 +97,7 @@ func (q *Queries) GetIAConfig(ctx context.Context) (GetIAConfigRow, error) {
 		&i.MaxTokens,
 		&i.TetoTokensDia,
 		&i.Ativo,
+		&i.SystemPrompt,
 		&i.UpdatedAt,
 		&i.UpdatedBy,
 		&i.UpdatedByEmail,
@@ -304,8 +306,9 @@ SET provedor        = $1,
     max_tokens      = $5,
     teto_tokens_dia = $6,
     ativo           = $7,
+    system_prompt   = $8,
     updated_at      = NOW(),
-    updated_by      = $8
+    updated_by      = $9
 WHERE id = 1
 `
 
@@ -317,6 +320,7 @@ type UpdateIAConfigParams struct {
 	MaxTokens     int32       `json:"max_tokens"`
 	TetoTokensDia int32       `json:"teto_tokens_dia"`
 	Ativo         bool        `json:"ativo"`
+	SystemPrompt  string      `json:"system_prompt"`
 	UpdatedBy     pgtype.UUID `json:"updated_by"`
 }
 
@@ -329,6 +333,7 @@ func (q *Queries) UpdateIAConfig(ctx context.Context, arg UpdateIAConfigParams) 
 		arg.MaxTokens,
 		arg.TetoTokensDia,
 		arg.Ativo,
+		arg.SystemPrompt,
 		arg.UpdatedBy,
 	)
 	return err

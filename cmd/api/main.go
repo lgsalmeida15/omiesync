@@ -110,7 +110,10 @@ func main() {
 
 	// --- Assistente de IA ---
 	iaConfigRepo := ia_config.NewRepository(pool)
-	iaConfigSvc := ia_config.NewService(iaConfigRepo)
+	// O prompt padrao vive em internal/ia, que importa ia_config — por isso ele
+	// e injetado aqui em vez de importado la, que fecharia um ciclo. Serve para
+	// a tela poder oferecer "restaurar padrao".
+	iaConfigSvc := ia_config.NewService(iaConfigRepo, ia.PromptPadrao())
 	iaConfigHandler := ia_config.NewHandler(iaConfigSvc, jwtSvc)
 
 	iaRepo := ia.NewRepository(pool)
@@ -135,7 +138,7 @@ func main() {
 			return "ia:" + claims.UserID, nil
 		},
 	))
-	iaHandler := ia.NewHandler(iaSvc, jwtSvc, authRepo, iaRateLimiter.Handler)
+	iaHandler := ia.NewHandler(iaSvc, jwtSvc, authRepo, log, iaRateLimiter.Handler)
 
 	// --- ETL Worker + Scheduler ---
 	executors := etl.NewAllExecutors(pool, log)

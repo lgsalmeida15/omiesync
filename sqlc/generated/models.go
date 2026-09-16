@@ -82,6 +82,7 @@ type EtlIaConfig struct {
 	Ativo         bool               `json:"ativo"`
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 	UpdatedBy     pgtype.UUID        `json:"updated_by"`
+	SystemPrompt  string             `json:"system_prompt"`
 }
 
 type EtlIaConversa struct {

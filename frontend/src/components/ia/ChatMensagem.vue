@@ -15,9 +15,25 @@
       <div v-if="msg.papel === 'assistente'" class="cm-texto" v-html="html" />
       <div v-else class="cm-texto cm-texto--user">{{ msg.conteudo }}</div>
 
-      <ChatGrafico v-if="msg.grafico" :spec="msg.grafico" />
+      <!--
+        Card de indicador e gráfico são exclusivos: a spec traz um ou outro.
+        Um valor único vira card; o resto vai para o Chart.js.
+      -->
+      <ChatNumero v-if="msg.grafico && !ehGrafico(msg.grafico)" :spec="msg.grafico" />
+      <ChatGrafico v-else-if="msg.grafico" :spec="msg.grafico" />
 
       <ChatFonte v-if="msg.fonte" :fonte="msg.fonte" />
+
+      <!--
+        O botão que faltava.
+
+        api/ia.ts já documentava que o campo `erro` existe "para permitir tentar
+        de novo", e não havia botão em lugar nenhum: quem batia numa falha
+        passageira tinha de redigitar a pergunta.
+      -->
+      <button v-if="msg.erro" class="cm-retry" type="button" @click="emit('repetir')">
+        Tentar novamente
+      </button>
     </div>
   </div>
 </template>
@@ -26,10 +42,13 @@
 import { computed } from 'vue'
 import { renderizarMarkdown } from '@/utils/markdown'
 import type { MensagemChat } from '@/api/ia'
+import { ehGrafico } from '@/utils/visaospec'
 import ChatGrafico from './ChatGrafico.vue'
+import ChatNumero from './ChatNumero.vue'
 import ChatFonte from './ChatFonte.vue'
 
 const props = defineProps<{ msg: MensagemChat }>()
+const emit = defineEmits<{ repetir: [] }>()
 
 const html = computed(() => renderizarMarkdown(props.msg.conteudo))
 </script>
@@ -38,6 +57,25 @@ const html = computed(() => renderizarMarkdown(props.msg.conteudo))
 .cm {
   display: flex;
   margin-bottom: 14px;
+}
+
+.cm-retry {
+  margin-top: 8px;
+  padding: 5px 10px;
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--primary);
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition);
+}
+
+.cm-retry:hover {
+  background: var(--primary-weak);
+  border-color: var(--primary);
 }
 
 .cm--usuario { justify-content: flex-end; }

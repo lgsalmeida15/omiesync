@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -25,9 +26,29 @@ de cancelamento, erro embrulhado com contexto — mas NÃO copia dois traços de
   - 30s é curto para geração de texto; o padrão aqui é maior.
 */
 
+/*
+timeoutPadrao é por TENTATIVA, não por pergunta.
+
+O orçamento de uma pergunta inteira é definido no handler (orcamentoPergunta) e
+chega aqui pelo contexto. 30s por tentativa é o que sobra para caber três
+tentativas com backoff dentro desse orçamento — com 90s, uma tentativa sozinha
+consumia tudo e as outras duas nunca aconteciam.
+*/
 const (
-	timeoutPadrao = 90 * time.Second
+	timeoutPadrao = 30 * time.Second
 	maxTentativas = 3
+)
+
+/*
+Erros que o service distingue para virar mensagem útil na tela.
+
+Sem eles, 401 de credencial errada e uma queda de rede chegavam ao usuário com o
+mesmo texto — e nenhum dos dois dizia o que fazer a respeito.
+*/
+var (
+	ErrSemCredencial      = errors.New("credencial da IA não configurada")
+	ErrCredencialRecusada = errors.New("credencial recusada pelo provedor")
+	ErrProvedorOcupado    = errors.New("provedor limitando as requisições")
 )
 
 // esperaEntreTentativas é curta de propósito: há um usuário olhando para um
@@ -81,7 +102,13 @@ type requisicao struct {
 	Modelo    string     `json:"model"`
 	Mensagens []MsgChat  `json:"messages"`
 	Tools     []toolSpec `json:"tools,omitempty"`
-	MaxTokens int32      `json:"max_tokens,omitempty"`
+	// ToolChoice vazio deixa o modelo decidir. "none" obriga a responder em
+	// texto — é como a última rodada evita pedir uma consulta cujo resultado
+	// ninguém vai ler. As ferramentas seguem declaradas de propósito: há
+	// tool_calls no histórico da conversa, e provedores recusam o payload se as
+	// ferramentas correspondentes sumirem.
+	ToolChoice string `json:"tool_choice,omitempty"`
+	MaxTokens  int32  `json:"max_tokens,omitempty"`
 	// Determinístico o bastante para que a mesma pergunta sobre os mesmos
 	// números não produza respostas divergentes de uma hora para a outra.
 	Temperatura float64 `json:"temperature"`
@@ -127,9 +154,12 @@ Completar faz uma rodada de conversa.
 Devolve a mensagem do modelo — que pode ser texto ou um pedido de ferramenta — e
 o consumo de tokens. Quem orquestra as rodadas é o service.
 */
-func (c *Client) Completar(ctx context.Context, msgs []MsgChat, ferramentas []Ferramenta, maxTokens int32) (*Retorno, error) {
+// toolChoice: "" deixa o modelo escolher; ToolChoiceNenhuma obriga texto.
+const ToolChoiceNenhuma = "none"
+
+func (c *Client) Completar(ctx context.Context, msgs []MsgChat, ferramentas []Ferramenta, maxTokens int32, toolChoice string) (*Retorno, error) {
 	if c.apiKey == "" {
-		return nil, fmt.Errorf("ia.client.Completar: credencial não configurada")
+		return nil, fmt.Errorf("ia.client.Completar: %w", ErrSemCredencial)
 	}
 
 	tools := make([]toolSpec, 0, len(ferramentas))
@@ -144,6 +174,7 @@ func (c *Client) Completar(ctx context.Context, msgs []MsgChat, ferramentas []Fe
 		Modelo:      c.modelo,
 		Mensagens:   msgs,
 		Tools:       tools,
+		ToolChoice:  toolChoice,
 		MaxTokens:   maxTokens,
 		Temperatura: 0.2,
 	})
@@ -206,8 +237,13 @@ func (c *Client) tentar(ctx context.Context, corpo []byte) (*Retorno, error, boo
 	 * prompt carrega dados financeiros.
 	 */
 	if res.StatusCode != http.StatusOK {
-		transitorio := res.StatusCode == http.StatusTooManyRequests || res.StatusCode >= 500
-		return nil, fmt.Errorf("ia.client: provedor respondeu %d", res.StatusCode), transitorio
+		switch {
+		case res.StatusCode == http.StatusTooManyRequests:
+			return nil, fmt.Errorf("ia.client: %w", ErrProvedorOcupado), true
+		case res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusForbidden:
+			return nil, fmt.Errorf("ia.client: %w", ErrCredencialRecusada), false
+		}
+		return nil, fmt.Errorf("ia.client: provedor respondeu %d", res.StatusCode), res.StatusCode >= 500
 	}
 
 	var r resposta

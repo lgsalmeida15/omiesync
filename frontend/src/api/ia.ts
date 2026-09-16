@@ -42,6 +42,10 @@ export interface ConfigIA {
   max_tokens: number
   teto_tokens_dia: number
   ativo: boolean
+  /** Instruções em vigor. Vazio significa que o padrão do sistema está em uso. */
+  system_prompt: string
+  /** O texto padrão, para a tela poder oferecer "restaurar". Só vem no GET. */
+  system_prompt_padrao?: string
   updated_at: string
   updated_by_email?: string
 }
@@ -59,7 +63,20 @@ export const iaApi = {
   disponivel: () => api.get<{ data: { disponivel: boolean } }>('/ia/disponivel'),
 
   perguntar: (pergunta: string, contexto: ContextoTela) =>
-    api.post<{ data: RespostaChat }>('/ia/chat', { pergunta, contexto }),
+    api.post<{ data: RespostaChat }>('/ia/chat', { pergunta, contexto }, {
+      /*
+       * Esta rota precisa de mais tempo que o padrão de 30s do client.
+       *
+       * Uma pergunta ao assistente é consulta ao banco + ida ao modelo + volta,
+       * às vezes com uma segunda rodada. O servidor trabalha com um orçamento de
+       * 90s (orcamentoPergunta, em internal/ia/handler.go); abortar aqui aos 30s
+       * desfaria essa correção pelo lado do navegador — a resposta chegaria e
+       * não teria mais ninguém esperando por ela.
+       *
+       * A folga sobre os 90s cobre a rede e a serialização.
+       */
+      timeout: 100_000,
+    }),
 
   conversa: () => api.get<{ data: MensagemChat[] }>('/ia/conversa'),
   limpar: () => api.delete('/ia/conversa'),

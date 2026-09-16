@@ -172,3 +172,87 @@ describe('configDoGrafico', () => {
     expect(cb(1500)).not.toContain('R$')
   })
 })
+
+/*
+ * O tooltip — a lacuna que deixou passar um "R$ NaN" para a tela.
+ *
+ * Nenhum teste tocava o callback de tooltip, e por isso ninguém viu que ele lia
+ * `parsed.y` num tipo em que `parsed` é um número. A rosca mostrava NaN no lugar
+ * do valor, em cima de um dado financeiro.
+ */
+describe('tooltip', () => {
+  function rotuloDoTooltip(s: VisaoSpec, item: unknown): string {
+    const cfg = configDoGrafico(s)
+    const cb = cfg?.options?.plugins?.tooltip?.callbacks?.label as
+      | ((i: unknown) => string)
+      | undefined
+    if (!cb) throw new Error('a config não tem callback de tooltip')
+    return cb(item)
+  }
+
+  // Em doughnut o Chart.js entrega `parsed` como NÚMERO, não como {x, y}.
+  it('formata o valor da rosca, onde parsed é um número', () => {
+    const texto = rotuloDoTooltip(
+      spec({ tipo: 'rosca', rotulos: ['Folha'], series: [{ nome: 'Despesa', valores: [1000] }] }),
+      { dataset: { label: 'Despesa' }, parsed: 1000 },
+    )
+
+    expect(texto).not.toContain('NaN')
+    expect(texto).toContain('1.000')
+  })
+
+  it('lê o eixo y na barra vertical', () => {
+    const texto = rotuloDoTooltip(spec(), {
+      dataset: { label: 'Receita' },
+      parsed: { x: 0, y: 250 },
+    })
+
+    expect(texto).not.toContain('NaN')
+    expect(texto).toContain('250')
+  })
+
+  // Na barra horizontal o valor está em x — ler y traria o índice da categoria,
+  // que é um número plausível e completamente errado.
+  it('lê o eixo x na barra horizontal', () => {
+    const texto = rotuloDoTooltip(spec({ tipo: 'barra_horizontal' }), {
+      dataset: { label: 'Receita' },
+      parsed: { x: 250, y: 1 },
+    })
+
+    expect(texto).toContain('250')
+    expect(texto).not.toContain('R$ 1,')
+  })
+
+  it('formata o valor da linha', () => {
+    const texto = rotuloDoTooltip(spec({ tipo: 'linha' }), {
+      dataset: { label: '2026' },
+      parsed: { x: 0, y: 4200 },
+    })
+
+    expect(texto).toContain('4.200')
+  })
+})
+
+/*
+ * O card de indicador.
+ *
+ * É o único tipo da spec que NÃO vira Chart.js: um valor único fica melhor
+ * escrito grande que desenhado como uma barra sozinha.
+ */
+describe('tipo numero', () => {
+  const card = spec({
+    tipo: 'numero',
+    rotulos: ['Setembro/2026'],
+    series: [{ nome: 'Receita', valores: [3140000] }],
+  })
+
+  it('é uma spec válida', () => {
+    expect(specValida(card)).toBe(true)
+  })
+
+  // Devolver config aqui faria o ChatGrafico tentar desenhar um gráfico sem eixo
+  // nem série — e 'numero' nem sequer é um tipo do Chart.js.
+  it('não produz configuração de gráfico', () => {
+    expect(configDoGrafico(card)).toBeNull()
+  })
+})

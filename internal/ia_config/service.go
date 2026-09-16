@@ -36,11 +36,23 @@ type service struct {
 	mu     sync.RWMutex
 	cache  *Config
 	valido bool
+
+	/*
+	 * promptPadrao é injetado, e não importado, porque o texto vive em
+	 * internal/ia — que importa este pacote. Importar de volta fecharia um
+	 * ciclo. Quem amarra os dois é o wire, em cmd/api.
+	 *
+	 * Serve só para a tela mostrar o que "restaurar padrão" vai recuperar; quem
+	 * aplica o padrão de fato é internal/ia, ao montar o prompt.
+	 */
+	promptPadrao string
 }
 
-func NewService(repo Repository) Service {
-	return &service{repo: repo}
+func NewService(repo Repository, promptPadrao string) Service {
+	return &service{repo: repo, promptPadrao: promptPadrao}
 }
+
+const maxTamanhoPrompt = 8000
 
 var provedoresValidos = map[string]bool{
 	// Todos falam o dialeto da OpenAI, que é o que o cliente HTTP implementa.
@@ -54,7 +66,14 @@ func (s *service) Get(ctx context.Context) (Response, error) {
 	if err != nil {
 		return Response{}, err
 	}
-	return toResponse(cfg), nil
+	return s.resposta(cfg), nil
+}
+
+// resposta acrescenta o prompt padrão ao que toResponse monta.
+func (s *service) resposta(c *Config) Response {
+	r := toResponse(c)
+	r.SystemPromptPadrao = s.promptPadrao
+	return r
 }
 
 func (s *service) Update(ctx context.Context, req UpdateRequest, usuarioID string) (Response, error) {
@@ -62,6 +81,7 @@ func (s *service) Update(ctx context.Context, req UpdateRequest, usuarioID strin
 	req.Modelo = strings.TrimSpace(req.Modelo)
 	req.BaseURL = strings.TrimSpace(req.BaseURL)
 	req.APIKey = strings.TrimSpace(req.APIKey)
+	req.SystemPrompt = strings.TrimSpace(req.SystemPrompt)
 
 	if !provedoresValidos[req.Provedor] {
 		return Response{}, apperror.Unprocessable("provedor inválido")
@@ -74,6 +94,17 @@ func (s *service) Update(ctx context.Context, req UpdateRequest, usuarioID strin
 	}
 	if req.TetoTokensDia <= 0 {
 		return Response{}, apperror.Unprocessable("teto_tokens_dia deve ser maior que zero")
+	}
+	/*
+	 * Teto de tamanho do prompt.
+	 *
+	 * Não é limite de banco — a coluna é TEXT. É limite de custo: o prompt vai
+	 * inteiro em TODA pergunta de TODOS os grupos habilitados, então cada
+	 * caractere aqui é token pago muitas vezes por dia. 8000 dá espaço de sobra
+	 * para instruções de negócio e ainda barra um documento colado por engano.
+	 */
+	if len(req.SystemPrompt) > maxTamanhoPrompt {
+		return Response{}, apperror.Unprocessable("o prompt é longo demais")
 	}
 
 	atual, err := s.repo.Get(ctx)
@@ -113,7 +144,7 @@ func (s *service) Update(ctx context.Context, req UpdateRequest, usuarioID strin
 	if err != nil {
 		return Response{}, err
 	}
-	return toResponse(cfg), nil
+	return s.resposta(cfg), nil
 }
 
 func (s *service) ListGrupos(ctx context.Context) ([]GrupoIA, error) {
