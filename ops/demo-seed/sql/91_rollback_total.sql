@@ -10,6 +10,8 @@ BEGIN
     RAISE EXCEPTION 'grupo % não é o grupo demo — abortando', current_setting('demo.grupo');
   END IF;
 END $$;
+DROP TRIGGER IF EXISTS trg_demo_vincular_novo_usuario ON _etl.usuarios;
+DROP FUNCTION IF EXISTS _etl.demo_vincular_novo_usuario();
 DROP SCHEMA IF EXISTS grupo_demo CASCADE;
 DROP SCHEMA IF EXISTS demo_stage CASCADE;
 DELETE FROM _etl.schema_versions WHERE schema_name = 'grupo_demo';

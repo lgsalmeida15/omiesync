@@ -2,7 +2,7 @@
 # Popula o grupo Demo (HML) com cópia anonimizada de um grupo real (PROD).
 #
 # Env:
-#   MODE         seed | rollback-dados | rollback-total
+#   MODE         seed | vincular-todos | rollback-dados | rollback-total
 #   HML_URL      banco de destino (único que recebe escrita)
 #   PROD_URL     banco de origem — só leitura (sessão read-only forçada)
 #   SRC_SCHEMA   schema do grupo de origem em PROD
@@ -56,6 +56,9 @@ case "$MODE" in
              FROM \"$SRC_SCHEMA\".matvw_gerencial_ano_corrente WHERE empresa_id IN ($SRC_IN) GROUP BY 1 ORDER BY 1"
     hml -c "SELECT receita_despesa, ROUND(SUM(valor_final), 2) AS demo, COUNT(*) AS linhas
             FROM grupo_demo.matvw_gerencial_ano_corrente GROUP BY 1 ORDER BY 1"
+    ;;
+  vincular-todos)
+    hml -f /sql/10_vincular_todos.sql
     ;;
   rollback-dados)
     hml -f /sql/90_rollback_dados.sql
