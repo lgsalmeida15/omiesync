@@ -137,6 +137,25 @@ INSERT INTO grupo_demo.categorias (empresa_id, codigo, descricao, id_conta_corre
 SELECT m.dst, c.codigo, c.descricao, c.id_conta_corrente, c.raw, c.synced_at
 FROM demo_stage.categorias c JOIN map_emp m ON m.src = c.empresa_id;
 
+-- Exceção: categorias "Clientes - <pessoa>" (carteira de vendedor) carregam nome
+-- de gente. Toda "Clientes - X" fora da lista genérica vira "Clientes - Carteira A..".
+-- A mesma pessoa recebe a mesma letra em todas as empresas.
+CREATE TEMP TABLE map_cat ON COMMIT DROP AS
+SELECT descricao AS original,
+       'Clientes - Carteira ' || chr(64 + DENSE_RANK() OVER (ORDER BY descricao)::int) AS nova
+FROM (SELECT DISTINCT descricao FROM grupo_demo.categorias
+      WHERE empresa_id IN (SELECT dst FROM map_emp)
+        AND descricao ~ '^Clientes - '
+        AND descricao NOT IN ('Clientes - Exportação', 'Clientes - Locação',
+                              'Clientes - Revenda de Mercadoria', 'Clientes - Serviços Prestados',
+                              'Clientes - Venda de Mercadoria Fabricadas')) d;
+
+UPDATE grupo_demo.categorias c
+   SET descricao = m.nova,
+       raw = (c.raw - 'descricao' - 'descricao_padrao') || jsonb_build_object('descricao', m.nova)
+  FROM map_cat m
+ WHERE c.descricao = m.original AND c.empresa_id IN (SELECT dst FROM map_emp);
+
 INSERT INTO grupo_demo.departamentos (empresa_id, codigo, descricao, inativo, raw, synced_at)
 SELECT m.dst, d.codigo, d.descricao, d.inativo, d.raw, d.synced_at
 FROM demo_stage.departamentos d JOIN map_emp m ON m.src = d.empresa_id;
@@ -241,6 +260,12 @@ SELECT m.dst, t.codigo_lancamento, t.data_lancamento, pg_temp.val(t.valor), t.ti
 FROM demo_stage.extrato t
 JOIN map_emp m ON m.src = t.empresa_id
 LEFT JOIN map_cli mc ON mc.cod = NULLIF(t.raw ->> 'nCodCliente', '')::bigint;
+
+-- O extrato traz a descrição da categoria pronta (cDesCategoria): mesma troca.
+UPDATE grupo_demo.extrato e
+   SET raw = jsonb_set(e.raw, '{cDesCategoria}', to_jsonb(m.nova))
+  FROM map_cat m
+ WHERE e.raw ->> 'cDesCategoria' = m.original AND e.empresa_id IN (SELECT dst FROM map_emp);
 
 -- Garantia extra: nenhuma empresa Demo com agendamento de sync ativo.
 UPDATE _etl.sync_control SET ativo = false WHERE empresa_id IN (SELECT dst FROM map_emp);
