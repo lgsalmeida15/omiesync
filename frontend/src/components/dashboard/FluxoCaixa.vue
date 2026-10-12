@@ -90,6 +90,40 @@
             <ResumoMes :resumo="resumo" :tipo="tipo" :titulo="tituloResumo" :subtitulo="rotuloRecorte" />
           </section>
 
+          <!--
+            Posicao de caixa do mes, na conta do relatorio do Omie:
+            abertura + resultado do mes = fechamento.
+
+            So aparece na visao de todos os tipos: nas abas Contas a Receber e
+            Contas a Pagar o "resultado" e um lado so, e somar isso a um saldo
+            produziria uma projecao de caixa que ignora metade do movimento.
+
+            Some tambem quando o recorte da tela nao e o do saldo (recorte por
+            dia, categoria ou entidade no proprio componente), pelo mesmo motivo
+            do rodape da aba Resultado.
+          -->
+          <section v-if="mostrarPosicao" class="fc-card">
+            <div class="fc-pos">
+              <div class="fc-pos-titulo">POSICAO DE CAIXA</div>
+              <div class="fc-pos-linha">
+                <span class="fc-pos-rot">Saldo inicial</span>
+                <span class="fc-pos-val num">{{ fmtExato(dados.saldo_inicial) }}</span>
+              </div>
+              <div class="fc-pos-linha">
+                <span class="fc-pos-rot">Resultado do mes</span>
+                <span class="fc-pos-val num" :class="resumo.resultado < 0 ? 'fc-pos--out' : 'fc-pos--in'">
+                  {{ fmtExato(resumo.resultado) }}
+                </span>
+              </div>
+              <div class="fc-pos-linha fc-pos-linha--total">
+                <span class="fc-pos-rot">Saldo final</span>
+                <span class="fc-pos-val num" :class="fechamento < 0 ? 'fc-pos--out' : 'fc-pos--in'">
+                  {{ fmtExato(fechamento) }}
+                </span>
+              </div>
+            </div>
+          </section>
+
           <section class="fc-card fc-card--venc">
             <ProximosVencimentos :itens="dados.proximos_vencimentos" />
           </section>
@@ -168,7 +202,7 @@ import AppSpinner from '@/components/ui/AppSpinner.vue'
 import BotaoFoco from '@/components/ui/BotaoFoco.vue'
 import ResumoMes from './ResumoMes.vue'
 import ProximosVencimentos from './ProximosVencimentos.vue'
-import { fmtMoeda, fmtCompacto } from '@/utils/formato'
+import { fmtMoeda, fmtMoedaExata, fmtCompacto } from '@/utils/formato'
 import { filtrarTransacoes, classeStatus, resumirTransacoes } from '@/utils/fluxo'
 import { aplicarSelecao, alternarNumero, temRecorte, type Selecao } from '@/utils/fluxocruzado'
 import { porCategoria, topEntidades } from '@/utils/agregacao'
@@ -370,6 +404,29 @@ const resumo = computed<FluxoResumo>(() => {
   return resumirTransacoes(recortadas.value, umLadoSo.value)
 })
 
+/*
+ * Posicao de caixa do mes — abertura, resultado e fechamento.
+ *
+ * Tres condicoes para aparecer, e cada uma evita um numero sem significado:
+ *
+ *   tipo 'todos'   nas abas Contas a Receber e Contas a Pagar o resultado e um
+ *                  lado so; soma-lo a um saldo projetaria um caixa que ignora
+ *                  metade do movimento.
+ *   sem recorte    recortar por dia, categoria ou entidade dentro da aba muda o
+ *                  resultado sem mudar o saldo de abertura.
+ *   ancora valida  o servidor ja responde se os filtros do dashboard permitem
+ *                  partir do saldo das contas.
+ */
+const mostrarPosicao = computed(() =>
+  props.tipo === 'todos' && !haRecorte.value && (dados.value?.ancora_aplicavel ?? false)
+)
+
+const fechamento = computed(() => (dados.value?.saldo_inicial ?? 0) + resumo.value.resultado)
+
+// Mesmo formatador dos cards de KPI: valor cheio, com centavos, negativo entre
+// parenteses. Posicao de caixa e numero para conferir contra o banco.
+const fmtExato = fmtMoedaExata
+
 // ── Listagem ───────────────────────────────────────────────────────────────
 // O recorte cruzado entra antes; `filtrarTransacoes` segue cuidando de busca,
 // tipo e situação. `dia: null` porque a dimensão de dia já foi aplicada.
@@ -449,6 +506,25 @@ watch(() => [props.grupoId, props.filtros, props.mes], carregar, { deep: true, i
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--r); padding: var(--sp-5);
 }
+
+/* Posicao de caixa: tres linhas, a ultima destacada como fechamento. */
+.fc-pos-titulo {
+  font-size: var(--fs-xs); font-weight: 600; letter-spacing: .08em;
+  color: var(--text-dim); margin-bottom: var(--sp-3);
+}
+.fc-pos-linha {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: var(--sp-4); padding: 6px 0;
+}
+.fc-pos-linha--total {
+  border-top: 1px solid var(--border-strong);
+  margin-top: 4px; padding-top: 10px; font-weight: 700;
+}
+.fc-pos-rot { font-size: var(--fs-sm); color: var(--text-muted); }
+.fc-pos-val { font-size: var(--fs-base); font-weight: 600; color: var(--text); }
+.fc-pos-linha--total .fc-pos-val { font-size: var(--fs-md); }
+.fc-pos--in  { color: var(--success); }
+.fc-pos--out { color: var(--danger); }
 /* O card do calendario e coluna flex para que .cal-grid possa usar flex:1 e
    preencher a altura, em vez de a altura sair do aspect-ratio da celula. */
 .fc-card--cal { display: flex; flex-direction: column; }

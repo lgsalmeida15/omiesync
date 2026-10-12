@@ -44,6 +44,18 @@ export interface FluxoCaixaData {
   resumo: FluxoResumo
   /** A partir de hoje, independente do mês selecionado. */
   proximos_vencimentos: FluxoTransacao[]
+
+  /**
+   * Posição de caixa do mês, no modelo do relatório do Omie:
+   * `saldo_inicial + resultado do mês = acumulado`.
+   *
+   * `saldo_inicial` é o fechamento do mês ANTERIOR — a abertura deste —, não o
+   * saldo de janeiro. Em janeiro os dois coincidem.
+   */
+  saldo_inicial: number
+  acumulado: number
+  /** Ver DashboardData.ancora_aplicavel. Falso: a escada parte do zero. */
+  ancora_aplicavel: boolean
 }
 
 export async function fetchFluxoCaixa(

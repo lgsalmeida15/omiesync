@@ -205,6 +205,8 @@ func parseDashboardParams(r *http.Request, grupoID string) DashboardParams {
 		// padrão é a tela, para que outros consumidores da API não herdem a
 		// exclusão sem pedir.
 		CategoriasExcluir: split(r.URL.Query().Get("categorias_excluir")),
+		// Vazio = as duas trilhas, como qualquer filtro marcável do produto.
+		Trilhas: split(r.URL.Query().Get("trilhas")),
 	}
 }
 

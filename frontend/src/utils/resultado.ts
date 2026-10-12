@@ -59,6 +59,44 @@ export function calcularResultado(
 }
 
 /**
+ * A linha ACUMULADO do rodapé: onde o caixa fecha a cada mês.
+ *
+ * É a conta do relatório de fluxo de caixa do Omie, conferida contra uma
+ * extração real (ver internal/dados/acumulado_omie_test.go):
+ *
+ *     acumulado(mês) = âncora + resultado de todos os meses até ele
+ *
+ * Calculado aqui, e não só no servidor, pelo mesmo motivo de calcularResultado:
+ * o usuário desmarca categorias na própria tela e recorta meses, e o servidor
+ * não sabe dessas escolhas. Um acumulado que viesse pronto ficaria parado
+ * enquanto a linha RESULTADO logo acima se mexe — duas linhas discordando na
+ * mesma tabela.
+ *
+ * `ancora` zero é um caso legítimo, não ausência de dado: é o que acontece
+ * quando o recorte não pode partir do saldo das contas, e a série passa a ser o
+ * acumulado DO RECORTE. Quem decide isso é o chamador.
+ *
+ * Meses fora do recorte não entram na soma E não recebem valor: a posição em que
+ * eles ficam no array é preenchida com null, para a tabela não desenhar um
+ * degrau onde não há coluna.
+ */
+export function acumularResultado(
+  ancora: number,
+  mesesResultado: number[],
+  mesesVisiveis: Set<number> = TODOS_OS_MESES,
+): (number | null)[] {
+  const out: (number | null)[] = Array(mesesResultado.length).fill(null)
+  let acc = ancora
+
+  for (let i = 0; i < mesesResultado.length; i++) {
+    if (!mesesVisiveis.has(i + 1)) continue
+    acc += mesesResultado[i]
+    out[i] = acc
+  }
+  return out
+}
+
+/**
  * Soma de uma linha nos meses visíveis. Mesmo motivo do total acima: `l.total`
  * e `n.total` guardam o ano fechado, e sob um recorte de meses eles mentiriam.
  */

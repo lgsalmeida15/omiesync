@@ -22,6 +22,21 @@ export interface PivotData {
   resultado_total: number
   /** Primeiro mês projetado (1-12). 13 = ano inteiro realizado. */
   mes_corte: number
+
+  /**
+   * Fechamento de cada mês: a âncora mais o resultado de todos os meses até ali.
+   * É a mesma escada que a Visão Geral desenha, na tabela.
+   */
+  acumulado: number[]
+  /** Abertura de janeiro — o saldo das contas no começo do período. */
+  saldo_inicial: number
+  /**
+   * Falso quando há filtro que o saldo das contas não sabe responder (categoria,
+   * departamento, cliente). Aí a escada parte do zero e passa a ser o acumulado
+   * DO RECORTE — e a tela precisa dizer isso, em vez de apresentar o número como
+   * posição de caixa.
+   */
+  ancora_aplicavel: boolean
 }
 
 export async function fetchPivot(grupoID: string, params: DashboardParams = {}): Promise<PivotData> {
