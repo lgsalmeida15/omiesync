@@ -39,6 +39,22 @@ type PivotResponse struct {
 	// propósito. Um é resultado do período; o outro, posição de caixa.
 	ResultadoMes   [12]float64 `json:"resultado_mes"`
 	ResultadoTotal float64     `json:"resultado_total"`
+
+	/*
+	 * Acumulado: a mesma leitura do relatório de fluxo de caixa do Omie, trazida
+	 * para a aba Resultado.
+	 *
+	 * Cada posição é o fechamento do mês — a âncora mais o resultado de todos os
+	 * meses até ali. SaldoInicial é a abertura de janeiro, e vem junto porque sem
+	 * ela a tela não tem como explicar de onde a escada parte.
+	 *
+	 * AncoraAplicavel é falso quando há filtro que o saldo das contas não sabe
+	 * responder (categoria, departamento, cliente): aí a série parte do zero e
+	 * passa a ser acumulado DO RECORTE. Ver ancoraAplicavel, em dashboard.go.
+	 */
+	Acumulado       [12]float64 `json:"acumulado"`
+	SaldoInicial    float64     `json:"saldo_inicial"`
+	AncoraAplicavel bool        `json:"ancora_aplicavel"`
 	// MesCorte separa realizado de previsto: a matvw usa considerar_mov_ext, então
 	// meses anteriores vêm de movimentos realizados e os seguintes, de provisões do
 	// extrato. Sem marcar a fronteira, a tela compara naturezas diferentes.
@@ -132,6 +148,33 @@ func QueryPivot(ctx context.Context, pool *pgxpool.Pool, p DashboardParams) (*Pi
 	}
 
 	resp.MesCorte = mesCorte(p.Ano)
+
+	/*
+	 * A escada do acumulado.
+	 *
+	 * O pivô não consultava contas correntes — era uma visão de fluxo do período,
+	 * só. Passa a consultar porque o acumulado precisa de onde partir, e porque
+	 * ter a mesma âncora da Visão Geral é o que impede as duas abas de mostrarem
+	 * escadas diferentes para o mesmo recorte.
+	 *
+	 * Falha ao ler o saldo não derruba a aba: o pivô continua válido sem a
+	 * âncora, e perder a matriz inteira por causa da linha de rodapé seria pior.
+	 */
+	resp.AncoraAplicavel = ancoraAplicavel(p)
+	if resp.AncoraAplicavel {
+		if saldo, err := querySaldoContasCorrentes(ctx, pool, safe, p); err == nil {
+			resp.SaldoInicial = saldo
+		} else {
+			resp.AncoraAplicavel = false
+		}
+	}
+
+	acc := resp.SaldoInicial
+	for i, r := range resp.ResultadoMes {
+		acc += r
+		resp.Acumulado[i] = acc
+	}
+
 	return resp, nil
 }
 

@@ -95,6 +95,32 @@
                 {{ fmt(resultado.total) }}
               </td>
             </tr>
+
+            <!--
+              ACUMULADO: onde o caixa fecha a cada mês.
+
+              É a mesma leitura do relatório de fluxo de caixa do Omie — cada
+              coluna é a anterior mais o resultado do mês. O rótulo muda conforme
+              a escada parta do saldo das contas ou do zero, porque são duas
+              perguntas diferentes e mostrar as duas com o mesmo nome foi o que
+              deixou a Visão Geral ambígua.
+            -->
+            <tr class="pv-tfoot pv-tfoot--acum">
+              <td class="pv-td-dim">
+                {{ acumuladoAncorado ? 'ACUMULADO' : 'ACUMULADO DO RECORTE' }}
+                <span class="pv-nota" :title="tituloAcumulado">?</span>
+              </td>
+              <td v-for="i in indicesVisiveis" :key="i"
+                  :class="['pv-td-num', { 'pv-previsto': i + 1 >= dados.mes_corte,
+                                          'pv-neg': (acumulado[i] ?? 0) < 0,
+                                          'pv-pos': (acumulado[i] ?? 0) > 0 }]">
+                {{ acumulado[i] === null ? '—' : fmt(acumulado[i] as number) }}
+              </td>
+              <td class="pv-td-total"
+                  :class="{ 'pv-neg': fechamento < 0, 'pv-pos': fechamento > 0 }">
+                {{ fmt(fechamento) }}
+              </td>
+            </tr>
           </tfoot>
         </table>
       </div>
@@ -110,7 +136,7 @@ import AppSpinner from '@/components/ui/AppSpinner.vue'
 import BotaoFoco from '@/components/ui/BotaoFoco.vue'
 import { fmtNumero } from '@/utils/formato'
 import { useUiStore } from '@/stores/ui'
-import { calcularResultado, chaveSuperior, larguraAoArrastar, alturaDisponivel, totalVisivel } from '@/utils/resultado'
+import { calcularResultado, chaveSuperior, larguraAoArrastar, alturaDisponivel, totalVisivel, acumularResultado } from '@/utils/resultado'
 
 const props = withDefaults(defineProps<{
   grupoId: string
@@ -235,6 +261,40 @@ const foraDoResultado = (n: No) =>
  */
 const resultado = computed(() =>
   calcularResultado(dados.value?.linhas ?? [], excluidosDoResultado.value, mesesVisiveis.value)
+)
+
+/*
+ * A escada parte do saldo das contas quando ele descreve o mesmo movimento que a
+ * tabela. Quem responde isso é o servidor (ancora_aplicavel).
+ *
+ * As exclusões feitas por clique aqui NÃO desligam a âncora, pelo mesmo critério
+ * do servidor: excluir é limpeza — "tire isto do meu fluxo" —, e o que sobra
+ * continua sendo o movimento da empresa inteira. Recorte é incluir só uma
+ * categoria, e aí o servidor já marca a âncora como inaplicável.
+ */
+const acumuladoAncorado = computed(() => dados.value?.ancora_aplicavel ?? false)
+
+const acumulado = computed(() =>
+  acumularResultado(
+    acumuladoAncorado.value ? (dados.value?.saldo_inicial ?? 0) : 0,
+    resultado.value.meses,
+    mesesVisiveis.value,
+  )
+)
+
+/** Último degrau visível — onde o período exibido fecha. */
+const fechamento = computed(() => {
+  for (let i = acumulado.value.length - 1; i >= 0; i--) {
+    const v = acumulado.value[i]
+    if (v !== null) return v
+  }
+  return 0
+})
+
+const tituloAcumulado = computed(() =>
+  acumuladoAncorado.value
+    ? 'Saldo das contas no início do período mais o resultado de cada mês, acumulado. É a mesma conta do relatório de fluxo de caixa do Omie.'
+    : 'Acumulado apenas do recorte filtrado, a partir do zero. Não parte do saldo das contas porque o filtro aplicado (categoria, departamento, cliente ou exclusão por clique) não pode ser respondido por um saldo bancário.'
 )
 
 // ── Montagem da árvore ─────────────────────────────────────────────────────
@@ -526,6 +586,17 @@ watch(() => [props.grupoId, props.filtros], carregar, { deep: true, immediate: t
   font-family: var(--font-body); font-size: var(--fs-xs); padding: 10px 12px;
 }
 .pv-tfoot .pv-td-dim { font-size: var(--fs-xs); letter-spacing: 1px; }
+
+/*
+ * A linha do acumulado e a segunda do rodape e fica visualmente subordinada a do
+ * RESULTADO: borda tracejada em vez da forte, para as duas lerem como um bloco,
+ * e peso um pouco menor, porque a leitura principal da aba continua sendo o
+ * resultado do periodo.
+ */
+.pv-tfoot--acum td {
+  border-top: 1px dashed var(--border);
+  font-weight: 600;
+}
 .pv-nota {
   display: inline-flex; align-items: center; justify-content: center;
   width: 13px; height: 13px; margin-left: 6px;

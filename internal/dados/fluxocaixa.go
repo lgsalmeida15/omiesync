@@ -64,6 +64,24 @@ type FluxoCaixaResponse struct {
 	// hoje, para que a tela continue avisando do que vem mesmo ao navegar por
 	// meses passados.
 	ProximosVencimentos []FluxoTransacao `json:"proximos_vencimentos"`
+
+	/*
+	 * A posição de caixa do mês, no modelo do relatório do Omie:
+	 *
+	 *     SaldoInicial + Resultado do mês = Acumulado
+	 *
+	 * SaldoInicial é o fechamento do mês ANTERIOR, não o saldo de janeiro: é o
+	 * que a aba precisa mostrar como abertura. Em janeiro, coincide com a
+	 * âncora do ano.
+	 *
+	 * Vem calculado do servidor, e não derivado na tela, porque a mesma escada
+	 * aparece na Visão Geral e na aba Resultado — se cada uma somasse por conta
+	 * própria, bastaria um arredondamento diferente para as três discordarem
+	 * sobre o mesmo mês.
+	 */
+	SaldoInicial    float64 `json:"saldo_inicial"`
+	Acumulado       float64 `json:"acumulado"`
+	AncoraAplicavel bool    `json:"ancora_aplicavel"`
 }
 
 const maxProximosVencimentos = 12
@@ -169,6 +187,29 @@ func QueryFluxoCaixa(ctx context.Context, pool *pgxpool.Pool, p DashboardParams)
 		(resp.Resumo.Recebido + resp.Resumo.AReceber + resp.Resumo.AtrasadoReceber) -
 			(resp.Resumo.Pago + resp.Resumo.APagar + resp.Resumo.AtrasadoPagar)
 
+	/*
+	 * Abertura e fechamento do mês.
+	 *
+	 * A abertura é o acumulado até o mês ANTERIOR — âncora mais o resultado de
+	 * janeiro até mes-1 —, e por isso o cálculo reaproveita o pivô do ano em vez
+	 * de refazer a soma aqui: é a mesma série que a aba Resultado desenha, vinda
+	 * da mesma consulta, o que impede as duas de divergirem.
+	 *
+	 * Degrada em silêncio se o pivô falhar: o fluxo do mês é o dado principal da
+	 * aba e não pode cair por causa da linha de abertura.
+	 */
+	if ancoraAplicavel(p) {
+		if abertura, errAb := saldoAteOMes(ctx, pool, safe, viewName(p.Ano), p, mes); errAb == nil {
+			resp.AncoraAplicavel = true
+			resp.SaldoInicial = abertura
+			resp.Acumulado = abertura + resp.Resumo.Resultado
+		} else {
+			log.Warn().Err(errAb).
+				Str("grupo_id", p.GrupoID).
+				Msg("dados: acumulado do mês indisponível; seguindo sem ele")
+		}
+	}
+
 	// ── Próximos vencimentos ─────────────────────────────────────────────────
 	// Sempre do ano corrente: o extrato só é sincronizado de hoje em diante, e o
 	// ramo ext existe apenas na view do ano corrente.
@@ -217,4 +258,35 @@ func scanTransacoes(ctx context.Context, pool *pgxpool.Pool, sql string, args []
 		out = append(out, t)
 	}
 	return out, rows.Err()
+}
+
+/*
+saldoAteOMes devolve a abertura do mês: a âncora mais o resultado dos meses
+anteriores dele.
+
+Usa a MESMA consulta mensal do dashboard, e não o pivô. O pivô agruparia por
+tipo, categoria, subcategoria e cliente para então somar tudo de volta — quatro
+dimensões de GROUP BY que a aba descartaria em seguida, num endpoint que o
+usuário aciona a cada troca de mês.
+
+Vir do mesmo caminho da Visão Geral é também o que garante que a abertura
+mostrada aqui seja exatamente o fechamento que a escada de lá desenha.
+*/
+func saldoAteOMes(ctx context.Context, pool *pgxpool.Pool, safe, view string, p DashboardParams, mes int) (float64, error) {
+	saldo, err := querySaldoContasCorrentes(ctx, pool, safe, p)
+	if err != nil {
+		return 0, fmt.Errorf("dados.saldoAteOMes saldo: %w", err)
+	}
+
+	mensal, err := queryGraficoMensal(ctx, pool, safe, view, p)
+	if err != nil {
+		return 0, fmt.Errorf("dados.saldoAteOMes mensal: %w", err)
+	}
+
+	// Até mes-1: a abertura de março é o fechamento de fevereiro. Janeiro abre
+	// na âncora, sem somar nada.
+	for i := 0; i < mes-1 && i < len(mensal); i++ {
+		saldo += mensal[i].ResultadoMes
+	}
+	return saldo, nil
 }

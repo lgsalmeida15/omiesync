@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { calcularResultado, chaveSuperior, larguraAoArrastar, alturaDisponivel, totalVisivel } from './resultado'
+import { calcularResultado, chaveSuperior, larguraAoArrastar, alturaDisponivel, totalVisivel, acumularResultado } from './resultado'
 import type { PivotLinha } from '@/api/pivot'
 
 function l(p: Partial<PivotLinha>): PivotLinha {
@@ -226,5 +226,55 @@ describe('totalVisivel', () => {
 
   it('recorte vazio devolve zero', () => {
     expect(totalVisivel([10, 20], new Set())).toBe(0)
+  })
+})
+
+/*
+ * A linha ACUMULADO.
+ *
+ * A conta vem do relatório de fluxo de caixa do Omie, e o teste equivalente do
+ * lado Go (internal/dados/acumulado_omie_test.go) confere os mesmos números
+ * contra uma extração real. Aqui o que importa é que o recorte da tela — meses
+ * desmarcados e categorias excluídas por clique — não quebre a escada.
+ */
+describe('acumularResultado', () => {
+  it('parte da âncora e soma mês a mês', () => {
+    expect(acumularResultado(1000, [100, -40, 25])).toEqual([1100, 1060, 1085])
+  })
+
+  // Âncora zero não é ausência de dado: é o acumulado do recorte, quando o saldo
+  // das contas não responde ao filtro aplicado.
+  it('âncora zero acumula a partir do zero', () => {
+    expect(acumularResultado(0, [100, 100])).toEqual([100, 200])
+  })
+
+  it('mês sem movimento repete o acumulado', () => {
+    expect(acumularResultado(500, [0, 0, 0])).toEqual([500, 500, 500])
+  })
+
+  /*
+   * O recorte de meses é o caso que mais fácil sai errado: o mês escondido não
+   * pode entrar na soma, senão a escada mostra um degrau que a coluna ao lado
+   * não explica.
+   */
+  it('ignora os meses fora do recorte, e não os preenche', () => {
+    const visiveis = new Set([2, 3])
+
+    expect(acumularResultado(1000, [999, 100, 50], visiveis)).toEqual([null, 1100, 1150])
+  })
+
+  it('devolve um array do mesmo tamanho da entrada', () => {
+    expect(acumularResultado(0, Array(12).fill(1))).toHaveLength(12)
+  })
+
+  // A escada tem de fechar no mesmo lugar que a linha RESULTADO: último
+  // acumulado = âncora + total. Se divergirem, uma das duas está errada.
+  it('fecha no mesmo valor que o total do resultado', () => {
+    const meses = [100, -40, 25, 10]
+    const total = meses.reduce((a, b) => a + b, 0)
+
+    const acum = acumularResultado(1000, meses)
+
+    expect(acum[acum.length - 1]).toBe(1000 + total)
   })
 })

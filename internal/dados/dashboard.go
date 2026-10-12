@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/rs/zerolog/log"
 )
 
 // ErrViewNaoPopulada indica que a view materializada existe mas nunca recebeu
@@ -52,6 +53,47 @@ type DashboardParams struct {
 	// Não afeta as listas de opções — a categoria excluída precisa continuar
 	// aparecendo no filtro para que o usuário possa incluí-la de volta.
 	CategoriasExcluir []string
+
+	/*
+	 * Trilhas recorta por natureza do lançamento: "realizado" é dinheiro que já
+	 * entrou ou saiu da conta (mov_ou_extrato = 'mov'); "previsto" é provisão do
+	 * extrato, o que ainda vai acontecer ('ext').
+	 *
+	 * Lista vazia = as duas, pela mesma convenção dos outros filtros marcáveis
+	 * do produto. Isso mantém a resposta idêntica à de antes para quem não pedir
+	 * nada — nenhum consumidor herda recorte sem escolher.
+	 *
+	 * Fica em buildFiltro, e não num tratamento por consulta, porque é o que faz
+	 * o dashboard, a aba Resultado e o Fluxo de Caixa recortarem juntos: as três
+	 * leem a mesma base, e um filtro aplicado em só uma delas faria as abas
+	 * discordarem sobre o mesmo mês.
+	 */
+	Trilhas []string
+}
+
+// Valores aceitos em Trilhas. Qualquer outro é ignorado no parse.
+const (
+	TrilhaRealizado = "realizado"
+	TrilhaPrevisto  = "previsto"
+)
+
+// trilhasParaFonte traduz a escolha do usuário para os valores da coluna
+// mov_ou_extrato. Devolve nil quando não há recorte a fazer — nenhuma trilha
+// marcada, ou as duas, que dão no mesmo.
+func trilhasParaFonte(trilhas []string) []string {
+	var fontes []string
+	for _, t := range trilhas {
+		switch t {
+		case TrilhaRealizado:
+			fontes = append(fontes, "mov")
+		case TrilhaPrevisto:
+			fontes = append(fontes, "ext")
+		}
+	}
+	if len(fontes) == 0 || len(fontes) == 2 {
+		return nil
+	}
+	return fontes
 }
 
 // nivelFiltro identifica até onde aplicar os filtros. As opções de cada filtro são
@@ -137,18 +179,42 @@ func QueryDashboard(ctx context.Context, pool *pgxpool.Pool, p DashboardParams) 
 		despesaTotal += m.Despesa
 	}
 
-	// Monta grafico_resultado_acumulado
-	acumulado := make([]GraficoAcumulado, len(mensal))
-	var acc float64
-	for i, m := range mensal {
-		acc += m.ResultadoMes
-		acumulado[i] = GraficoAcumulado{
-			Mes:          m.Mes,
-			MesNome:      m.MesNome,
-			ResultadoMes: m.ResultadoMes,
-			Acumulado:    acc,
+	/*
+	 * A âncora só entra quando ela é VERDADE para o recorte.
+	 *
+	 * O saldo vem do cadastro das contas correntes, então sabe responder a
+	 * filtros de empresa e de conta — e só. Com um filtro de categoria,
+	 * departamento ou cliente, ancorar no saldo somaria o movimento de um
+	 * recorte a uma abertura do total: um número plausível e sem significado.
+	 *
+	 * Nesse caso a série parte de zero e vira "acumulado do recorte". Continua
+	 * verdadeira, só responde outra pergunta — e a resposta diz qual, para a
+	 * tela poder mudar o título em vez de mentir no mesmo.
+	 */
+	ancoraVale := ancoraAplicavel(p)
+	ancora := saldo
+	if !ancoraVale {
+		ancora = 0
+	}
+
+	/*
+	 * Atrasados entram só quando pedidos, e só na trilha prevista.
+	 *
+	 * Falha aqui não derruba o dashboard: sem o acréscimo a projeção fica
+	 * otimista, o que é ruim, mas perder a tela inteira por causa disso é pior.
+	 * O aviso no log é o que permite descobrir que aconteceu.
+	 */
+	var atrasados float64
+	if p.Inadimplencia {
+		if v, errAtr := totalAtrasados(ctx, pool, schema, p); errAtr == nil {
+			atrasados = v
+		} else {
+			log.Warn().Err(errAtr).
+				Str("grupo_id", p.GrupoID).
+				Msg("dados: atrasados indisponíveis; projeção segue sem eles")
 		}
 	}
+	acumulado := acumularResultado(ancora, atrasados, mensal)
 
 	return &DashboardResponse{
 		Cards: CardMetrics{
@@ -165,7 +231,37 @@ func QueryDashboard(ctx context.Context, pool *pgxpool.Pool, p DashboardParams) 
 		GraficoResultadoAcumulado: acumulado,
 		SaldosMensais:             saldosMensais,
 		FiltrosDisponiveis:        filtros,
+		AncoraAplicavel:           ancoraVale,
+		MesCorte:                  mesCorte(p.Ano),
 	}, nil
+}
+
+/*
+ancoraAplicavel diz se o saldo das contas descreve o mesmo recorte que o fluxo.
+
+O saldo sai de contas_correntes (querySaldoContasCorrentes), que conhece empresa
+e conta corrente. Categoria, departamento e cliente são dimensões do LANÇAMENTO,
+não da conta — não há como perguntar a um extrato bancário quanto do saldo veio
+de "Despesas com Pessoal". Com um desses, ancorar somaria o movimento de um
+recorte a uma abertura do total.
+
+EXCLUSÃO de categoria é tratada de forma diferente da inclusão, e a distinção é
+de intenção: incluir é "me mostre só isto" — um recorte, que invalida a âncora;
+excluir é "tire isto do meu fluxo" — uma limpeza, em que o resto continua sendo
+o movimento da empresa inteira.
+
+A diferença não é cosmética: a tela exclui transferências por padrão, e tratar
+isso como recorte faria o acumulado NUNCA partir do saldo na configuração
+normal, que é quando ele mais importa.
+
+O critério é imperfeito por construção — excluir quase todas as categorias tem o
+mesmo efeito de um recorte, e aqui passaria como limpeza. Vale pelo caso
+dominante, e o custo do erro é uma abertura otimista, não um número inventado.
+*/
+func ancoraAplicavel(p DashboardParams) bool {
+	return len(p.Categorias) == 0 &&
+		len(p.Departamentos) == 0 &&
+		p.Cliente == ""
 }
 
 // buildFiltroAno monta o WHERE completo, usado pelas consultas de dados.
@@ -197,6 +293,18 @@ func buildFiltro(p DashboardParams, ate nivelFiltro) (where string, args []any) 
 		idx++
 	}
 
+	/*
+	 * A trilha entra em TODOS os níveis, inclusive nos das listas de opções.
+	 *
+	 * É diferente das outras dimensões, que seguem a cascata para não quebrar o
+	 * multi-select. Aqui faz sentido: se o usuário está olhando só o realizado,
+	 * uma categoria que só aparece em provisão não deveria ser oferecida como
+	 * filtro — ela não existe na tela que ele está vendo.
+	 */
+	if fontes := trilhasParaFonte(p.Trilhas); fontes != nil {
+		add("mov_ou_extrato = ANY($%d)", fontes)
+	}
+
 	if ate >= nivelEmpresas && len(p.Empresas) > 0 {
 		add("empresa_id::text = ANY($%d)", p.Empresas)
 	}
@@ -223,11 +331,27 @@ func buildFiltro(p DashboardParams, ate nivelFiltro) (where string, args []any) 
 
 func queryGraficoMensal(ctx context.Context, pool *pgxpool.Pool, safe, view string, p DashboardParams) ([]GraficoMensal, error) {
 	where, args := buildFiltroAno(p)
+	/*
+	 * Receita e despesa saem separadas em REALIZADO e PREVISTO.
+	 *
+	 * O corte é por mov_ou_extrato, que a view já traz: 'mov' é movimento de
+	 * conta corrente — dinheiro que entrou ou saiu — e 'ext' é provisão de
+	 * extrato, o que ainda vai acontecer. A fronteira entre os dois é garantida
+	 * por considerar_mov_ext na própria view, então não há risco de um
+	 * lançamento ser contado nas duas trilhas.
+	 *
+	 * Os totais continuam somando os dois, para que Receita e Despesa — e tudo
+	 * que depende delas — não mudem de valor com esta alteração.
+	 */
 	sql := fmt.Sprintf(`
 		SELECT
 			mes,
 			COALESCE(SUM(CASE WHEN ajuste_receita_despesa = 1 THEN valor_final ELSE 0 END), 0) AS receita,
-			COALESCE(SUM(CASE WHEN ajuste_receita_despesa = 2 THEN valor_final ELSE 0 END), 0) AS despesa
+			COALESCE(SUM(CASE WHEN ajuste_receita_despesa = 2 THEN valor_final ELSE 0 END), 0) AS despesa,
+			COALESCE(SUM(CASE WHEN ajuste_receita_despesa = 1 AND mov_ou_extrato = 'mov' THEN valor_final ELSE 0 END), 0) AS receita_real,
+			COALESCE(SUM(CASE WHEN ajuste_receita_despesa = 2 AND mov_ou_extrato = 'mov' THEN valor_final ELSE 0 END), 0) AS despesa_real,
+			COALESCE(SUM(CASE WHEN ajuste_receita_despesa = 1 AND mov_ou_extrato = 'ext' THEN valor_final ELSE 0 END), 0) AS receita_prev,
+			COALESCE(SUM(CASE WHEN ajuste_receita_despesa = 2 AND mov_ou_extrato = 'ext' THEN valor_final ELSE 0 END), 0) AS despesa_prev
 		FROM %s.%s
 		WHERE %s
 		GROUP BY mes
@@ -248,14 +372,31 @@ func queryGraficoMensal(ctx context.Context, pool *pgxpool.Pool, safe, view stri
 
 	for rows.Next() {
 		var mes int
-		var receita, despesa float64
-		if err := rows.Scan(&mes, &receita, &despesa); err != nil {
+		var receita, despesa, receitaReal, despesaReal, receitaPrev, despesaPrev float64
+		if err := rows.Scan(&mes, &receita, &despesa, &receitaReal, &despesaReal, &receitaPrev, &despesaPrev); err != nil {
 			return nil, err
 		}
 		if mes >= 1 && mes <= 12 {
-			resultado[mes-1].Receita = receita
-			resultado[mes-1].Despesa = despesa
-			resultado[mes-1].ResultadoMes = receita - despesa
+			m := &resultado[mes-1]
+			m.Receita = receita
+			m.Despesa = despesa
+			m.ResultadoMes = receita - despesa
+			m.ReceitaRealizada = receitaReal
+			m.DespesaRealizada = despesaReal
+			m.ResultadoRealizado = receitaReal - despesaReal
+			m.ReceitaPrevista = receitaPrev
+			m.DespesaPrevista = despesaPrev
+			/*
+			 * A regra do Omie, conferida contra um relatório real (ver
+			 * acumulado_omie_test.go): o resultado PREVISTO do mês inclui o que
+			 * já foi realizado nele. A projeção não é "o que falta", é "como o
+			 * mês deve fechar".
+			 *
+			 * Somar só as provisões daria um número menor e plausível, e a
+			 * projeção de caixa ficaria otimista justamente nos meses em que já
+			 * houve movimento.
+			 */
+			m.ResultadoPrevisto = m.ResultadoRealizado + (receitaPrev - despesaPrev)
 		}
 	}
 
@@ -354,6 +495,65 @@ saldo no começo do período coberto pela view. Se a conta é antiga e o
 saldo_inicial for de anos atrás, o resultado será o saldo daquela data mais os
 movimentos deste ano — plausível, e errado.
 */
+/*
+acumularResultado monta as duas trilhas encadeadas do modelo do Omie.
+
+A conta, conferida contra um relatório real do Omie em acumulado_omie_test.go:
+
+	SaldoInicial(mês N) = Acumulado(mês N−1)
+	Acumulado(mês N)    = SaldoInicial(mês N) + Resultado(mês N)
+
+As duas trilhas partem da MESMA âncora e divergem a partir dali: a realizada
+soma só o que entrou e saiu; a prevista soma o realizado do mês mais as
+provisões. Em janeiro as duas abrem no mesmo ponto, o que é correto — a posição
+de caixa no início do ano é uma só.
+
+Pura e sem banco pelo mesmo motivo da acumularSaldos: é a única aritmética da
+parte, e um erro aqui produz uma série plausível. A tela não denuncia.
+*/
+func acumularResultado(ancora, atrasados float64, mensal []GraficoMensal) []GraficoAcumulado {
+	out := make([]GraficoAcumulado, len(mensal))
+
+	/*
+	 * As duas trilhas abrem em pontos diferentes, e é de propósito.
+	 *
+	 * A realizada parte do saldo das contas: é a posição de caixa de fato. A
+	 * prevista parte do saldo MAIS o que está vencido e não pago — porque esse
+	 * dinheiro já deveria ter saído (ou entrado) e ainda vai pesar no caixa.
+	 *
+	 * `atrasados` chega zerado quando o filtro está desligado, e aí as duas
+	 * abrem no mesmo ponto.
+	 */
+	accReal, accPrev := ancora, ancora+atrasados
+	var accMisto float64
+
+	for i, m := range mensal {
+		saldoIniReal, saldoIniPrev := accReal, accPrev
+
+		accReal += m.ResultadoRealizado
+		accPrev += m.ResultadoPrevisto
+		accMisto += m.ResultadoMes
+
+		out[i] = GraficoAcumulado{
+			Mes:     m.Mes,
+			MesNome: m.MesNome,
+			// Campos antigos, preservados byte a byte: a cascata da Visão Geral
+			// lê resultado_mes e soma por fora, e trocar isso agora mudaria o
+			// desenho antes de a tela estar pronta para as trilhas.
+			ResultadoMes: m.ResultadoMes,
+			Acumulado:    accMisto,
+
+			SaldoInicialRealizado: saldoIniReal,
+			ResultadoRealizado:    m.ResultadoRealizado,
+			AcumuladoRealizado:    accReal,
+			SaldoInicialPrevisto:  saldoIniPrev,
+			ResultadoPrevisto:     m.ResultadoPrevisto,
+			AcumuladoPrevisto:     accPrev,
+		}
+	}
+	return out
+}
+
 func acumularSaldos(saldoInicial float64, realizadoPorMes [12]float64) []SaldoMes {
 	out := make([]SaldoMes, 12)
 	acc := saldoInicial

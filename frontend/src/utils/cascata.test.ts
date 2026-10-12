@@ -10,7 +10,15 @@ function serie(vals: Record<number, number>): GraficoAcumulado[] {
   return Array.from({ length: 12 }, (_, i) => {
     const resultado_mes = vals[i + 1] ?? 0
     acc += resultado_mes
-    return { mes: i + 1, mes_nome: NOMES[i], resultado_mes, acumulado: acc }
+    // As trilhas realizada/prevista nao importam para a cascata, que le
+    // resultado_mes. Preenchidas com o mesmo valor para satisfazer o contrato.
+    return {
+      mes: i + 1, mes_nome: NOMES[i], resultado_mes, acumulado: acc,
+      saldo_inicial_realizado: acc - resultado_mes, resultado_realizado: resultado_mes,
+      acumulado_realizado: acc,
+      saldo_inicial_previsto: acc - resultado_mes, resultado_previsto: resultado_mes,
+      acumulado_previsto: acc,
+    }
   })
 }
 

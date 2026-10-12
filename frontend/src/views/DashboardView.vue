@@ -35,10 +35,31 @@
           </div>
         </div>
 
-        <!-- Inadimplência: só nas abas de contas, mesmo criterio do seletor de MÊS.
-             Nas demais abas nem aparece, porque nao tem efeito nelas. -->
-        <div class="fi" v-if="abaDeContas">
-          <span class="fi-label">INADIMPLÊNCIA</span>
+        <!--
+          Natureza do lançamento. Vazio e os dois marcados dão no mesmo: sem
+          recorte — a mesma convenção dos outros filtros marcáveis.
+
+          Vale para todas as abas porque todas leem a mesma base: recortar numa
+          e não na outra faria a aba Resultado e o Fluxo de Caixa discordarem
+          sobre o mesmo mês.
+        -->
+        <div class="fi">
+          <span class="fi-label">LANÇAMENTOS</span>
+          <select class="fi-select" :value="trilhaSelecionada" @change="definirTrilha($event)">
+            <option value="">Realizado e previsto</option>
+            <option value="realizado">Só realizado</option>
+            <option value="previsto">Só previsto</option>
+          </select>
+        </div>
+
+        <!--
+          Inadimplência: deixou de ser exclusiva das abas de contas.
+
+          Passou a pesar no acumulado previsto — um título vencido e não pago
+          ainda vai mexer no caixa —, e por isso faz efeito em todas as abas.
+        -->
+        <div class="fi">
+          <span class="fi-label">ATRASADOS</span>
           <select class="fi-select" v-model="filtros.inadimplencia">
             <option :value="true">Considerar</option>
             <option :value="false">Ignorar</option>
@@ -431,7 +452,10 @@ const filtrosAtivos = computed(() => ({
   categorias_excluir: filtros.categorias_excluir.length ? filtros.categorias_excluir : undefined,
   // Enviado apenas nas abas de contas: Fluxo de Caixa usa o mesmo endpoint e
   // precisa continuar devolvendo exatamente o que devolvia antes.
-  inadimplencia:    abaDeContas.value && filtros.inadimplencia ? true : undefined,
+  // Deixou de depender da aba: os atrasados entram na abertura do acumulado
+  // previsto, e isso vale em qualquer visão.
+  inadimplencia:    filtros.inadimplencia ? true : undefined,
+  trilhas:          filtros.trilhas.length === 1 ? filtros.trilhas : undefined,
 }))
 
 // ── Estado ─────────────────────────────────────────────────────────────────
@@ -476,7 +500,31 @@ const filtros = reactive({
   // Ligado por padrao: quem abre Contas a Pagar ou a Receber quer ver o que
   // esta vencido. Desligado, ninguem descobriria a opcao.
   inadimplencia:     true,
+  /**
+   * Vazio = as duas naturezas, sem recorte. Mantém a tela idêntica à de antes
+   * do filtro existir para quem nunca o tocar.
+   */
+  trilhas:           [] as string[],
 })
+
+/*
+ * Natureza do lançamento: realizado, previsto, ou os dois.
+ *
+ * Um select em vez de caixas de marcação porque só há três estados possíveis, e
+ * o terceiro — nenhum marcado — não existe: ele devolveria a tela vazia. Com o
+ * select, o estado "os dois" é a opção padrão e fica visível, em vez de ser a
+ * ausência de marcação.
+ *
+ * Vazio é o padrão e não recorta nada: mantém a tela idêntica à de antes do
+ * filtro existir para quem nunca o tocar.
+ */
+const trilhaSelecionada = computed(() => filtros.trilhas[0] ?? '')
+
+function definirTrilha(e: Event) {
+  const v = (e.target as HTMLSelectElement).value
+  filtros.trilhas = v ? [v] : []
+  carregar()
+}
 
 /**
  * Ordem da cascata. Cada filtro é restringido apenas pelos anteriores, e mudar um

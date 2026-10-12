@@ -186,3 +186,37 @@ func queryInadimplencia(ctx context.Context, pool *pgxpool.Pool, schema string, 
 	}
 	return todas, nil
 }
+
+/*
+totalAtrasados devolve o líquido do que está vencido e não pago: receitas menos
+despesas atrasadas do ano.
+
+Existe para a trilha PREVISTA do acumulado. No relatório do Omie os atrasados
+formam um balde próprio, ANTES de janeiro, e entram na abertura da projeção —
+uma projeção de caixa que ignora o que já venceu e não foi pago é otimista por
+construção, e otimista exatamente no valor que mais importa.
+
+Reaproveita queryInadimplencia com mês zero em vez de uma agregação própria. O
+SQL de lá carrega o rateio de categoria, a deduplicação de departamento e os
+mesmos joins da matvw; reescrever isso como SUM abriria espaço para os dois
+números divergirem — a aba mostraria um total e o acumulado partiria de outro.
+
+O custo é trazer as linhas para somar em Go. É o mesmo custo que a aba Fluxo de
+Caixa já paga quando o filtro está ligado.
+*/
+func totalAtrasados(ctx context.Context, pool *pgxpool.Pool, schema string, p DashboardParams) (float64, error) {
+	linhas, err := queryInadimplencia(ctx, pool, schema, p, 0)
+	if err != nil {
+		return 0, fmt.Errorf("dados.totalAtrasados: %w", err)
+	}
+
+	var liquido float64
+	for _, t := range linhas {
+		if t.Tipo == "receita" {
+			liquido += t.Valor
+		} else {
+			liquido -= t.Valor
+		}
+	}
+	return liquido, nil
+}
