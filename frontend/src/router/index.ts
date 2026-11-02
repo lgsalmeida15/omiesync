@@ -212,4 +212,32 @@ router.beforeEach(async to => {
   return true
 })
 
+/*
+ * Auto-cura de deploy: quando o index.html em cache ainda aponta pra um chunk
+ * com hash que o deploy já substituiu, o import() lazy da rota falha e a
+ * navegação aborta SEM erro visível (a pessoa fica presa na tela atual). Em vez
+ * de travar, recarregamos a página uma vez — o novo index.html (servido com
+ * Cache-Control: no-cache) traz os hashes novos e a navegação segue.
+ *
+ * O guard contra loop usa sessionStorage: só recarrega se ainda não recarregou
+ * nesta navegação.
+ */
+router.onError((err, to) => {
+  const msg = (err as Error)?.message || ''
+  const ehChunk = /dynamically imported module|Importing a module script failed|error loading dynamically imported module|Failed to fetch/i.test(msg)
+  if (!ehChunk) return
+  const marca = 'vision:chunk-reload'
+  try {
+    if (sessionStorage.getItem(marca)) return
+    sessionStorage.setItem(marca, '1')
+  } catch { /* modo restrito: segue pro reload mesmo assim */ }
+  window.location.assign(to?.fullPath || window.location.pathname)
+})
+
+// Limpa a marca após uma navegação bem-sucedida, liberando um novo auto-reload
+// num próximo deploy.
+router.afterEach(() => {
+  try { sessionStorage.removeItem('vision:chunk-reload') } catch { /* noop */ }
+})
+
 export default router

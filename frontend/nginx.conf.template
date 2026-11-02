@@ -19,7 +19,12 @@ server {
         proxy_pass http://$backend;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
+        # Repassa o IP real que o Traefik determinou (ele sobrescreve o que o
+        # cliente manda, então é confiável). Usar $remote_addr aqui colocava o
+        # IP do PRÓPRIO Traefik, colapsando todos os usuários num único balde de
+        # rate limit (httprate.LimitByIP no backend) — a equipe inteira batia no
+        # limite de /auth/login e /auth/select-grupo compartilhado.
+        proxy_set_header X-Real-IP $http_x_real_ip;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
 
@@ -32,6 +37,12 @@ server {
     # Vue Router — todas as rotas caem no index.html
     location / {
         try_files $uri $uri/ /index.html;
+        # O index.html NUNCA pode ser cacheado sem revalidar: ele referencia os
+        # chunks com hash, e os chunks são immutable (1 ano). Um index.html velho
+        # em cache aponta pra chunks que o deploy já substituiu → o import() lazy
+        # dá 404 e a navegação do vue-router aborta em silêncio (ex.: preso no
+        # /select-grupo sem erro). no-cache força o Etag a ser revalidado sempre.
+        add_header Cache-Control "no-cache";
     }
 
     # Cache longo para assets com hash no nome
