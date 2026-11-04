@@ -27,7 +27,10 @@ import (
 //	v11 — tabela contratos (ListarContratos). Não precisa de bloco de auto-upgrade
 //	      próprio: o CREATE TABLE IF NOT EXISTS do slice principal já é idempotente
 //	      e roda de novo em todo schema cuja versão ficou para trás.
-const CurrentSchemaVersion = 11
+//	v12 — contratos como fallback de departamento/cliente/categoria nas matvw;
+//	      recria as duas. Renomeia contratos.codigo_lancamento_omie para
+//	      codigo_contrato_omie (ver migration 000037).
+const CurrentSchemaVersion = 12
 
 // Provisioner cria e inicializa schemas de tenant.
 type Provisioner struct {
@@ -65,9 +68,36 @@ func (p *Provisioner) markProvisioned(ctx context.Context, schemaName string) er
 // É idempotente — pode ser chamado multiplas vezes sem efeitos colaterais.
 // Ao concluir com sucesso, marca a versão em _etl.schema_versions.
 func (p *Provisioner) ProvisionSchema(ctx context.Context, schemaName string) error {
+	stmts := provisionStatements(schemaName)
+
+	for i, stmt := range stmts {
+		if _, err := p.pool.Exec(ctx, stmt); err != nil {
+			// Inclui um trecho do statement: sem isso, um erro de sintaxe numa das
+			// views gerenciais não diz qual das dezenas de statements falhou.
+			trecho := stmt
+			if len(trecho) > 200 {
+				trecho = trecho[:200] + "..."
+			}
+			return fmt.Errorf("db.Provisioner.ProvisionSchema [%s] statement %d (%s): %w", schemaName, i, trecho, err)
+		}
+	}
+
+	if err := p.markProvisioned(ctx, schemaName); err != nil {
+		// Não fatal — schema está correto, só o registro de versão falhou
+		fmt.Printf("db.Provisioner.ProvisionSchema: markProvisioned falhou para %s: %v\n", schemaName, err)
+	}
+
+	return nil
+}
+
+// provisionStatements monta o SQL de provisionamento do schema. Separado de
+// ProvisionSchema para ser testável sem banco: as views gerenciais são strings com
+// dezenas de %s posicionais, e um placeholder a mais ou a menos só apareceria em
+// tempo de execução, num REFRESH, contra o schema de um cliente.
+func provisionStatements(schemaName string) []string {
 	safe := pgx.Identifier{schemaName}.Sanitize()
 
-	stmts := []string{
+	return []string{
 		// Schema
 		fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", safe),
 
@@ -242,15 +272,14 @@ func (p *Provisioner) ProvisionSchema(ctx context.Context, schemaName string) er
 		)`, safe),
 
 		// Contratos de serviço
-		// codigo_lancamento_omie guarda o nCodCtr do cabeçalho. É a chave que
-		// extrato.raw ->> 'cNumero' referencia nos lançamentos originados de contrato,
-		// que não têm título em contas_pagar/contas_receber. numero_contrato (cNumCtr)
-		// fica ao lado para permitir validar a chave nos dois formatos sem recoletar.
+		// codigo_contrato_omie guarda o nCodCtr do cabeçalho e é a chave de identidade
+		// da tabela. A chave de LIGAÇÃO com o extrato é outra: numero_contrato (cNumCtr)
+		// contra extrato.raw ->> 'cNumero', confirmado em produção com ~94% de acerto.
 		// Rateio por departamento e categorias por item ficam em raw.
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s.contratos (
 			id                     BIGSERIAL   PRIMARY KEY,
 			empresa_id             UUID        NOT NULL,
-			codigo_lancamento_omie BIGINT      NOT NULL,
+			codigo_contrato_omie BIGINT      NOT NULL,
 			numero_contrato        TEXT,
 			codigo_cliente         BIGINT,
 			codigo_situacao        TEXT,
@@ -264,7 +293,7 @@ func (p *Provisioner) ProvisionSchema(ctx context.Context, schemaName string) er
 			codigo_conta_corrente  BIGINT,
 			raw                    JSONB,
 			synced_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-			UNIQUE(empresa_id, codigo_lancamento_omie)
+			UNIQUE(empresa_id, codigo_contrato_omie)
 		)`, safe),
 
 		// Indices de performance
@@ -429,6 +458,25 @@ BEGIN
 END
 $$`, "'"+schemaName+"'", safe),
 
+		// Auto-upgrade v12: contratos entram como fallback de departamento, cliente e
+		// categoria nos lançamentos sem título em CP/CR. As DUAS views mudam — o ramo
+		// mov existe em ambas e também ganha o fallback, via detalhes.cNumCtr. O
+		// marcador é a ausência da CTE ctr_distribuicao na definição atual.
+		fmt.Sprintf(`DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_matviews
+               WHERE schemaname = %[1]s AND matviewname = 'matvw_gerencial_ano_corrente'
+                 AND definition NOT LIKE '%%ctr_distribuicao%%') THEN
+        DROP MATERIALIZED VIEW %[2]s.matvw_gerencial_ano_corrente CASCADE;
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_matviews
+               WHERE schemaname = %[1]s AND matviewname = 'matvw_gerencial_historico'
+                 AND definition NOT LIKE '%%ctr_distribuicao%%') THEN
+        DROP MATERIALIZED VIEW %[2]s.matvw_gerencial_historico CASCADE;
+    END IF;
+END
+$$`, "'"+schemaName+"'", safe),
+
 		// ── View: ano corrente + previsões futuras ────────────────────────────────
 		// Filtro: ano >= ano atual (captura previsões de extrato para anos futuros).
 		// REFRESH: após todo sync (incremental e full) — dataset pequeno, rápido.
@@ -444,6 +492,12 @@ movimentos_unificados AS (
         e.codigo_conta_corrente::TEXT          AS codigo_conta_corrente,
         e.raw ->> 'nCodCliente'                AS codigo_cliente,
         e.raw ->> 'nCodLancamento'             AS codigo_titulo,
+        -- Chave de ligação com contratos, para os lançamentos que não têm título em
+        -- contas_pagar/contas_receber. Validado em produção: casamento exato contra
+        -- contratos.numero_contrato, sem prefixo nem máscara. Sem filtro por cOrigem
+        -- de propósito — amarraria o join a um rótulo de interface que a Omie pode
+        -- mudar, e o formato do número já exclui o que não é contrato (ex.: "RPS 1406").
+        e.raw ->> 'cNumero'                    AS numero_contrato,
         NULL::TEXT                             AS grupo,
         TO_CHAR(e.data_lancamento, 'DD/MM/YYYY') AS data_pagamento,
         NULL::TEXT                             AS data_previsao,
@@ -491,6 +545,9 @@ movimentos_unificados AS (
         mf.codigo_conta_corrente::TEXT                            AS codigo_conta_corrente,
         mf.raw -> 'detalhes' ->> 'nCodCliente'                   AS codigo_cliente,
         mf.codigo_titulo::TEXT                                    AS codigo_titulo,
+        -- O ListarMovimentos traz nCodCtr/cNumCtr nativamente, então o mesmo fallback
+        -- de contrato cobre lançamentos realizados sem título.
+        mf.raw -> 'detalhes' ->> 'cNumCtr'                       AS numero_contrato,
         mf.raw -> 'detalhes' ->> 'cGrupo'                        AS grupo,
         mf.raw -> 'detalhes' ->> 'dDtPagamento'                  AS data_pagamento,
         mf.raw -> 'detalhes' ->> 'dDtPrevisao'                   AS data_previsao,
@@ -576,19 +633,67 @@ cp_distribuicao AS (
     ) dist_todas
     ORDER BY empresa_id, id, codigo_departamento
 ),
+-- Contratos: fallback de enriquecimento para lançamentos sem título em CP/CR.
+--
+-- Medido em produção antes de escrever isto: a categoria do contrato é IDÊNTICA à
+-- que o extrato já traz em cCodCategoria em todas as linhas casadas, então o ganho
+-- real aqui é departamento e cliente. codigo_categoria entra só como último recurso,
+-- para o caso de cCodCategoria vir vazio.
+--
+-- No máximo um cabeçalho por (empresa, número de contrato). Hoje a consulta de
+-- duplicatas não retorna nada, mas nada no schema garante isso — o UNIQUE é por
+-- codigo_contrato_omie. Havendo duplicata, vence o contrato de código mais alto,
+-- que é o mais recente.
+ctr_cabecalho AS (
+    SELECT DISTINCT ON (empresa_id, numero_contrato)
+        empresa_id, numero_contrato, codigo_cliente, codigo_categoria,
+        -- Na lista de seleção só porque é critério de desempate do ORDER BY.
+        -- O DISTINCT ON aceita ordenar por coluna de fora, mas cp_distribuicao
+        -- resolve o mesmo problema com SELECT *; manter as duas no mesmo formato.
+        codigo_contrato_omie
+    FROM %s.contratos
+    WHERE numero_contrato IS NOT NULL AND numero_contrato <> ''
+    ORDER BY empresa_id, numero_contrato, codigo_contrato_omie DESC
+),
+-- Mesma regra de cp_distribuicao: NÃO aplica o percentual do departamento, porque
+-- duas linhas de rateio duplicariam o valor cheio. Uma só por contrato.
+--
+-- O guard de jsonb_typeof é obrigatório: contrato sem rateio traz 'departamentos'
+-- ausente ou como objeto vazio, e jsonb_array_elements sobre não-array levanta
+-- exceção, derrubando o REFRESH inteiro.
+ctr_distribuicao AS (
+    SELECT DISTINCT ON (empresa_id, numero_contrato) *
+    FROM (
+        SELECT
+            ctr.empresa_id,
+            ctr.numero_contrato,
+            (dep_elem ->> 'nValDep')::NUMERIC              AS valor_distribuido,
+            (dep_elem ->> 'nPerDep')::NUMERIC              AS percentual_distribuicao,
+            dep_elem ->> 'cCodDep'                         AS codigo_departamento
+        FROM %s.contratos ctr,
+             LATERAL jsonb_array_elements(
+                 CASE WHEN jsonb_typeof(ctr.raw -> 'departamentos') = 'array'
+                      THEN ctr.raw -> 'departamentos'
+                      ELSE '[]'::JSONB END) AS dep_elem
+        WHERE ctr.numero_contrato IS NOT NULL AND ctr.numero_contrato <> ''
+    ) dep_todas
+    ORDER BY empresa_id, numero_contrato, codigo_departamento
+),
 movimentos_processados AS (
     SELECT
         m.*,
         c.codigo_categoria                             AS categoria_join,
         c.percentual_categoria,
         c.origem,
-        COALESCE(d.codigo_departamento, m.departamento_mov) AS codigo_departamento_join,
+        -- Precedência: distribuição do título, depois rateio do contrato, por último
+        -- o departamento do próprio movimento. O contrato só entra onde não há título.
+        COALESCE(d.codigo_departamento, ctrd.codigo_departamento, m.departamento_mov) AS codigo_departamento_join,
         d.percentual_distribuicao                      AS percentual_distribuicao_join,
         d.valor_distribuido                            AS valor_distribuido_join,
         cc.fluxo_caixa                                 AS conta_considerada,
-        LEFT(COALESCE(c.codigo_categoria, m.codigo_categoria), 4) AS cod_categoria_final_superior,
+        LEFT(COALESCE(c.codigo_categoria, m.codigo_categoria, ctrc.codigo_categoria), 4) AS cod_categoria_final_superior,
         cat_sup.descricao                              AS descricao_categoria_superior,
-        COALESCE(c.codigo_categoria, m.codigo_categoria) AS cod_categoria_final,
+        COALESCE(c.codigo_categoria, m.codigo_categoria, ctrc.codigo_categoria) AS cod_categoria_final,
         COALESCE(c.percentual_categoria, 100)          AS percentual_cat_final,
         CASE
             WHEN c.origem = 'contas_a_receber'                                              THEN 'receita'
@@ -626,7 +731,7 @@ movimentos_processados AS (
         -- Título usa a distribuição de contas_pagar/receber; lançamento avulso usa o
         -- array departamentos do próprio movimento.
         CASE
-            WHEN COALESCE(d.codigo_departamento, m.departamento_mov) IS NULL THEN 'Sem departamento'
+            WHEN COALESCE(d.codigo_departamento, ctrd.codigo_departamento, m.departamento_mov) IS NULL THEN 'Sem departamento'
             ELSE dept.descricao
         END                                            AS departamento_final,
         COALESCE(cli.nome_fantasia, m.cliente_ext, 'Cliente não informado') AS cliente_final,
@@ -645,20 +750,31 @@ movimentos_processados AS (
     -- cp_distribuicao já vem deduplicada por (empresa, título), então este join
     -- não multiplica linhas. Hash join, não laço aninhado.
     LEFT JOIN cp_distribuicao d    ON m.codigo_titulo = d.id   AND m.empresa_id = d.empresa_id
+    -- Contrato só entra onde NÃO há título: a condição c.origem IS NULL está no ON,
+    -- não num WHERE, para não transformar o LEFT JOIN em filtro de linhas. Ambas as
+    -- CTEs vêm deduplicadas por (empresa, número de contrato), então nenhum destes
+    -- dois joins multiplica linhas — se multiplicasse, o valor do lançamento seria
+    -- contado duas vezes e os totais da view subiriam em silêncio.
+    LEFT JOIN ctr_cabecalho   ctrc ON m.numero_contrato = ctrc.numero_contrato
+                                  AND m.empresa_id = ctrc.empresa_id
+                                  AND c.origem IS NULL
+    LEFT JOIN ctr_distribuicao ctrd ON m.numero_contrato = ctrd.numero_contrato
+                                  AND m.empresa_id = ctrd.empresa_id
+                                  AND c.origem IS NULL
     LEFT JOIN %s.contas_correntes cc
            ON cc.codigo_conta_corrente::TEXT = m.codigo_conta_corrente
           AND cc.empresa_id = m.empresa_id
     LEFT JOIN categorias_processadas cat_sup
-           ON LEFT(COALESCE(c.codigo_categoria, m.codigo_categoria), 4) = cat_sup.codigo
+           ON LEFT(COALESCE(c.codigo_categoria, m.codigo_categoria, ctrc.codigo_categoria), 4) = cat_sup.codigo
           AND cat_sup.empresa_id = m.empresa_id
     LEFT JOIN categorias_processadas cat_final
-           ON COALESCE(c.codigo_categoria, m.codigo_categoria) = cat_final.codigo
+           ON COALESCE(c.codigo_categoria, m.codigo_categoria, ctrc.codigo_categoria) = cat_final.codigo
           AND cat_final.empresa_id = m.empresa_id
     LEFT JOIN %s.departamentos dept
-           ON COALESCE(d.codigo_departamento, m.departamento_mov) = dept.codigo
+           ON COALESCE(d.codigo_departamento, ctrd.codigo_departamento, m.departamento_mov) = dept.codigo
           AND dept.empresa_id = m.empresa_id
     LEFT JOIN %s.clientes cli
-           ON cli.codigo_cliente_omie::TEXT = m.codigo_cliente
+           ON cli.codigo_cliente_omie::TEXT = COALESCE(m.codigo_cliente, ctrc.codigo_cliente::TEXT)
           AND cli.empresa_id = m.empresa_id
     LEFT JOIN _etl.empresas emp
            ON emp.id = m.empresa_id
@@ -669,7 +785,7 @@ SELECT
     -- grão de movimento: uma baixa pode gerar N linhas via rateio de categoria.
     ROW_NUMBER() OVER ()                           AS mv_id,
     empresa_id, nome_empresa, codigo_conta_corrente, codigo_cliente,
-    codigo_titulo, grupo, data_pagamento, data_previsao, codigo_categoria,
+    codigo_titulo, numero_contrato, grupo, data_pagamento, data_previsao, codigo_categoria,
     status_mov, valor_titulo_mov_ext, ano, mes, mov_ou_extrato,
     categoria_join, percentual_categoria, origem, codigo_departamento_join,
     percentual_distribuicao_join, valor_distribuido_join, conta_considerada,
@@ -687,6 +803,8 @@ WITH NO DATA`,
 			safe,           // movimentos_financeiros
 			safe, safe,     // cp_categorias: contas_pagar, contas_receber
 			safe, safe,     // cp_distribuicao: contas_pagar, contas_receber
+			safe,           // ctr_cabecalho: contratos
+			safe,           // ctr_distribuicao: contratos
 			safe,           // movimentos_processados: contas_correntes
 			safe,           // movimentos_processados: departamentos
 			safe,           // movimentos_processados: clientes
@@ -722,6 +840,9 @@ movimentos_unificados AS (
         mf.codigo_conta_corrente::TEXT                            AS codigo_conta_corrente,
         mf.raw -> 'detalhes' ->> 'nCodCliente'                   AS codigo_cliente,
         mf.codigo_titulo::TEXT                                    AS codigo_titulo,
+        -- O ListarMovimentos traz nCodCtr/cNumCtr nativamente, então o mesmo fallback
+        -- de contrato cobre lançamentos realizados sem título.
+        mf.raw -> 'detalhes' ->> 'cNumCtr'                       AS numero_contrato,
         mf.raw -> 'detalhes' ->> 'cGrupo'                        AS grupo,
         mf.raw -> 'detalhes' ->> 'dDtPagamento'                  AS data_pagamento,
         mf.raw -> 'detalhes' ->> 'dDtPrevisao'                   AS data_previsao,
@@ -803,19 +924,67 @@ cp_distribuicao AS (
     ) dist_todas
     ORDER BY empresa_id, id, codigo_departamento
 ),
+-- Contratos: fallback de enriquecimento para lançamentos sem título em CP/CR.
+--
+-- Medido em produção antes de escrever isto: a categoria do contrato é IDÊNTICA à
+-- que o extrato já traz em cCodCategoria em todas as linhas casadas, então o ganho
+-- real aqui é departamento e cliente. codigo_categoria entra só como último recurso,
+-- para o caso de cCodCategoria vir vazio.
+--
+-- No máximo um cabeçalho por (empresa, número de contrato). Hoje a consulta de
+-- duplicatas não retorna nada, mas nada no schema garante isso — o UNIQUE é por
+-- codigo_contrato_omie. Havendo duplicata, vence o contrato de código mais alto,
+-- que é o mais recente.
+ctr_cabecalho AS (
+    SELECT DISTINCT ON (empresa_id, numero_contrato)
+        empresa_id, numero_contrato, codigo_cliente, codigo_categoria,
+        -- Na lista de seleção só porque é critério de desempate do ORDER BY.
+        -- O DISTINCT ON aceita ordenar por coluna de fora, mas cp_distribuicao
+        -- resolve o mesmo problema com SELECT *; manter as duas no mesmo formato.
+        codigo_contrato_omie
+    FROM %s.contratos
+    WHERE numero_contrato IS NOT NULL AND numero_contrato <> ''
+    ORDER BY empresa_id, numero_contrato, codigo_contrato_omie DESC
+),
+-- Mesma regra de cp_distribuicao: NÃO aplica o percentual do departamento, porque
+-- duas linhas de rateio duplicariam o valor cheio. Uma só por contrato.
+--
+-- O guard de jsonb_typeof é obrigatório: contrato sem rateio traz 'departamentos'
+-- ausente ou como objeto vazio, e jsonb_array_elements sobre não-array levanta
+-- exceção, derrubando o REFRESH inteiro.
+ctr_distribuicao AS (
+    SELECT DISTINCT ON (empresa_id, numero_contrato) *
+    FROM (
+        SELECT
+            ctr.empresa_id,
+            ctr.numero_contrato,
+            (dep_elem ->> 'nValDep')::NUMERIC              AS valor_distribuido,
+            (dep_elem ->> 'nPerDep')::NUMERIC              AS percentual_distribuicao,
+            dep_elem ->> 'cCodDep'                         AS codigo_departamento
+        FROM %s.contratos ctr,
+             LATERAL jsonb_array_elements(
+                 CASE WHEN jsonb_typeof(ctr.raw -> 'departamentos') = 'array'
+                      THEN ctr.raw -> 'departamentos'
+                      ELSE '[]'::JSONB END) AS dep_elem
+        WHERE ctr.numero_contrato IS NOT NULL AND ctr.numero_contrato <> ''
+    ) dep_todas
+    ORDER BY empresa_id, numero_contrato, codigo_departamento
+),
 movimentos_processados AS (
     SELECT
         m.*,
         c.codigo_categoria                             AS categoria_join,
         c.percentual_categoria,
         c.origem,
-        COALESCE(d.codigo_departamento, m.departamento_mov) AS codigo_departamento_join,
+        -- Precedência: distribuição do título, depois rateio do contrato, por último
+        -- o departamento do próprio movimento. O contrato só entra onde não há título.
+        COALESCE(d.codigo_departamento, ctrd.codigo_departamento, m.departamento_mov) AS codigo_departamento_join,
         d.percentual_distribuicao                      AS percentual_distribuicao_join,
         d.valor_distribuido                            AS valor_distribuido_join,
         cc.fluxo_caixa                                 AS conta_considerada,
-        LEFT(COALESCE(c.codigo_categoria, m.codigo_categoria), 4) AS cod_categoria_final_superior,
+        LEFT(COALESCE(c.codigo_categoria, m.codigo_categoria, ctrc.codigo_categoria), 4) AS cod_categoria_final_superior,
         cat_sup.descricao                              AS descricao_categoria_superior,
-        COALESCE(c.codigo_categoria, m.codigo_categoria) AS cod_categoria_final,
+        COALESCE(c.codigo_categoria, m.codigo_categoria, ctrc.codigo_categoria) AS cod_categoria_final,
         COALESCE(c.percentual_categoria, 100)          AS percentual_cat_final,
         CASE
             WHEN c.origem = 'contas_a_receber'                                              THEN 'receita'
@@ -853,7 +1022,7 @@ movimentos_processados AS (
         -- Título usa a distribuição de contas_pagar/receber; lançamento avulso usa o
         -- array departamentos do próprio movimento.
         CASE
-            WHEN COALESCE(d.codigo_departamento, m.departamento_mov) IS NULL THEN 'Sem departamento'
+            WHEN COALESCE(d.codigo_departamento, ctrd.codigo_departamento, m.departamento_mov) IS NULL THEN 'Sem departamento'
             ELSE dept.descricao
         END                                            AS departamento_final,
         COALESCE(cli.nome_fantasia, m.cliente_ext, 'Cliente não informado') AS cliente_final,
@@ -872,20 +1041,31 @@ movimentos_processados AS (
     -- cp_distribuicao já vem deduplicada por (empresa, título), então este join
     -- não multiplica linhas. Hash join, não laço aninhado.
     LEFT JOIN cp_distribuicao d    ON m.codigo_titulo = d.id   AND m.empresa_id = d.empresa_id
+    -- Contrato só entra onde NÃO há título: a condição c.origem IS NULL está no ON,
+    -- não num WHERE, para não transformar o LEFT JOIN em filtro de linhas. Ambas as
+    -- CTEs vêm deduplicadas por (empresa, número de contrato), então nenhum destes
+    -- dois joins multiplica linhas — se multiplicasse, o valor do lançamento seria
+    -- contado duas vezes e os totais da view subiriam em silêncio.
+    LEFT JOIN ctr_cabecalho   ctrc ON m.numero_contrato = ctrc.numero_contrato
+                                  AND m.empresa_id = ctrc.empresa_id
+                                  AND c.origem IS NULL
+    LEFT JOIN ctr_distribuicao ctrd ON m.numero_contrato = ctrd.numero_contrato
+                                  AND m.empresa_id = ctrd.empresa_id
+                                  AND c.origem IS NULL
     LEFT JOIN %s.contas_correntes cc
            ON cc.codigo_conta_corrente::TEXT = m.codigo_conta_corrente
           AND cc.empresa_id = m.empresa_id
     LEFT JOIN categorias_processadas cat_sup
-           ON LEFT(COALESCE(c.codigo_categoria, m.codigo_categoria), 4) = cat_sup.codigo
+           ON LEFT(COALESCE(c.codigo_categoria, m.codigo_categoria, ctrc.codigo_categoria), 4) = cat_sup.codigo
           AND cat_sup.empresa_id = m.empresa_id
     LEFT JOIN categorias_processadas cat_final
-           ON COALESCE(c.codigo_categoria, m.codigo_categoria) = cat_final.codigo
+           ON COALESCE(c.codigo_categoria, m.codigo_categoria, ctrc.codigo_categoria) = cat_final.codigo
           AND cat_final.empresa_id = m.empresa_id
     LEFT JOIN %s.departamentos dept
-           ON COALESCE(d.codigo_departamento, m.departamento_mov) = dept.codigo
+           ON COALESCE(d.codigo_departamento, ctrd.codigo_departamento, m.departamento_mov) = dept.codigo
           AND dept.empresa_id = m.empresa_id
     LEFT JOIN %s.clientes cli
-           ON cli.codigo_cliente_omie::TEXT = m.codigo_cliente
+           ON cli.codigo_cliente_omie::TEXT = COALESCE(m.codigo_cliente, ctrc.codigo_cliente::TEXT)
           AND cli.empresa_id = m.empresa_id
     LEFT JOIN _etl.empresas emp
            ON emp.id = m.empresa_id
@@ -896,7 +1076,7 @@ SELECT
     -- grão de movimento: uma baixa pode gerar N linhas via rateio de categoria.
     ROW_NUMBER() OVER ()                           AS mv_id,
     empresa_id, nome_empresa, codigo_conta_corrente, codigo_cliente,
-    codigo_titulo, grupo, data_pagamento, data_previsao, codigo_categoria,
+    codigo_titulo, numero_contrato, grupo, data_pagamento, data_previsao, codigo_categoria,
     status_mov, valor_titulo_mov_ext, ano, mes, mov_ou_extrato,
     categoria_join, percentual_categoria, origem, codigo_departamento_join,
     percentual_distribuicao_join, valor_distribuido_join, conta_considerada,
@@ -913,6 +1093,8 @@ WITH NO DATA`,
 			safe,           // movimentos_financeiros (sem ramo ext: extrato só tem futuro)
 			safe, safe,     // cp_categorias: contas_pagar, contas_receber
 			safe, safe,     // cp_distribuicao: contas_pagar, contas_receber
+			safe,           // ctr_cabecalho: contratos
+			safe,           // ctr_distribuicao: contratos
 			safe,           // movimentos_processados: contas_correntes
 			safe,           // movimentos_processados: departamentos
 			safe,           // movimentos_processados: clientes
@@ -927,25 +1109,6 @@ WITH NO DATA`,
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_hist_categoria ON %s.matvw_gerencial_historico (cod_categoria_final)", schemaName, safe),
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_hist_empresa ON %s.matvw_gerencial_historico (empresa_id)", schemaName, safe),
 	}
-
-	for i, stmt := range stmts {
-		if _, err := p.pool.Exec(ctx, stmt); err != nil {
-			// Inclui um trecho do statement: sem isso, um erro de sintaxe numa das
-			// views gerenciais não diz qual das dezenas de statements falhou.
-			trecho := stmt
-			if len(trecho) > 200 {
-				trecho = trecho[:200] + "..."
-			}
-			return fmt.Errorf("db.Provisioner.ProvisionSchema [%s] statement %d (%s): %w", schemaName, i, trecho, err)
-		}
-	}
-
-	if err := p.markProvisioned(ctx, schemaName); err != nil {
-		// Não fatal — schema está correto, só o registro de versão falhou
-		fmt.Printf("db.Provisioner.ProvisionSchema: markProvisioned falhou para %s: %v\n", schemaName, err)
-	}
-
-	return nil
 }
 
 // DropSchema remove completamente o schema de um tenant (chamado pelo deletion job).

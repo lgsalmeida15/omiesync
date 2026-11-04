@@ -104,14 +104,14 @@ func upsertContratos(ctx context.Context, pool *pgxpool.Pool, schema string, emp
 		}
 		_, err := pool.Exec(ctx, fmt.Sprintf(`
 			INSERT INTO %s.contratos
-				(empresa_id, codigo_lancamento_omie, numero_contrato, codigo_cliente,
+				(empresa_id, codigo_contrato_omie, numero_contrato, codigo_cliente,
 				 codigo_situacao, vigencia_inicial, vigencia_final, dia_faturamento,
 				 valor_total_mes, tipo_faturamento, codigo_categoria, codigo_projeto,
 				 codigo_conta_corrente, raw, synced_at)
 			VALUES ($1,$2,$3,$4,$5,
 				NULLIF($6,'')::date, NULLIF($7,'')::date,
 				$8,$9,$10,$11,$12,$13,$14,NOW())
-			ON CONFLICT (empresa_id, codigo_lancamento_omie) DO UPDATE SET
+			ON CONFLICT (empresa_id, codigo_contrato_omie) DO UPDATE SET
 				numero_contrato       = EXCLUDED.numero_contrato,
 				codigo_cliente        = EXCLUDED.codigo_cliente,
 				codigo_situacao       = EXCLUDED.codigo_situacao,
