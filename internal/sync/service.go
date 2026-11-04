@@ -124,6 +124,7 @@ func (s *service) ListJobs(ctx context.Context, params ListParams) ([]*SyncJob, 
 
 var validExecutors = map[string]bool{
 	"clientes":               true,
+	"contratos":              true,
 	"categorias":             true,
 	"departamentos":          true,
 	"contas_correntes":       true,
@@ -356,7 +357,7 @@ func (s *service) GetExecutorConfigs(ctx context.Context, empresaID string) ([]*
 
 	// Ordem fixa dos executors para o frontend
 	order := []string{
-		"categorias", "departamentos", "contas_correntes", "clientes",
+		"categorias", "departamentos", "contas_correntes", "clientes", "contratos",
 		"contas_pagar", "contas_receber", "movimentos_financeiros",
 		"extrato", "ordens_servico", "projetos",
 	}

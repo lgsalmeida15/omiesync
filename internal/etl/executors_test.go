@@ -50,15 +50,15 @@ func TestAllExecutors_NomesUnicos(t *testing.T) {
 		}
 		nomes[e.Nome()] = true
 	}
-	if len(execs) != 10 {
-		t.Errorf("esperava 10 executors, got %d", len(execs))
+	if len(execs) != 11 {
+		t.Errorf("esperava 11 executors, got %d", len(execs))
 	}
 }
 
 func TestAllExecutors_TodosOsModulos(t *testing.T) {
 	esperados := []string{
 		"categorias", "departamentos", "contas_correntes",
-		"clientes", "contas_pagar", "contas_receber",
+		"clientes", "contratos", "contas_pagar", "contas_receber",
 		"movimentos_financeiros", "extrato", "ordens_servico", "projetos",
 	}
 	execs := NewAllExecutors(nil, zerolog.Nop())

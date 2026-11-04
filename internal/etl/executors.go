@@ -33,7 +33,8 @@ func (w *alwaysFullWrapper) ExecutePage(ctx context.Context, client *omie.Client
 //
 // Regras de delta:
 //   - Filtram por HOJE (data_alteracao):
-//     clientes, categorias, contas_pagar, contas_receber, ordens_servico, projetos
+//     clientes, categorias, contas_pagar, contas_receber, ordens_servico, projetos,
+//     contratos
 //   - Sempre buscam TUDO (IgnorarDelta=true):
 //     contas_correntes — dados mestres, poucos registros
 //     movimentos_financeiros — UPSERT por ID único, sempre completo garante consistência
@@ -45,6 +46,7 @@ func NewAllExecutors(pool *pgxpool.Pool, log zerolog.Logger) []worker.Executor {
 		NewDepartamentosExecutor(pool, log),                                     // delta: hoje
 		&alwaysFullWrapper{NewContasCorrentesExecutor(pool, log)},               // sempre tudo
 		NewClientesExecutor(pool, log),                                          // delta: hoje
+		NewContratosExecutor(pool, log),                                         // delta: hoje (depende de clientes)
 		NewContasPagarExecutor(pool, log),                                       // delta: hoje
 		NewContasReceberExecutor(pool, log),                                     // delta: hoje
 		NewMovimentosFinanceirosExecutor(pool, log),                             // datas via dDtIncDe/dDtAltDe

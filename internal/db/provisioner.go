@@ -24,7 +24,10 @@ import (
 //	v8 — matvw no grão de movimento: remove o DISTINCT ON que descartava baixas parciais
 //	v9 — mv_id + índice único nas matvw, para permitir REFRESH ... CONCURRENTLY
 //	v10 — ramo ext deixa de filtrar por conta corrente; recria as matvw
-const CurrentSchemaVersion = 10
+//	v11 — tabela contratos (ListarContratos). Não precisa de bloco de auto-upgrade
+//	      próprio: o CREATE TABLE IF NOT EXISTS do slice principal já é idempotente
+//	      e roda de novo em todo schema cuja versão ficou para trás.
+const CurrentSchemaVersion = 11
 
 // Provisioner cria e inicializa schemas de tenant.
 type Provisioner struct {
@@ -238,11 +241,42 @@ func (p *Provisioner) ProvisionSchema(ctx context.Context, schemaName string) er
 			UNIQUE(empresa_id, codigo_projeto)
 		)`, safe),
 
+		// Contratos de serviço
+		// codigo_lancamento_omie guarda o nCodCtr do cabeçalho. É a chave que
+		// extrato.raw ->> 'cNumero' referencia nos lançamentos originados de contrato,
+		// que não têm título em contas_pagar/contas_receber. numero_contrato (cNumCtr)
+		// fica ao lado para permitir validar a chave nos dois formatos sem recoletar.
+		// Rateio por departamento e categorias por item ficam em raw.
+		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s.contratos (
+			id                     BIGSERIAL   PRIMARY KEY,
+			empresa_id             UUID        NOT NULL,
+			codigo_lancamento_omie BIGINT      NOT NULL,
+			numero_contrato        TEXT,
+			codigo_cliente         BIGINT,
+			codigo_situacao        TEXT,
+			vigencia_inicial       DATE,
+			vigencia_final         DATE,
+			dia_faturamento        INT,
+			valor_total_mes        NUMERIC(15,2),
+			tipo_faturamento       TEXT,
+			codigo_categoria       TEXT,
+			codigo_projeto         BIGINT,
+			codigo_conta_corrente  BIGINT,
+			raw                    JSONB,
+			synced_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			UNIQUE(empresa_id, codigo_lancamento_omie)
+		)`, safe),
+
 		// Indices de performance
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_clientes_cnpj ON %s.clientes (empresa_id, cnpj_cpf)", schemaName, safe),
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_cp_venc ON %s.contas_pagar (empresa_id, data_vencimento, status_titulo)", schemaName, safe),
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_cr_venc ON %s.contas_receber (empresa_id, data_vencimento, status_titulo)", schemaName, safe),
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_mov_data ON %s.movimentos_financeiros (empresa_id, data_lancamento)", schemaName, safe),
+
+		// Índices — contratos (dimensionados para o join futuro com o extrato)
+		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_contratos_numero ON %s.contratos (empresa_id, numero_contrato)", schemaName, safe),
+		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_contratos_cliente ON %s.contratos (empresa_id, codigo_cliente)", schemaName, safe),
+		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_contratos_raw ON %s.contratos USING GIN (raw)", schemaName, safe),
 
 		// Índices para as views gerenciais — extrato
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_extrato_data ON %s.extrato (empresa_id, data_lancamento)", schemaName, safe),

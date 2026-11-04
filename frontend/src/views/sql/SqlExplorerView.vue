@@ -162,6 +162,7 @@ const TABLES = [
   'contas_correntes',
   'contas_pagar',
   'contas_receber',
+  'contratos',
   'extrato',
   'movimentos_financeiros',
   'ordens_servico',
