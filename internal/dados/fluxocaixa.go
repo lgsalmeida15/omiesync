@@ -70,9 +70,9 @@ type FluxoCaixaResponse struct {
 	 *
 	 *     SaldoInicial + Resultado do mês = Acumulado
 	 *
-	 * SaldoInicial é o fechamento do mês ANTERIOR, não o saldo de janeiro: é o
-	 * que a aba precisa mostrar como abertura. Em janeiro, coincide com a
-	 * âncora do ano.
+	 * SaldoInicial é o saldo REAL do próprio mês selecionado (saldo_por_contas,
+	 * dia 1) — não mais o fechamento do mês anterior: cada mês é independente,
+	 * sem encadeamento.
 	 *
 	 * Vem calculado do servidor, e não derivado na tela, porque a mesma escada
 	 * aparece na Visão Geral e na aba Resultado — se cada uma somasse por conta
@@ -190,16 +190,15 @@ func QueryFluxoCaixa(ctx context.Context, pool *pgxpool.Pool, p DashboardParams)
 	/*
 	 * Abertura e fechamento do mês.
 	 *
-	 * A abertura é o acumulado até o mês ANTERIOR — âncora mais o resultado de
-	 * janeiro até mes-1 —, e por isso o cálculo reaproveita o pivô do ano em vez
-	 * de refazer a soma aqui: é a mesma série que a aba Resultado desenha, vinda
-	 * da mesma consulta, o que impede as duas de divergirem.
+	 * A abertura é o saldo REAL do próprio mês (saldo_por_contas, dia 1) — não
+	 * mais um acumulado até o mês anterior, já que cada mês passou a ser
+	 * independente.
 	 *
-	 * Degrada em silêncio se o pivô falhar: o fluxo do mês é o dado principal da
-	 * aba e não pode cair por causa da linha de abertura.
+	 * Degrada em silêncio se a leitura falhar: o fluxo do mês é o dado principal
+	 * da aba e não pode cair por causa da linha de abertura.
 	 */
 	if ancoraAplicavel(p) {
-		if abertura, errAb := saldoAteOMes(ctx, pool, safe, viewName(p.Ano), p, mes); errAb == nil {
+		if abertura, errAb := aberturaDoMes(ctx, pool, safe, p, mes); errAb == nil {
 			resp.AncoraAplicavel = true
 			resp.SaldoInicial = abertura
 			resp.Acumulado = abertura + resp.Resumo.Resultado
@@ -261,32 +260,17 @@ func scanTransacoes(ctx context.Context, pool *pgxpool.Pool, sql string, args []
 }
 
 /*
-saldoAteOMes devolve a abertura do mês: a âncora mais o resultado dos meses
-anteriores dele.
-
-Usa a MESMA consulta mensal do dashboard, e não o pivô. O pivô agruparia por
-tipo, categoria, subcategoria e cliente para então somar tudo de volta — quatro
-dimensões de GROUP BY que a aba descartaria em seguida, num endpoint que o
-usuário aciona a cada troca de mês.
-
-Vir do mesmo caminho da Visão Geral é também o que garante que a abertura
-mostrada aqui seja exatamente o fechamento que a escada de lá desenha.
+aberturaDoMes devolve o saldo REAL do mês selecionado (saldo_por_contas, dia
+1) — não soma mais nada por cima: cada mês é independente, sem encadeamento
+com o anterior.
 */
-func saldoAteOMes(ctx context.Context, pool *pgxpool.Pool, safe, view string, p DashboardParams, mes int) (float64, error) {
-	saldo, err := querySaldoContasCorrentes(ctx, pool, safe, p)
+func aberturaDoMes(ctx context.Context, pool *pgxpool.Pool, safe string, p DashboardParams, mes int) (float64, error) {
+	saldoMensal, err := querySaldoMensalContasCorrentes(ctx, pool, safe, p)
 	if err != nil {
-		return 0, fmt.Errorf("dados.saldoAteOMes saldo: %w", err)
+		return 0, fmt.Errorf("dados.aberturaDoMes: %w", err)
 	}
-
-	mensal, err := queryGraficoMensal(ctx, pool, safe, view, p)
-	if err != nil {
-		return 0, fmt.Errorf("dados.saldoAteOMes mensal: %w", err)
+	if mes < 1 || mes > 12 {
+		return 0, fmt.Errorf("dados.aberturaDoMes: mês inválido %d", mes)
 	}
-
-	// Até mes-1: a abertura de março é o fechamento de fevereiro. Janeiro abre
-	// na âncora, sem somar nada.
-	for i := 0; i < mes-1 && i < len(mensal); i++ {
-		saldo += mensal[i].ResultadoMes
-	}
-	return saldo, nil
+	return saldoMensal[mes-1], nil
 }

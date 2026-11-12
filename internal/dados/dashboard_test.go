@@ -148,9 +148,12 @@ func TestBuildFiltro_ListasVaziasNaoEntram(t *testing.T) {
 // ── acumularSaldos ──────────────────────────────────────────────────────────
 // É a única aritmética do saldo mensal, e um erro aqui produziria um número
 // plausível na tela — o tipo de defeito que não se acha olhando.
+//
+// Cada mês é independente (saldoMensal[i] vem de saldo_por_contas, um por
+// mês) — não há mais encadeamento com o mês anterior.
 
-func TestAcumularSaldos_SemMovimentoRepeteOSaldoInicial(t *testing.T) {
-	s := acumularSaldos(10000, [12]float64{})
+func TestAcumularSaldos_SemMovimentoRepeteOSaldoDoMes(t *testing.T) {
+	s := acumularSaldos(ancoraMensal(10000), [12]float64{})
 
 	if len(s) != 12 {
 		t.Fatalf("esperados 12 meses, vieram %d", len(s))
@@ -162,11 +165,16 @@ func TestAcumularSaldos_SemMovimentoRepeteOSaldoInicial(t *testing.T) {
 	}
 }
 
-func TestAcumularSaldos_AcumulaMesAMes(t *testing.T) {
-	// jan +5000, fev −2000, mar +1000, resto zero.
-	s := acumularSaldos(10000, [12]float64{5000, -2000, 1000})
+// Cada mês soma só o SEU PRÓPRIO saldo real e o SEU PRÓPRIO movimento — não
+// existe mais carregar o movimento de um mês para o próximo.
+func TestAcumularSaldos_CadaMesSomaSoOSeuProprio(t *testing.T) {
+	var saldoMensal [12]float64
+	for i := range saldoMensal {
+		saldoMensal[i] = 10000
+	}
+	s := acumularSaldos(saldoMensal, [12]float64{5000, -2000, 1000})
 
-	esperado := []float64{15000, 13000, 14000, 14000}
+	esperado := []float64{15000, 8000, 11000, 10000}
 	for i, e := range esperado {
 		if s[i].Saldo != e {
 			t.Errorf("mês %d: esperado %v, veio %v", i+1, e, s[i].Saldo)
@@ -174,24 +182,21 @@ func TestAcumularSaldos_AcumulaMesAMes(t *testing.T) {
 	}
 }
 
-// O saldo do último mês é o saldo inicial mais TODO o realizado do ano. Se
-// deixasse de ser, o card com "ano inteiro" marcado divergiria da soma.
-func TestAcumularSaldos_DezembroFechaComOAnoInteiro(t *testing.T) {
+// O saldo de dezembro NÃO inclui o movimento acumulado do ano inteiro — só o
+// saldo real de dezembro mais o movimento de dezembro. É a propriedade que
+// elimina o arrasto de erro entre meses.
+func TestAcumularSaldos_DezembroNaoCarregaOAnoInteiro(t *testing.T) {
 	mov := [12]float64{100, -50, 25, 0, 0, 0, 0, 0, 0, 0, 0, -75}
-	s := acumularSaldos(1000, mov)
+	s := acumularSaldos(ancoraMensal(1000), mov)
 
-	var soma float64
-	for _, v := range mov {
-		soma += v
-	}
-	if s[11].Saldo != 1000+soma {
-		t.Errorf("dezembro deveria ser 1000%+v = %v, veio %v", soma, 1000+soma, s[11].Saldo)
+	if s[11].Saldo != 1000-75 {
+		t.Errorf("dezembro deveria ser 1000-75 = %v, veio %v", 1000-75.0, s[11].Saldo)
 	}
 }
 
 // Saldo inicial negativo é conta no vermelho, não erro — não pode ser zerado.
 func TestAcumularSaldos_SaldoInicialNegativo(t *testing.T) {
-	s := acumularSaldos(-500, [12]float64{200})
+	s := acumularSaldos(ancoraMensal(-500), [12]float64{200})
 
 	if s[0].Saldo != -300 {
 		t.Errorf("janeiro: esperado -300, veio %v", s[0].Saldo)
@@ -199,7 +204,7 @@ func TestAcumularSaldos_SaldoInicialNegativo(t *testing.T) {
 }
 
 func TestAcumularSaldos_NomeDoMesAcompanha(t *testing.T) {
-	s := acumularSaldos(0, [12]float64{})
+	s := acumularSaldos([12]float64{}, [12]float64{})
 
 	if s[0].MesNome != "Jan" || s[11].MesNome != "Dez" {
 		t.Errorf("nomes fora de ordem: %q..%q", s[0].MesNome, s[11].MesNome)

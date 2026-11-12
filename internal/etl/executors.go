@@ -40,6 +40,9 @@ func (w *alwaysFullWrapper) ExecutePage(ctx context.Context, client *omie.Client
 //     movimentos_financeiros — UPSERT por ID único, sempre completo garante consistência
 //   - Lógica própria (sem buildPaginacao):
 //     extrato — sempre hoje +1 ano (provisão futura), subdivisão binária adaptativa
+//     saldo_por_contas — saldo real por conta no dia 1 de cada mês; roda depois de
+//     extrato, que já propagou contas_correntes.fluxo_caixa usado no filtro das
+//     duas; incrementalidade própria por conta×mês (ver periodosParaSincronizar)
 func NewAllExecutors(pool *pgxpool.Pool, log zerolog.Logger) []worker.Executor {
 	return []worker.Executor{
 		NewCategoriasExecutor(pool, log),                                        // delta: hoje
@@ -51,6 +54,7 @@ func NewAllExecutors(pool *pgxpool.Pool, log zerolog.Logger) []worker.Executor {
 		NewContasReceberExecutor(pool, log),                                     // delta: hoje
 		NewMovimentosFinanceirosExecutor(pool, log),                             // datas via dDtIncDe/dDtAltDe
 		NewExtratoExecutor(pool, log),                                           // hoje +365d (lógica própria)
+		NewSaldoPorContasExecutor(pool, log),                                    // saldo mensal real (lógica própria)
 		NewOrdensServicoExecutor(pool, log),                                     // delta: hoje
 		NewProjetosExecutor(pool, log),                                          // delta: hoje
 	}

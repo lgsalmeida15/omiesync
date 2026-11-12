@@ -44,9 +44,10 @@ type PivotResponse struct {
 	 * Acumulado: a mesma leitura do relatório de fluxo de caixa do Omie, trazida
 	 * para a aba Resultado.
 	 *
-	 * Cada posição é o fechamento do mês — a âncora mais o resultado de todos os
-	 * meses até ali. SaldoInicial é a abertura de janeiro, e vem junto porque sem
-	 * ela a tela não tem como explicar de onde a escada parte.
+	 * Cada posição é o saldo REAL daquele mês (saldo_por_contas, dia 1) mais o
+	 * resultado do próprio mês — independente dos demais, sem encadeamento.
+	 * SaldoInicial é o saldo real de janeiro, e vem junto porque sem ele a tela
+	 * não tem como explicar de onde a escada parte.
 	 *
 	 * AncoraAplicavel é falso quando há filtro que o saldo das contas não sabe
 	 * responder (categoria, departamento, cliente): aí a série parte do zero e
@@ -161,18 +162,20 @@ func QueryPivot(ctx context.Context, pool *pgxpool.Pool, p DashboardParams) (*Pi
 	 * âncora, e perder a matriz inteira por causa da linha de rodapé seria pior.
 	 */
 	resp.AncoraAplicavel = ancoraAplicavel(p)
+	var saldoMensal [12]float64
 	if resp.AncoraAplicavel {
-		if saldo, err := querySaldoContasCorrentes(ctx, pool, safe, p); err == nil {
-			resp.SaldoInicial = saldo
+		if sm, err := querySaldoMensalContasCorrentes(ctx, pool, safe, p); err == nil {
+			saldoMensal = sm
+			resp.SaldoInicial = sm[0]
 		} else {
 			resp.AncoraAplicavel = false
 		}
 	}
 
-	acc := resp.SaldoInicial
+	// Cada mês é independente: Acumulado(mês) = saldo real do mês + resultado
+	// do mês, sem encadear com o mês anterior.
 	for i, r := range resp.ResultadoMes {
-		acc += r
-		resp.Acumulado[i] = acc
+		resp.Acumulado[i] = saldoMensal[i] + r
 	}
 
 	return resp, nil

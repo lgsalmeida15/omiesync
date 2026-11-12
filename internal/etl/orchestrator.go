@@ -33,9 +33,11 @@ func (o *Orchestrator) DiscoverAndCreatePages(
 	configs map[string]*omie_config.EndpointConfig,
 ) error {
 	for modulo, cfg := range configs {
-		// 1. Extrato SEMPRE primeiro — nunca criar sub-jobs para extrato
-		if modulo == "extrato" {
-			o.log.Info().Str("modulo", modulo).Msg("extrato excluído dos sub-jobs — lógica especial")
+		// 1. Extrato e saldo_por_contas SEMPRE primeiro — nunca criar sub-jobs
+		// para módulos sem paginação Omie tradicional (lógica própria de
+		// conta×período, sem "total de páginas" real a sondar).
+		if modulo == "extrato" || modulo == "saldo_por_contas" {
+			o.log.Info().Str("modulo", modulo).Msg("módulo excluído dos sub-jobs — lógica especial")
 			continue
 		}
 

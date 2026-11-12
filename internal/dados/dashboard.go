@@ -150,7 +150,7 @@ func QueryDashboard(ctx context.Context, pool *pgxpool.Pool, p DashboardParams) 
 		return nil, fmt.Errorf("dados.QueryDashboard grafico_mensal: %w", err)
 	}
 
-	saldo, err := querySaldoContasCorrentes(ctx, pool, safe, p)
+	saldoMensal, err := querySaldoMensalContasCorrentes(ctx, pool, safe, p)
 	if err != nil {
 		return nil, fmt.Errorf("dados.QueryDashboard saldo_cc: %w", err)
 	}
@@ -162,7 +162,6 @@ func QueryDashboard(ctx context.Context, pool *pgxpool.Pool, p DashboardParams) 
 		}
 		return nil, fmt.Errorf("dados.QueryDashboard realizado_mes: %w", err)
 	}
-	saldosMensais := acumularSaldos(saldo, realizadoMes)
 
 	filtros, err := queryFiltrosDisponiveis(ctx, pool, safe, view, p)
 	if err != nil {
@@ -182,20 +181,25 @@ func QueryDashboard(ctx context.Context, pool *pgxpool.Pool, p DashboardParams) 
 	/*
 	 * A âncora só entra quando ela é VERDADE para o recorte.
 	 *
-	 * O saldo vem do cadastro das contas correntes, então sabe responder a
-	 * filtros de empresa e de conta — e só. Com um filtro de categoria,
+	 * O saldo vem do saldo real por mês (saldo_por_contas), que sabe responder
+	 * a filtros de empresa e de conta — e só. Com um filtro de categoria,
 	 * departamento ou cliente, ancorar no saldo somaria o movimento de um
 	 * recorte a uma abertura do total: um número plausível e sem significado.
 	 *
 	 * Nesse caso a série parte de zero e vira "acumulado do recorte". Continua
 	 * verdadeira, só responde outra pergunta — e a resposta diz qual, para a
 	 * tela poder mudar o título em vez de mentir no mesmo.
+	 *
+	 * Vale para as duas séries que partem do saldo real (SaldosMensais e
+	 * GraficoResultadoAcumulado) — as duas respondem à mesma pergunta, então
+	 * as duas têm que concordar sobre quando a âncora vale.
 	 */
 	ancoraVale := ancoraAplicavel(p)
-	ancora := saldo
+	saldoMensalEfetivo := saldoMensal
 	if !ancoraVale {
-		ancora = 0
+		saldoMensalEfetivo = [12]float64{}
 	}
+	saldosMensais := acumularSaldos(saldoMensalEfetivo, realizadoMes)
 
 	/*
 	 * Atrasados entram só quando pedidos, e só na trilha prevista.
@@ -214,7 +218,7 @@ func QueryDashboard(ctx context.Context, pool *pgxpool.Pool, p DashboardParams) 
 				Msg("dados: atrasados indisponíveis; projeção segue sem eles")
 		}
 	}
-	acumulado := acumularResultado(ancora, atrasados, mensal)
+	acumulado := acumularResultado(saldoMensalEfetivo, atrasados, mensal)
 
 	return &DashboardResponse{
 		Cards: CardMetrics{
@@ -225,7 +229,7 @@ func QueryDashboard(ctx context.Context, pool *pgxpool.Pool, p DashboardParams) 
 			// Mantida como estava para não mudar um número em silêncio.
 			Resultado:            receitaTotal - despesaTotal + saldosMensais[11].Saldo,
 			SaldoContasCorrentes: saldosMensais[11].Saldo,
-			SaldoInicial:         saldo,
+			SaldoInicial:         saldoMensal[0],
 		},
 		GraficoMensal:             mensal,
 		GraficoResultadoAcumulado: acumulado,
@@ -239,8 +243,8 @@ func QueryDashboard(ctx context.Context, pool *pgxpool.Pool, p DashboardParams) 
 /*
 ancoraAplicavel diz se o saldo das contas descreve o mesmo recorte que o fluxo.
 
-O saldo sai de contas_correntes (querySaldoContasCorrentes), que conhece empresa
-e conta corrente. Categoria, departamento e cliente são dimensões do LANÇAMENTO,
+O saldo sai de saldo_por_contas (querySaldoMensalContasCorrentes), que conhece
+empresa e conta corrente. Categoria, departamento e cliente são dimensões do LANÇAMENTO,
 não da conta — não há como perguntar a um extrato bancário quanto do saldo veio
 de "Despesas com Pessoal". Com um desses, ancorar somaria o movimento de um
 recorte a uma abertura do total.
@@ -403,7 +407,13 @@ func queryGraficoMensal(ctx context.Context, pool *pgxpool.Pool, safe, view stri
 	return resultado, rows.Err()
 }
 
-func querySaldoContasCorrentes(ctx context.Context, pool *pgxpool.Pool, safe string, p DashboardParams) (float64, error) {
+// querySaldoContasCorrentesCadastro soma contas_correntes.saldo_inicial — campo
+// de cadastro do Omie, SEM DATA associada (o cadastro traz essa data em
+// raw->>'saldo_data', mas nunca viramos coluna). Usada só como fallback
+// transitório, dentro de querySaldoMensalContasCorrentes, para um mês que
+// ainda não tem registro em saldo_por_contas (backfill incompleto) — não é
+// mais chamada diretamente por QueryDashboard/QueryPivot/QueryFluxoCaixa.
+func querySaldoContasCorrentesCadastro(ctx context.Context, pool *pgxpool.Pool, safe string, p DashboardParams) (float64, error) {
 	args := []any{p.GrupoID}
 	empresaFilter := ""
 	if len(p.Empresas) > 0 {
@@ -435,6 +445,97 @@ func querySaldoContasCorrentes(ctx context.Context, pool *pgxpool.Pool, safe str
 	var saldo float64
 	err := pool.QueryRow(ctx, sql, args...).Scan(&saldo)
 	return saldo, err
+}
+
+/*
+querySaldoMensalContasCorrentes devolve o saldo REAL de cada mês (índice 0 =
+janeiro), somado por conta corrente com fluxo_caixa = 'S', lido de
+saldo_por_contas (saldo do dia 1, vindo direto do Omie via ListarExtrato com
+cExibirApenasSaldo=S) — não mais acumulado a partir de um saldo de cadastro
+sem data.
+
+Aplica os MESMOS filtros que a consulta de cadastro já aplicava (Empresas,
+ContasCorrentes — só esses dois fazem sentido para um saldo de conta
+corrente; categoria/departamento/cliente são tratados por ancoraAplicavel,
+que decide se a âncora participa do recorte, não por esta função).
+
+Fallback por mês: se algum mês ainda não tem linha em saldo_por_contas
+(backfill incompleto ou grupo recém-provisionado), usa o saldo de cadastro só
+PARA AQUELE MÊS, com aviso no log — evita que o dashboard mostre um mês
+isolado zerado enquanto o backfill não terminou.
+*/
+func querySaldoMensalContasCorrentes(ctx context.Context, pool *pgxpool.Pool, safe string, p DashboardParams) ([12]float64, error) {
+	var out [12]float64
+
+	args := []any{p.GrupoID, p.Ano}
+	empresaFilter := ""
+	if len(p.Empresas) > 0 {
+		empresaFilter = fmt.Sprintf(" AND e.id::text = ANY($%d)", len(args)+1)
+		args = append(args, p.Empresas)
+	}
+	ccFilter := ""
+	if len(p.ContasCorrentes) > 0 {
+		ccFilter = fmt.Sprintf(" AND spc.codigo_conta_corrente::text = ANY($%d)", len(args)+1)
+		args = append(args, p.ContasCorrentes)
+	}
+
+	sql := fmt.Sprintf(`
+		SELECT EXTRACT(MONTH FROM spc.data_referencia)::int AS mes,
+		       COALESCE(SUM(spc.saldo_atual), 0) AS saldo
+		FROM %s.saldo_por_contas spc
+		JOIN %s.contas_correntes cc ON cc.empresa_id = spc.empresa_id
+		                            AND cc.codigo_conta_corrente = spc.codigo_conta_corrente
+		JOIN _etl.empresas e ON e.id = spc.empresa_id
+		WHERE e.grupo_id = $1
+		  AND e.deleted_at IS NULL
+		  AND cc.fluxo_caixa = 'S'
+		  AND EXTRACT(YEAR FROM spc.data_referencia) = $2
+		  %s%s
+		GROUP BY mes
+	`, safe, safe, empresaFilter, ccFilter)
+
+	rows, err := pool.Query(ctx, sql, args...)
+	if err != nil {
+		return out, err
+	}
+	defer rows.Close()
+
+	var encontrados [12]bool
+	for rows.Next() {
+		var mes int
+		var saldo float64
+		if err := rows.Scan(&mes, &saldo); err != nil {
+			return out, err
+		}
+		if mes >= 1 && mes <= 12 {
+			out[mes-1] = saldo
+			encontrados[mes-1] = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return out, err
+	}
+
+	var faltaAlgum bool
+	for _, ok := range encontrados {
+		if !ok {
+			faltaAlgum = true
+			break
+		}
+	}
+	if faltaAlgum {
+		if cadastro, errCad := querySaldoContasCorrentesCadastro(ctx, pool, safe, p); errCad == nil {
+			for i, ok := range encontrados {
+				if !ok {
+					out[i] = cadastro
+					log.Warn().Str("grupo_id", p.GrupoID).Int("mes", i+1).
+						Msg("dados: saldo real ainda não sincronizado para este mês; usando fallback do cadastro (saldo_inicial)")
+				}
+			}
+		}
+	}
+
+	return out, nil
 }
 
 /*
@@ -483,56 +584,34 @@ func queryRealizadoPorMes(ctx context.Context, pool *pgxpool.Pool, safe, view st
 }
 
 /*
-acumularSaldos transforma o realizado de cada mês no saldo ao FIM de cada mês.
+acumularResultado monta as duas trilhas do modelo do Omie, cada mês
+INDEPENDENTE dos demais:
 
-Função separada e sem banco de propósito: é a única aritmética desta parte, e é
-onde um erro de acumulação passaria despercebido — o número continuaria
-plausível na tela.
+	SaldoInicial(mês) = saldo REAL do mês (saldo_por_contas, dia 1)  [+ atrasados, só na trilha prevista]
+	Acumulado(mês)    = SaldoInicial(mês) + Resultado(mês)
 
-ATENÇÃO à âncora: saldoInicial é a soma de contas_correntes.saldo_inicial, que é
-campo de cadastro do Omie, sem data. A conta só fecha se esse valor representar o
-saldo no começo do período coberto pela view. Se a conta é antiga e o
-saldo_inicial for de anos atrás, o resultado será o saldo daquela data mais os
-movimentos deste ano — plausível, e errado.
+Não há mais encadeamento (SaldoInicial(mês) deixou de ser Acumulado(mês-1)):
+um mês com saldo real ainda não sincronizado, ou com um erro pontual, não
+contamina os meses seguintes — diferente do modelo antigo, que acumulava a
+partir de um único saldo de cadastro sem data e propagava qualquer erro de
+abertura pelo ano inteiro.
+
+`atrasados` soma em TODOS os meses da trilha prevista, não só em janeiro: no
+modelo antigo ele entrava uma única vez na âncora e se propagava para os
+meses seguintes por efeito do encadeamento; aqui, sem encadeamento, somar em
+todo mês reproduz o mesmo efeito (passivo vencido e não pago que ainda pesa
+na projeção), agora sobre uma base real a cada mês. `atrasados` chega zerado
+quando o filtro está desligado, e aí as duas trilhas abrem no mesmo ponto.
+
+Pura e sem banco de propósito: é a única aritmética desta parte, e um erro
+aqui produz uma série plausível. A tela não denuncia.
 */
-/*
-acumularResultado monta as duas trilhas encadeadas do modelo do Omie.
-
-A conta, conferida contra um relatório real do Omie em acumulado_omie_test.go:
-
-	SaldoInicial(mês N) = Acumulado(mês N−1)
-	Acumulado(mês N)    = SaldoInicial(mês N) + Resultado(mês N)
-
-As duas trilhas partem da MESMA âncora e divergem a partir dali: a realizada
-soma só o que entrou e saiu; a prevista soma o realizado do mês mais as
-provisões. Em janeiro as duas abrem no mesmo ponto, o que é correto — a posição
-de caixa no início do ano é uma só.
-
-Pura e sem banco pelo mesmo motivo da acumularSaldos: é a única aritmética da
-parte, e um erro aqui produz uma série plausível. A tela não denuncia.
-*/
-func acumularResultado(ancora, atrasados float64, mensal []GraficoMensal) []GraficoAcumulado {
+func acumularResultado(saldoMensal [12]float64, atrasados float64, mensal []GraficoMensal) []GraficoAcumulado {
 	out := make([]GraficoAcumulado, len(mensal))
 
-	/*
-	 * As duas trilhas abrem em pontos diferentes, e é de propósito.
-	 *
-	 * A realizada parte do saldo das contas: é a posição de caixa de fato. A
-	 * prevista parte do saldo MAIS o que está vencido e não pago — porque esse
-	 * dinheiro já deveria ter saído (ou entrado) e ainda vai pesar no caixa.
-	 *
-	 * `atrasados` chega zerado quando o filtro está desligado, e aí as duas
-	 * abrem no mesmo ponto.
-	 */
-	accReal, accPrev := ancora, ancora+atrasados
-	var accMisto float64
-
 	for i, m := range mensal {
-		saldoIniReal, saldoIniPrev := accReal, accPrev
-
-		accReal += m.ResultadoRealizado
-		accPrev += m.ResultadoPrevisto
-		accMisto += m.ResultadoMes
+		saldoIniReal := saldoMensal[i]
+		saldoIniPrev := saldoMensal[i] + atrasados
 
 		out[i] = GraficoAcumulado{
 			Mes:     m.Mes,
@@ -541,25 +620,35 @@ func acumularResultado(ancora, atrasados float64, mensal []GraficoMensal) []Graf
 			// lê resultado_mes e soma por fora, e trocar isso agora mudaria o
 			// desenho antes de a tela estar pronta para as trilhas.
 			ResultadoMes: m.ResultadoMes,
-			Acumulado:    accMisto,
+			Acumulado:    saldoMensal[i] + m.ResultadoMes,
 
 			SaldoInicialRealizado: saldoIniReal,
 			ResultadoRealizado:    m.ResultadoRealizado,
-			AcumuladoRealizado:    accReal,
+			AcumuladoRealizado:    saldoIniReal + m.ResultadoRealizado,
 			SaldoInicialPrevisto:  saldoIniPrev,
 			ResultadoPrevisto:     m.ResultadoPrevisto,
-			AcumuladoPrevisto:     accPrev,
+			AcumuladoPrevisto:     saldoIniPrev + m.ResultadoPrevisto,
 		}
 	}
 	return out
 }
 
-func acumularSaldos(saldoInicial float64, realizadoPorMes [12]float64) []SaldoMes {
+/*
+acumularSaldos monta o saldo ao FIM de cada mês: saldo REAL do próprio mês
+(saldo_por_contas, dia 1) mais o resultado realizado do mesmo mês.
+
+Função separada e sem banco de propósito: é a única aritmética desta parte, e é
+onde um erro passaria despercebido — o número continuaria plausível na tela.
+
+Cada mês é INDEPENDENTE dos demais — não há mais encadeamento (
+SaldoInicial(mês) deixou de ser Acumulado(mês-1)). Um mês com saldo real ainda
+não sincronizado não contamina os meses seguintes, diferente do modelo antigo
+baseado em contas_correntes.saldo_inicial (cadastro do Omie, sem data).
+*/
+func acumularSaldos(saldoMensal, realizadoPorMes [12]float64) []SaldoMes {
 	out := make([]SaldoMes, 12)
-	acc := saldoInicial
 	for i := 0; i < 12; i++ {
-		acc += realizadoPorMes[i]
-		out[i] = SaldoMes{Mes: i + 1, MesNome: nomeMes[i+1], Saldo: acc}
+		out[i] = SaldoMes{Mes: i + 1, MesNome: nomeMes[i+1], Saldo: saldoMensal[i] + realizadoPorMes[i]}
 	}
 	return out
 }

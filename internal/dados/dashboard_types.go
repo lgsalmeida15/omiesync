@@ -24,8 +24,10 @@ type DashboardResponse struct {
 	MesCorte int `json:"mes_corte"`
 }
 
-// SaldoMes é o saldo das contas correntes ao FIM do mês: o saldo inicial
-// cadastrado mais os movimentos já realizados até ali.
+// SaldoMes é o saldo das contas correntes ao FIM do mês: o saldo REAL do
+// próprio mês (saldo_por_contas, dia 1) mais os movimentos já realizados
+// naquele mês. Cada mês é independente — não há mais encadeamento com o
+// saldo do mês anterior.
 //
 // Só conta movimento realizado (mov_ou_extrato = 'mov'). Somar as provisões do
 // extrato daria saldo previsto, que é outra coisa — e faria o saldo de dezembro
@@ -41,11 +43,12 @@ type CardMetrics struct {
 	DespesaTotal         float64 `json:"despesa_total"`
 	Resultado            float64 `json:"resultado"`
 	SaldoContasCorrentes float64 `json:"saldo_contas_correntes"`
-	// SaldoInicial é a soma de contas_correntes.saldo_inicial, antes de qualquer
-	// movimento — a abertura da cascata. Explícito na resposta porque derivá-lo
-	// no cliente exigiria subtrair o realizado de janeiro do saldo de janeiro, e
-	// o cliente só tem a série que mistura realizado e previsto: a conta daria
-	// um número plausível e errado.
+	// SaldoInicial é o saldo REAL de 1º de janeiro, lido de saldo_por_contas —
+	// não mais o campo de cadastro contas_correntes.saldo_inicial, que não tem
+	// data associada. Explícito na resposta porque derivá-lo no cliente exigiria
+	// subtrair o realizado de janeiro do saldo de janeiro, e o cliente só tem a
+	// série que mistura realizado e previsto: a conta daria um número plausível
+	// e errado.
 	SaldoInicial float64 `json:"saldo_inicial"`
 }
 
@@ -84,11 +87,14 @@ type GraficoAcumulado struct {
 	Acumulado    float64 `json:"acumulado"`
 
 	/*
-	 * O acumulado nas duas trilhas, cada uma partindo da MESMA âncora e
-	 * encadeando mês a mês — a conta do Omie:
+	 * O acumulado nas duas trilhas — cada mês é INDEPENDENTE dos demais:
 	 *
-	 *     SaldoInicial(N) = Acumulado(N-1)
-	 *     Acumulado(N)    = SaldoInicial(N) + Resultado(N)
+	 *     SaldoInicial(mês) = saldo real do mês (saldo_por_contas, dia 1)  [+ atrasados, só na trilha prevista]
+	 *     Acumulado(mês)    = SaldoInicial(mês) + Resultado(mês)
+	 *
+	 * Um mês com dado ruim (ex.: sync ainda não cobriu aquele mês) não
+	 * contamina os meses seguintes — diferente do modelo anterior, que
+	 * encadeava o acumulado de um mês como abertura do próximo.
 	 *
 	 * SaldoInicial vem junto porque é o que a aba Fluxo de Caixa mostra como
 	 * abertura do mês, e derivá-lo na tela exigiria olhar o mês anterior.

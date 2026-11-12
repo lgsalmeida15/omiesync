@@ -30,7 +30,12 @@ import (
 //	v12 — contratos como fallback de departamento/cliente/categoria nas matvw;
 //	      recria as duas. Renomeia contratos.codigo_lancamento_omie para
 //	      codigo_contrato_omie (ver migration 000037).
-const CurrentSchemaVersion = 12
+//	v13 — tabela saldo_por_contas (ListarExtrato com cExibirApenasSaldo=S):
+//	      saldo real por conta corrente no dia 1 de cada mês. Alimenta o cálculo
+//	      independente do Resultado Acumulado (ver dados/dashboard.go). Não entra
+//	      nas matvw. Não precisa de bloco de auto-upgrade dedicado: o CREATE
+//	      TABLE IF NOT EXISTS do slice principal já é idempotente, igual ao v11.
+const CurrentSchemaVersion = 13
 
 // Provisioner cria e inicializa schemas de tenant.
 type Provisioner struct {
@@ -296,6 +301,23 @@ func provisionStatements(schemaName string) []string {
 			UNIQUE(empresa_id, codigo_contrato_omie)
 		)`, safe),
 
+		// Saldo por conta corrente no dia 1 de cada mês (ListarExtrato com
+		// cExibirApenasSaldo=S). Fonte do saldo real que ancora o Resultado
+		// Acumulado — ver internal/dados/dashboard.go querySaldoMensalContasCorrentes.
+		// Não entra nas matvw: é lida direto pelo pacote dados.
+		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s.saldo_por_contas (
+			id                     BIGSERIAL   PRIMARY KEY,
+			empresa_id             UUID        NOT NULL,
+			codigo_conta_corrente  BIGINT      NOT NULL,
+			data_referencia        DATE        NOT NULL,
+			saldo_anterior         NUMERIC(15,2),
+			saldo_atual            NUMERIC(15,2),
+			saldo_atual_previsto   NUMERIC(15,2),
+			raw                    JSONB,
+			synced_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			UNIQUE(empresa_id, codigo_conta_corrente, data_referencia)
+		)`, safe),
+
 		// Indices de performance
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_clientes_cnpj ON %s.clientes (empresa_id, cnpj_cpf)", schemaName, safe),
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_cp_venc ON %s.contas_pagar (empresa_id, data_vencimento, status_titulo)", schemaName, safe),
@@ -306,6 +328,11 @@ func provisionStatements(schemaName string) []string {
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_contratos_numero ON %s.contratos (empresa_id, numero_contrato)", schemaName, safe),
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_contratos_cliente ON %s.contratos (empresa_id, codigo_cliente)", schemaName, safe),
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_contratos_raw ON %s.contratos USING GIN (raw)", schemaName, safe),
+
+		// Índices — saldo_por_contas
+		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_saldo_por_contas_data ON %s.saldo_por_contas (empresa_id, data_referencia)", schemaName, safe),
+		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_saldo_por_contas_cc ON %s.saldo_por_contas (empresa_id, codigo_conta_corrente)", schemaName, safe),
+		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_saldo_por_contas_raw ON %s.saldo_por_contas USING GIN (raw)", schemaName, safe),
 
 		// Índices para as views gerenciais — extrato
 		fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_extrato_data ON %s.extrato (empresa_id, data_lancamento)", schemaName, safe),

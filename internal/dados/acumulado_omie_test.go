@@ -15,15 +15,22 @@ o que não devia, ancorar no lugar errado, somar o previsto duas vezes) produz u
 série internamente consistente e completamente errada, e nenhum teste de
 propriedade pega isso. Estes pegam, porque a resposta certa veio de fora.
 
-As três regras que o relatório revela, válidas nos doze meses:
+O relatório original encadeava o saldo inicial de um mês a partir do acumulado
+do anterior (Saldo Inicial(N) = Acumulado(N−1)). A nossa implementação NÃO
+encadeia mais: cada mês recebe seu próprio saldo real (vindo de
+saldo_por_contas, não mais de um saldo de cadastro sem data), e por isso os
+testes abaixo alimentam `acumularSaldos`/`acumularResultado` com a série de
+SaldoIniRealizado do relatório inteira, mês a mês, em vez de só a âncora de
+janeiro — o relatório real já tem essa série (ela é, sob o modelo antigo,
+idêntica ao acumulado do mês anterior; sob o modelo novo, cada valor seria lido
+direto de saldo_por_contas). O que os testes continuam conferindo é a
+aritmética Resultado(N) + Saldo Inicial(N) = Acumulado(N), não mais o
+encadeamento entre meses.
 
-	Saldo Inicial(N)  = Acumulado(N−1)            encadeado, sem exceção
-	Resultado(N)      = Receitas + Despesas       (despesas já negativas)
-	Acumulado(N)      = Saldo Inicial(N) + Resultado(N)
-
-E a que menos se adivinha: a trilha PREVISTA acumula SOBRE a realizada —
-Resultado Previsto = Receitas Previstas + Despesas Previstas + Resultado
-REALIZADO do mesmo mês. A projeção do mês inclui o que já aconteceu nele.
+A regra que menos se adivinha, e que continua valendo: a trilha PREVISTA
+acumula SOBRE a realizada — Resultado Previsto = Receitas Previstas + Despesas
+Previstas + Resultado REALIZADO do mesmo mês. A projeção do mês inclui o que já
+aconteceu nele.
 
 Os valores são de um cliente real e estão aqui SEM qualquer identificação — nem
 empresa, nem conta, nem fornecedor. O que importa para o teste é a aritmética.
@@ -66,16 +73,14 @@ const centavo = 0.011
 
 func perto(a, b float64) bool { return math.Abs(a-b) < centavo }
 
-// A regra do encadeamento: o saldo inicial de um mês é o acumulado do anterior.
-// É o que transforma doze cálculos independentes numa série.
-func TestOmie_SaldoInicialEncadeiaComOAcumuladoAnterior(t *testing.T) {
-	for i := 1; i < len(relatorioOmie); i++ {
-		anterior, atual := relatorioOmie[i-1], relatorioOmie[i]
-		if !perto(atual.SaldoIniRealizado, anterior.AcumuladoRealizado) {
-			t.Errorf("mês %d: saldo inicial %.2f, mas o acumulado do mês anterior é %.2f",
-				atual.Mes, atual.SaldoIniRealizado, anterior.AcumuladoRealizado)
-		}
+// ancoraMensal repete um único valor nas 12 posições — usado nos testes que
+// não testam variação mensal da âncora, só a aritmética de um mês isolado.
+func ancoraMensal(v float64) [12]float64 {
+	var out [12]float64
+	for i := range out {
+		out[i] = v
 	}
+	return out
 }
 
 func TestOmie_ResultadoEhReceitaMaisDespesa(t *testing.T) {
@@ -120,12 +125,13 @@ a âncora e os resultados mensais do relatório, ela tem de reproduzir a coluna 
 acumulado do Omie — mês a mês, não só no total.
 */
 func TestAcumularSaldos_ReproduzOAcumuladoDoOmie(t *testing.T) {
-	var realizado [12]float64
+	var realizado, saldoMensal [12]float64
 	for i, m := range relatorioOmie {
 		realizado[i] = m.ResultadoRealizado
+		saldoMensal[i] = m.SaldoIniRealizado
 	}
 
-	saldos := acumularSaldos(relatorioOmie[0].SaldoIniRealizado, realizado)
+	saldos := acumularSaldos(saldoMensal, realizado)
 
 	if len(saldos) != 12 {
 		t.Fatalf("devolveu %d meses", len(saldos))
@@ -141,7 +147,7 @@ func TestAcumularSaldos_ReproduzOAcumuladoDoOmie(t *testing.T) {
 // Mês sem movimento não muda o acumulado — é o caso de novembro e dezembro na
 // extração, e o que garante que um mês vazio não zera a série.
 func TestAcumularSaldos_MesSemMovimentoMantemOAcumulado(t *testing.T) {
-	saldos := acumularSaldos(1000, [12]float64{})
+	saldos := acumularSaldos(ancoraMensal(1000), [12]float64{})
 
 	for _, s := range saldos {
 		if !perto(s.Saldo, 1000) {
@@ -160,7 +166,9 @@ duas trilhas.
 */
 func TestAcumularResultado_ReproduzORelatorioDoOmie(t *testing.T) {
 	mensal := make([]GraficoMensal, 0, len(relatorioOmie))
-	for _, m := range relatorioOmie {
+	var saldoMensal [12]float64
+	for i, m := range relatorioOmie {
+		saldoMensal[i] = m.SaldoIniRealizado
 		mensal = append(mensal, GraficoMensal{
 			Mes:                m.Mes,
 			MesNome:            nomeMes[m.Mes],
@@ -173,7 +181,7 @@ func TestAcumularResultado_ReproduzORelatorioDoOmie(t *testing.T) {
 		})
 	}
 
-	out := acumularResultado(relatorioOmie[0].SaldoIniRealizado, 0, mensal)
+	out := acumularResultado(saldoMensal, 0, mensal)
 
 	for i, got := range out {
 		esperado := relatorioOmie[i]
@@ -190,33 +198,38 @@ func TestAcumularResultado_ReproduzORelatorioDoOmie(t *testing.T) {
 }
 
 /*
-O encadeamento, verificado na saída da nossa função.
+A independência entre meses, verificada na saída da nossa função.
 
-É a propriedade que transforma doze cálculos soltos numa série: a abertura de um
-mês tem de ser exatamente o fechamento do anterior. Um off-by-one aqui — usar o
-acumulado do próprio mês como abertura — daria um gráfico que sobe o dobro e
-continua parecendo certo.
+É a propriedade central do modelo novo: um mês ruim não pode contaminar os
+seguintes. Alterando o saldo real de um único mês, só o acumulado DAQUELE mês
+deve mudar — os outros, que partem do próprio saldo real deles, têm que
+continuar exatamente iguais.
 */
-func TestAcumularResultado_AberturaEhOFechamentoDoMesAnterior(t *testing.T) {
+func TestAcumularResultado_MesesSaoIndependentes(t *testing.T) {
 	mensal := []GraficoMensal{
 		{Mes: 1, ResultadoRealizado: 100, ResultadoPrevisto: 150},
 		{Mes: 2, ResultadoRealizado: -40, ResultadoPrevisto: -10},
 		{Mes: 3, ResultadoRealizado: 25, ResultadoPrevisto: 25},
 	}
 
-	out := acumularResultado(1000, 0, mensal)
+	base := ancoraMensal(1000)
+	alterado := base
+	alterado[0] = 1000000 // um saldo real de janeiro muito diferente
 
-	if !perto(out[0].SaldoInicialRealizado, 1000) {
-		t.Fatalf("o primeiro mês não abriu na âncora: %.2f", out[0].SaldoInicialRealizado)
+	out := acumularResultado(base, 0, mensal)
+	outAlterado := acumularResultado(alterado, 0, mensal)
+
+	if perto(out[0].AcumuladoRealizado, outAlterado[0].AcumuladoRealizado) {
+		t.Fatalf("mês 1 não reagiu à mudança no seu próprio saldo real")
 	}
 	for i := 1; i < len(out); i++ {
-		if !perto(out[i].SaldoInicialRealizado, out[i-1].AcumuladoRealizado) {
-			t.Errorf("mês %d abre em %.2f, mas o anterior fechou em %.2f",
-				out[i].Mes, out[i].SaldoInicialRealizado, out[i-1].AcumuladoRealizado)
+		if !perto(out[i].AcumuladoRealizado, outAlterado[i].AcumuladoRealizado) {
+			t.Errorf("mês %d mudou (%.2f -> %.2f) por causa de um saldo alterado em outro mês — encadeamento não deveria mais existir",
+				out[i].Mes, out[i].AcumuladoRealizado, outAlterado[i].AcumuladoRealizado)
 		}
-		if !perto(out[i].SaldoInicialPrevisto, out[i-1].AcumuladoPrevisto) {
-			t.Errorf("mês %d (previsto) abre em %.2f, mas o anterior fechou em %.2f",
-				out[i].Mes, out[i].SaldoInicialPrevisto, out[i-1].AcumuladoPrevisto)
+		if !perto(out[i].AcumuladoPrevisto, outAlterado[i].AcumuladoPrevisto) {
+			t.Errorf("mês %d (previsto) mudou (%.2f -> %.2f) por causa de um saldo alterado em outro mês",
+				out[i].Mes, out[i].AcumuladoPrevisto, outAlterado[i].AcumuladoPrevisto)
 		}
 	}
 }
@@ -224,7 +237,7 @@ func TestAcumularResultado_AberturaEhOFechamentoDoMesAnterior(t *testing.T) {
 // As duas trilhas partem do mesmo ponto: a posição de caixa no início do período
 // é uma só. Elas divergem a partir do primeiro mês, não antes dele.
 func TestAcumularResultado_AsDuasTrilhasAbremNaMesmaAncora(t *testing.T) {
-	out := acumularResultado(500, 0, []GraficoMensal{{Mes: 1, ResultadoRealizado: 10, ResultadoPrevisto: 99}})
+	out := acumularResultado(ancoraMensal(500), 0, []GraficoMensal{{Mes: 1, ResultadoRealizado: 10, ResultadoPrevisto: 99}})
 
 	if !perto(out[0].SaldoInicialRealizado, 500) || !perto(out[0].SaldoInicialPrevisto, 500) {
 		t.Fatalf("abriram em pontos diferentes: real=%.2f prev=%.2f",
@@ -242,7 +255,7 @@ func TestAcumularResultado_AsDuasTrilhasAbremNaMesmaAncora(t *testing.T) {
 recorte, a partir do zero. Precisa continuar somando normalmente.
 */
 func TestAcumularResultado_AncoraZeroAcumulaDoZero(t *testing.T) {
-	out := acumularResultado(0, 0, []GraficoMensal{
+	out := acumularResultado([12]float64{}, 0, []GraficoMensal{
 		{Mes: 1, ResultadoRealizado: 100},
 		{Mes: 2, ResultadoRealizado: 100},
 	})
@@ -301,8 +314,8 @@ relatório do Omie faz com o balde (Atrasados), antes de janeiro.
 func TestAcumularResultado_AtrasadosSoNaTrilhaPrevista(t *testing.T) {
 	mensal := []GraficoMensal{{Mes: 1, ResultadoRealizado: 100, ResultadoPrevisto: 100}}
 
-	semAtraso := acumularResultado(1000, 0, mensal)
-	comAtraso := acumularResultado(1000, -300, mensal)
+	semAtraso := acumularResultado(ancoraMensal(1000), 0, mensal)
+	comAtraso := acumularResultado(ancoraMensal(1000), -300, mensal)
 
 	if !perto(semAtraso[0].AcumuladoRealizado, comAtraso[0].AcumuladoRealizado) {
 		t.Errorf("os atrasados mexeram no realizado: %.2f virou %.2f",
@@ -319,7 +332,7 @@ func TestAcumularResultado_AtrasadosSoNaTrilhaPrevista(t *testing.T) {
 // Com o filtro desligado (atrasados = 0) as duas trilhas abrem no mesmo ponto —
 // é o comportamento anterior, preservado.
 func TestAcumularResultado_SemAtrasadosAsTrilhasAbremJuntas(t *testing.T) {
-	out := acumularResultado(1000, 0, []GraficoMensal{{Mes: 1}})
+	out := acumularResultado(ancoraMensal(1000), 0, []GraficoMensal{{Mes: 1}})
 
 	if !perto(out[0].SaldoInicialRealizado, out[0].SaldoInicialPrevisto) {
 		t.Fatalf("abriram separadas sem atrasados: %.2f e %.2f",

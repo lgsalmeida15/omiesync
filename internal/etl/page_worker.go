@@ -116,11 +116,11 @@ func (pw *PageWorker) processPage(
 		return nil // outra goroutine já pegou esta página
 	}
 
-	// Guard de segurança: extrato jamais deve chegar aqui
-	if page.Modulo == "extrato" {
-		pw.log.Error().Msg("BUG CRÍTICO: extrato chegou ao PageWorker — isso nunca deve acontecer")
+	// Guard de segurança: extrato e saldo_por_contas jamais devem chegar aqui
+	if page.Modulo == "extrato" || page.Modulo == "saldo_por_contas" {
+		pw.log.Error().Str("modulo", page.Modulo).Msg("BUG CRÍTICO: módulo sem paginação chegou ao PageWorker — isso nunca deve acontecer")
 		_ = pw.syncRepo.MarkPageErro(ctx, page.ID,
-			"BUG: extrato não deve usar sub-jobs por página", time.Now().Add(24*time.Hour))
+			"BUG: "+page.Modulo+" não deve usar sub-jobs por página", time.Now().Add(24*time.Hour))
 		return nil
 	}
 
