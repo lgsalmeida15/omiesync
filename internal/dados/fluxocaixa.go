@@ -18,7 +18,7 @@ type FluxoTransacao struct {
 	Dia       int    `json:"dia"`
 	Data      string `json:"data"` // DD/MM/YYYY
 	Descricao string `json:"descricao"`
-	Tipo      string `json:"tipo"` // "receita" | "despesa"
+	Tipo      string `json:"tipo"` // "receita" | "despesa" | "transferencia"
 	// CategoriaSuperior é o agrupador de nível 2 do pivô — na matvw, LEFT(codigo, 4)
 	// resolvido contra a tabela de categorias. Existe aqui para que a tabela
 	// intradia da aba Fluxo de Caixa tenha os mesmos quatro níveis da aba
@@ -50,8 +50,14 @@ type FluxoResumo struct {
 	AtrasadoReceber float64 `json:"atrasado_receber"`
 	AtrasadoPagar   float64 `json:"atrasado_pagar"`
 
-	// Continua somando os seis: separar o atrasado redistribui as linhas acima,
-	// mas não muda o total.
+	// Transferência (entrada/saída entre contas) separada de Recebido/Pago, no
+	// mesmo nível deles — não é receita nem despesa, mas conta no Resultado
+	// abaixo, igual sempre contou.
+	TransferidoEntrada float64 `json:"transferido_entrada"`
+	TransferidoSaida   float64 `json:"transferido_saida"`
+
+	// Continua somando os oito: separar o atrasado e a transferência redistribui
+	// as linhas acima, mas não muda o total.
 	Resultado float64 `json:"resultado"`
 }
 
@@ -88,14 +94,14 @@ const maxProximosVencimentos = 12
 
 // colunasFluxo é a projeção compartilhada pelas duas consultas.
 //
-// O tipo sai de ajuste_receita_despesa, e não da coluna textual receita_despesa,
-// que é NULL quando a classificação não resolve. É a mesma regra do dashboard e do
-// pivot — usar o texto criaria um terceiro grupo e faria as abas divergirem.
+// O tipo sai de grupo_financeiro, que já cobre receita/despesa/transferência com o
+// mesmo fallback que ajuste_receita_despesa usava — é a mesma regra do dashboard e
+// do pivot, para as três abas não divergirem.
 const colunasFluxo = `
 	EXTRACT(DAY FROM TO_DATE(NULLIF(data_pagamento,''), 'DD/MM/YYYY'))::INT AS dia,
 	COALESCE(data_pagamento, '')                                           AS data,
 	COALESCE(NULLIF(cliente_final, ''), 'Não informado')                   AS descricao,
-	CASE ajuste_receita_despesa WHEN 1 THEN 'receita' ELSE 'despesa' END   AS tipo,
+	grupo_financeiro                                                       AS tipo,
 	COALESCE(NULLIF(descricao_categoria_superior, ''), 'Sem categoria')    AS categoria_superior,
 	COALESCE(NULLIF(descricao_categoria_final, ''), 'Sem categoria')       AS categoria,
 	valor_final                                                            AS valor,
@@ -173,6 +179,14 @@ func QueryFluxoCaixa(ctx context.Context, pool *pgxpool.Pool, p DashboardParams)
 			resp.Resumo.AtrasadoReceber += t.Valor
 		case t.Status == statusAtrasado:
 			resp.Resumo.AtrasadoPagar += t.Valor
+		// Transferência ANTES do default: sem este ramo ela cairia em Pago/APagar,
+		// voltando a se misturar com despesa — o mesmo problema que esta mudança
+		// resolveu no Resultado, só que aqui. A direção vem de t.Categoria, que a
+		// matvw já sintetiza (ver provisioner.go).
+		case t.Tipo == "transferencia" && t.Categoria == "Entrada de Transferência":
+			resp.Resumo.TransferidoEntrada += t.Valor
+		case t.Tipo == "transferencia":
+			resp.Resumo.TransferidoSaida += t.Valor
 		case t.Tipo == "receita" && t.Realizado:
 			resp.Resumo.Recebido += t.Valor
 		case t.Tipo == "receita":
@@ -184,8 +198,8 @@ func QueryFluxoCaixa(ctx context.Context, pool *pgxpool.Pool, p DashboardParams)
 		}
 	}
 	resp.Resumo.Resultado =
-		(resp.Resumo.Recebido + resp.Resumo.AReceber + resp.Resumo.AtrasadoReceber) -
-			(resp.Resumo.Pago + resp.Resumo.APagar + resp.Resumo.AtrasadoPagar)
+		(resp.Resumo.Recebido + resp.Resumo.AReceber + resp.Resumo.AtrasadoReceber + resp.Resumo.TransferidoEntrada) -
+			(resp.Resumo.Pago + resp.Resumo.APagar + resp.Resumo.AtrasadoPagar + resp.Resumo.TransferidoSaida)
 
 	/*
 	 * Abertura e fechamento do mês.

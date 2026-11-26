@@ -33,6 +33,16 @@
         <span class="res-val res-val--atraso">{{ fmtMoeda(resumo.atrasado_pagar) }}</span>
       </div>
     </template>
+    <!-- Transferência não é receita nem despesa — aparece só quando há alguma no
+         recorte, para não exibir uma linha a zero em quem nunca transferiu. -->
+    <div v-if="resumo.transferido_entrada > 0" class="res-linha">
+      <span class="res-rot">Transferido<span class="res-prev">entrada</span></span>
+      <span class="res-val res-val--transf">{{ fmtMoeda(resumo.transferido_entrada) }}</span>
+    </div>
+    <div v-if="resumo.transferido_saida > 0" class="res-linha">
+      <span class="res-rot">Transferido<span class="res-prev">saída</span></span>
+      <span class="res-val res-val--transf">{{ fmtMoeda(resumo.transferido_saida) }}</span>
+    </div>
     <div class="res-linha res-linha--total">
       <span class="res-rot">{{ tipo === 'todos' ? 'Resultado' : 'Total' }}</span>
       <span class="res-val" :class="resumo.resultado < 0 ? 'res-val--out' : 'res-val--in'">
@@ -92,5 +102,6 @@ defineProps<{
 .res-val--in     { color: var(--success); }
 .res-val--out    { color: var(--danger); }
 .res-val--atraso { color: var(--danger); font-weight: 700; }
+.res-val--transf { color: var(--text-muted); }
 .res-linha--total .res-val { font-size: var(--fs-base); }
 </style>

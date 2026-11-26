@@ -308,9 +308,10 @@ interface No {
   total: number
   temFilhos: boolean
   paiId: string | null
-  // Herdado da raiz da arvore. Receita e despesa chegam ambas como magnitude
-  // positiva, entao o sinal nao distingue as duas — quem distingue e o tipo.
-  tipo: 'receita' | 'despesa'
+  // Herdado da raiz da arvore. Receita, despesa e transferencia chegam todas
+  // como magnitude positiva, entao o sinal nao distingue — quem distingue e o
+  // tipo (e, dentro de transferencia, a categoria final: Entrada/Saida).
+  tipo: 'receita' | 'despesa' | 'transferencia'
 }
 
 const zeros = () => Array(12).fill(0)
@@ -354,9 +355,15 @@ const arvore = computed<No[]>(() => {
     porPai.set(n.paiId, lista)
   }
 
-  // Receita antes de despesa. O SQL ordena por `tipo`, e alfabeticamente "despesa"
-  // vem primeiro — invertido em relação à leitura de um resultado.
-  const pesoTipo = (rotulo: string) => (rotulo.toUpperCase() === 'RECEITA' ? 0 : 1)
+  // Receita, despesa, transferência — nesta ordem, explícita, e não por sorte da
+  // ordenação alfabética do SQL (que colocaria despesa antes de receita).
+  const pesoTipo = (rotulo: string) => {
+    switch (rotulo.toUpperCase()) {
+      case 'RECEITA': return 0
+      case 'DESPESA': return 1
+      default:        return 2
+    }
+  }
   const raiz = porPai.get(null)
   if (raiz) raiz.sort((a, b) => pesoTipo(a.rotulo) - pesoTipo(b.rotulo))
   const saida: No[] = []
@@ -556,6 +563,7 @@ watch(() => [props.grupoId, props.filtros], carregar, { deep: true, immediate: t
 
 .pv-receita { color: var(--success); }
 .pv-despesa { color: var(--danger); }
+.pv-transferencia { color: var(--text-muted); }
 /* .pv-zero vence as duas: celula sem valor nao deve puxar atencao com cor. */
 .pv-zero { color: var(--text-dim) !important; }
 .pv-previsto { background: var(--warning-weak); }

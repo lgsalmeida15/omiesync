@@ -16,22 +16,26 @@ function emJaneiro(v: number): number[] {
   return m
 }
 
+// Transferência agora é seu próprio tipo (não mais sob receita/despesa), com
+// entrada e saída como categorias finais DENTRO da mesma categoria superior
+// 'Transferência' — por isso as duas compartilham a mesma chaveSuperior.
 const linhas: PivotLinha[] = [
   l({ tipo: 'receita', categoria_superior: 'Receitas',      meses: emJaneiro(10000), total: 10000 }),
-  l({ tipo: 'receita', categoria_superior: 'Transferência', categoria_final: 'Transf. Inter Empresas/Contas',
-      meses: emJaneiro(3000), total: 3000 }),
   l({ tipo: 'despesa', categoria_superior: 'Despesas',      meses: emJaneiro(4000), total: 4000 }),
-  l({ tipo: 'despesa', categoria_superior: 'Transferência', categoria_final: 'Transf. Inter Empresas/Contas',
+  l({ tipo: 'transferencia', categoria_superior: 'Transferência', categoria_final: 'Entrada de Transferência',
       meses: emJaneiro(3000), total: 3000 }),
+  l({ tipo: 'transferencia', categoria_superior: 'Transferência', categoria_final: 'Saída de Transferência',
+      meses: emJaneiro(1000), total: 1000 }),
 ]
 
 describe('calcularResultado', () => {
   // Este é o teste de regressão: sem exclusão nenhuma, o valor tem de ser o mesmo
-  // que o backend soma. Receita 13.000 − despesa 7.000 = 6.000.
+  // que o backend soma. Receita 10.000 − despesa 4.000 + transferência líquida
+  // (3.000 entrada − 1.000 saída) = 8.000.
   it('sem exclusões reproduz a soma do servidor', () => {
     const r = calcularResultado(linhas)
-    expect(r.total).toBe(6000)
-    expect(r.meses[0]).toBe(6000)
+    expect(r.total).toBe(8000)
+    expect(r.meses[0]).toBe(8000)
   })
 
   it('lista vazia devolve zeros nos doze meses', () => {
@@ -41,18 +45,27 @@ describe('calcularResultado', () => {
     expect(r.meses.every(v => v === 0)).toBe(true)
   })
 
-  // A mesma superior existe sob receita e sob despesa. Desmarcar a de receita não
-  // pode levar a de despesa junto — foi por isso que a chave carrega o tipo.
-  it('exclui só o tipo pedido quando a superior existe nos dois', () => {
-    const r = calcularResultado(linhas, new Set([chaveSuperior('receita', 'Transferência')]))
-    // Sai 3.000 de receita: 10.000 − 7.000 = 3.000
-    expect(r.total).toBe(3000)
+  // Transferência nunca deixou de contar no resultado — só deixou de ficar
+  // diluída em receita/despesa. Entrada soma, saída subtrai, como receita e
+  // despesa sempre somaram/subtraíram.
+  it('transferência soma a entrada e subtrai a saída', () => {
+    const r = calcularResultado([
+      l({ tipo: 'transferencia', categoria_superior: 'Transferência', categoria_final: 'Entrada de Transferência',
+          meses: emJaneiro(500), total: 500 }),
+    ])
+    expect(r.total).toBe(500)
+
+    const rSaida = calcularResultado([
+      l({ tipo: 'transferencia', categoria_superior: 'Transferência', categoria_final: 'Saída de Transferência',
+          meses: emJaneiro(500), total: 500 }),
+    ])
+    expect(rSaida.total).toBe(-500)
   })
 
   it('excluir uma despesa AUMENTA o resultado', () => {
     const semExclusao = calcularResultado(linhas).total
-    const r = calcularResultado(linhas, new Set([chaveSuperior('despesa', 'Transferência')]))
-    expect(r.total).toBe(9000)
+    const r = calcularResultado(linhas, new Set([chaveSuperior('despesa', 'Despesas')]))
+    expect(r.total).toBe(12000)
     expect(r.total).toBeGreaterThan(semExclusao)
   })
 
@@ -62,14 +75,13 @@ describe('calcularResultado', () => {
     expect(r.total).toBeLessThan(semExclusao)
   })
 
-  // É o caso de uso que o usuário descreveu: desmarcando Transferência dos dois
-  // lados, o número volta a ser o de antes de ela passar a somar.
-  it('excluir Transferência dos dois tipos devolve o resultado sem ela', () => {
-    const r = calcularResultado(linhas, new Set([
-      chaveSuperior('receita', 'Transferência'),
-      chaveSuperior('despesa', 'Transferência'),
-    ]))
-    expect(r.total).toBe(6000)   // 10.000 − 4.000
+  // Entrada e saída de transferência compartilham a mesma categoria superior
+  // ('Transferência') sob o mesmo tipo ('transferencia'), então um único clique
+  // no bloco tira as duas pontas do resultado de uma vez — diferente de
+  // receita/despesa, que precisam de uma chave por tipo.
+  it('excluir a categoria superior Transferência tira entrada e saída juntas', () => {
+    const r = calcularResultado(linhas, new Set([chaveSuperior('transferencia', 'Transferência')]))
+    expect(r.total).toBe(6000)   // 10.000 − 4.000, sem a transferência
   })
 
   it('excluir tudo zera', () => {
@@ -81,7 +93,7 @@ describe('calcularResultado', () => {
 
   it('exclusão desconhecida não altera nada', () => {
     const r = calcularResultado(linhas, new Set(['receita|Nao Existe']))
-    expect(r.total).toBe(6000)
+    expect(r.total).toBe(8000)
   })
 
   // O ELSE do ajuste_receita_despesa no servidor manda o não classificado para

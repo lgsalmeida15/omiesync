@@ -5,7 +5,7 @@ export interface FluxoTransacao {
   dia: number
   data: string          // DD/MM/YYYY
   descricao: string     // cliente_final
-  tipo: 'receita' | 'despesa'
+  tipo: 'receita' | 'despesa' | 'transferencia'
   /**
    * Agrupador de nivel 2 do pivo — na matvw, LEFT(codigo, 4) resolvido contra a
    * tabela de categorias. Alimenta a tabela intradia da aba Fluxo de Caixa, que
@@ -33,7 +33,13 @@ export interface FluxoResumo {
    */
   atrasado_receber: number
   atrasado_pagar: number
-  /** Soma os seis. Separar o atrasado redistribui as linhas, nao muda o total. */
+  /**
+   * Transferência (entrada/saída entre contas), separada de recebido/pago, no
+   * mesmo nível deles. Entra em `resultado` pelo líquido.
+   */
+  transferido_entrada: number
+  transferido_saida: number
+  /** Soma os oito. Separar o atrasado e a transferência redistribui as linhas, nao muda o total. */
   resultado: number
 }
 

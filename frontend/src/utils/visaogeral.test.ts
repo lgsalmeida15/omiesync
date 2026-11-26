@@ -6,11 +6,18 @@ import type { GraficoMensal, SaldoMes } from '@/api/dashboard'
 
 const NOMES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
 
-/** Doze meses; `vals` informa [receita, despesa] dos meses que importam. */
-function serie(vals: Record<number, [number, number]>): GraficoMensal[] {
+/**
+ * Doze meses; `vals` informa [receita, despesa] ou [receita, despesa,
+ * transferencia_entrada, transferencia_saida] dos meses que importam.
+ */
+function serie(vals: Record<number, [number, number] | [number, number, number, number]>): GraficoMensal[] {
   return Array.from({ length: 12 }, (_, i) => {
-    const [receita, despesa] = vals[i + 1] ?? [0, 0]
-    return { mes: i + 1, mes_nome: NOMES[i], receita, despesa, resultado_mes: receita - despesa }
+    const [receita, despesa, transferenciaEntrada = 0, transferenciaSaida = 0] = vals[i + 1] ?? [0, 0]
+    return {
+      mes: i + 1, mes_nome: NOMES[i], receita, despesa,
+      transferencia_entrada: transferenciaEntrada, transferencia_saida: transferenciaSaida,
+      resultado_mes: (receita - despesa) + (transferenciaEntrada - transferenciaSaida),
+    }
   })
 }
 
@@ -60,6 +67,14 @@ describe('cardsDoRecorte', () => {
 
   it('série vazia não estoura', () => {
     expect(cardsDoRecorte([])).toEqual({ receita: 0, despesa: 0, resultado: 0 })
+  })
+
+  // Transferência não soma em receita/despesa — ela é um grupo próprio — mas
+  // continua contando no resultado pelo líquido, igual sempre contou.
+  it('transferência entra no resultado pelo líquido, sem somar em receita/despesa', () => {
+    const comTransferencia = serie({ 1: [1000, 400, 300, 100] })
+    const r = cardsDoRecorte(comTransferencia, new Set([1]))
+    expect(r).toEqual({ receita: 1000, despesa: 400, resultado: 800 }) // 1000-400+300-100
   })
 })
 

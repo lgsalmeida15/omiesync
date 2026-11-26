@@ -16,7 +16,7 @@ import (
 // por 12 e obrigaria o cliente a cruzar tudo. Assim cada combinação vem uma vez só,
 // e a árvore é montada somando os filhos, sem consulta adicional por expansão.
 type PivotLinha struct {
-	Tipo              string      `json:"tipo"` // "receita" | "despesa"
+	Tipo              string      `json:"tipo"` // "receita" | "despesa" | "transferencia"
 	CategoriaSuperior string      `json:"categoria_superior"`
 	CategoriaFinal    string      `json:"categoria_final"`
 	Cliente           string      `json:"cliente"`
@@ -78,12 +78,12 @@ func QueryPivot(ctx context.Context, pool *pgxpool.Pool, p DashboardParams) (*Pi
 	// FILTER (WHERE mes = N) é o pivot: uma coluna por mês, uma linha por combinação.
 	sql := fmt.Sprintf(`
 		SELECT
-			-- Deriva de ajuste_receita_despesa, e não da coluna textual
-			-- receita_despesa, que é NULL quando a classificação não resolve.
-			-- O dashboard usa o ajuste, cujo ELSE manda o não classificado para
-			-- despesa; agrupar pelo texto criaria um terceiro grupo aqui e faria
-			-- as duas abas divergirem no total.
-			CASE ajuste_receita_despesa WHEN 1 THEN 'receita' ELSE 'despesa' END AS tipo,
+			-- grupo_financeiro, e não a coluna textual receita_despesa (que é NULL
+			-- quando a classificação não resolve): já cobre os três grupos — receita,
+			-- despesa e transferência — com o mesmo fallback para despesa que
+			-- ajuste_receita_despesa usa, então não há mais risco de um terceiro
+			-- grupo "escondido" fazer esta aba divergir de dashboard/fluxo de caixa.
+			grupo_financeiro AS tipo,
 			COALESCE(NULLIF(descricao_categoria_superior, ''), 'Sem categoria') AS cat_superior,
 			COALESCE(NULLIF(descricao_categoria_final, ''),    'Sem categoria') AS cat_final,
 			COALESCE(NULLIF(cliente_final, ''), 'Não informado')   AS cliente,
@@ -133,9 +133,12 @@ func QueryPivot(ctx context.Context, pool *pgxpool.Pool, p DashboardParams) (*Pi
 		// arredondamento divergiria do que o banco reporta nos cards.
 		//
 		// As linhas seguem com a magnitude positiva — quem carrega o sinal é o
-		// rodapé, onde despesa subtrai.
+		// rodapé, onde despesa subtrai. Transferência CONTINUA contando aqui —
+		// só deixou de ficar misturada dentro de receita/despesa — então entrada
+		// soma e saída subtrai, pela mesma regra.
 		sinal := 1.0
-		if l.Tipo == "despesa" {
+		if l.Tipo == "despesa" ||
+			(l.Tipo == "transferencia" && l.CategoriaFinal == "Saída de Transferência") {
 			sinal = -1.0
 		}
 		for i, v := range l.Meses {

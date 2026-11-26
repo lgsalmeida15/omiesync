@@ -169,11 +169,10 @@
           {{ d }}
         </label>
       </div>
-      <!-- Categorias: lista de exclusão, com "Transferência" oculta por padrão -->
+      <!-- Categorias: lista de exclusão -->
       <div v-if="dropdown === 'cat'" class="fd-fixed" :style="fdStyle" @click.stop>
         <div class="fd-acoes">
           <button class="fd-acao" @click="todasCategorias">Marcar todas</button>
-          <button class="fd-acao" @click="padraoCategorias">Padrão</button>
         </div>
         <label v-for="c in filtrosDisponiveis.categorias" :key="c" class="chk-item">
           <input type="checkbox" :checked="categoriaMarcada(c)" @change="alternarCategoria(c)" />
@@ -480,15 +479,6 @@ const anosDisponiveis = computed(() => {
   return anos
 })
 
-/**
- * Categoria oculta por padrão. É lista de EXCLUSÃO: se fosse de inclusão, uma
- * categoria nova no Omie ficaria fora dos números em silêncio até alguém marcá-la.
- */
-// Categoria FINAL, nao superior: o filtro passou a operar na final, e a superior
-// "Transferência" nao existe mais como opcao. Consequencia esperada — as demais
-// finais que estavam sob ela passam a aparecer e a somar.
-const CATEGORIA_OCULTA_PADRAO = 'Transf. Inter Empresas/Contas'
-
 const filtros = reactive({
   ano:               anoAtual,
   contas_correntes:  [] as string[],
@@ -496,7 +486,11 @@ const filtros = reactive({
   categorias:        [] as string[],
   empresas:          [] as string[],
   cliente:           '',
-  categorias_excluir: [CATEGORIA_OCULTA_PADRAO] as string[],
+  // Lista de EXCLUSÃO, não de inclusão: uma categoria nova no Omie fica nos
+  // números em vez de ficar escondida em silêncio até alguém marcá-la.
+  // Transferência deixou de precisar de exclusão por padrão aqui — ela virou um
+  // grupo próprio no backend (grupo_financeiro), separado de receita/despesa.
+  categorias_excluir: [] as string[],
   // Ligado por padrao: quem abre Contas a Pagar ou a Receber quer ver o que
   // esta vencido. Desligado, ninguem descobriria a opcao.
   inadimplencia:     true,
@@ -625,11 +619,6 @@ function todasCategorias() {
   carregar()
 }
 
-function padraoCategorias() {
-  filtros.categorias_excluir = [CATEGORIA_OCULTA_PADRAO]
-  carregar()
-}
-
 /** Rótulo do gatilho: informa o estado sem obrigar a abrir o dropdown. */
 function rotuloLista(campo: CampoLista, total: number): string {
   const n = filtros[campo].length
@@ -639,9 +628,6 @@ function rotuloLista(campo: CampoLista, total: number): string {
 const rotuloCategorias = computed(() => {
   const ex = filtros.categorias_excluir.length
   if (ex === 0) return 'Todas'
-  if (ex === 1 && filtros.categorias_excluir[0] === CATEGORIA_OCULTA_PADRAO) {
-    return 'Todas exc. Transf.'
-  }
   return `${ex} oculta${ex > 1 ? 's' : ''}`
 })
 
@@ -1195,8 +1181,7 @@ function limparFiltros() {
   filtros.empresas         = []
   filtros.cliente          = ''
   filtros.ano              = anoAtual
-  // Volta ao padrão, não a "tudo visível": Transferência segue oculta.
-  filtros.categorias_excluir = [CATEGORIA_OCULTA_PADRAO]
+  filtros.categorias_excluir = []
   carregar()
 }
 

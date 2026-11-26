@@ -172,10 +172,12 @@ func QueryDashboard(ctx context.Context, pool *pgxpool.Pool, p DashboardParams) 
 	}
 
 	// Calcula cards a partir dos dados mensais
-	var receitaTotal, despesaTotal float64
+	var receitaTotal, despesaTotal, transferenciaEntradaTotal, transferenciaSaidaTotal float64
 	for _, m := range mensal {
 		receitaTotal += m.Receita
 		despesaTotal += m.Despesa
+		transferenciaEntradaTotal += m.TransferenciaEntrada
+		transferenciaSaidaTotal += m.TransferenciaSaida
 	}
 
 	/*
@@ -222,12 +224,16 @@ func QueryDashboard(ctx context.Context, pool *pgxpool.Pool, p DashboardParams) 
 
 	return &DashboardResponse{
 		Cards: CardMetrics{
-			ReceitaTotal: receitaTotal,
-			DespesaTotal: despesaTotal,
+			ReceitaTotal:              receitaTotal,
+			DespesaTotal:              despesaTotal,
+			TransferenciaEntradaTotal: transferenciaEntradaTotal,
+			TransferenciaSaidaTotal:   transferenciaSaidaTotal,
 			// A fórmula soma posição de caixa a fluxo do período e infla a margem
 			// exibida no card — sinalizado ao usuário, aguardando decisão dele.
-			// Mantida como estava para não mudar um número em silêncio.
-			Resultado:            receitaTotal - despesaTotal + saldosMensais[11].Saldo,
+			// Mantida como estava para não mudar um número em silêncio. Transferência
+			// entra pelo líquido, igual sempre entrou — só não fica mais escondida
+			// dentro de receita/despesa.
+			Resultado:            receitaTotal - despesaTotal + transferenciaEntradaTotal - transferenciaSaidaTotal + saldosMensais[11].Saldo,
 			SaldoContasCorrentes: saldosMensais[11].Saldo,
 			SaldoInicial:         saldoMensal[0],
 		},
@@ -346,16 +352,28 @@ func queryGraficoMensal(ctx context.Context, pool *pgxpool.Pool, safe, view stri
 	 *
 	 * Os totais continuam somando os dois, para que Receita e Despesa — e tudo
 	 * que depende delas — não mudem de valor com esta alteração.
+	 *
+	 * Receita/despesa filtram por grupo_financeiro, não mais por
+	 * ajuste_receita_despesa: é o que deixa os dois totais limpos de
+	 * transferência. Transferência entra em duas somas próprias (entrada/saída),
+	 * que o Resultado (abaixo) soma de volta pelo líquido — ela nunca deixou de
+	 * contar, só deixou de ficar escondida dentro de receita/despesa.
 	 */
 	sql := fmt.Sprintf(`
 		SELECT
 			mes,
-			COALESCE(SUM(CASE WHEN ajuste_receita_despesa = 1 THEN valor_final ELSE 0 END), 0) AS receita,
-			COALESCE(SUM(CASE WHEN ajuste_receita_despesa = 2 THEN valor_final ELSE 0 END), 0) AS despesa,
-			COALESCE(SUM(CASE WHEN ajuste_receita_despesa = 1 AND mov_ou_extrato = 'mov' THEN valor_final ELSE 0 END), 0) AS receita_real,
-			COALESCE(SUM(CASE WHEN ajuste_receita_despesa = 2 AND mov_ou_extrato = 'mov' THEN valor_final ELSE 0 END), 0) AS despesa_real,
-			COALESCE(SUM(CASE WHEN ajuste_receita_despesa = 1 AND mov_ou_extrato = 'ext' THEN valor_final ELSE 0 END), 0) AS receita_prev,
-			COALESCE(SUM(CASE WHEN ajuste_receita_despesa = 2 AND mov_ou_extrato = 'ext' THEN valor_final ELSE 0 END), 0) AS despesa_prev
+			COALESCE(SUM(CASE WHEN grupo_financeiro = 'receita' THEN valor_final ELSE 0 END), 0) AS receita,
+			COALESCE(SUM(CASE WHEN grupo_financeiro = 'despesa' THEN valor_final ELSE 0 END), 0) AS despesa,
+			COALESCE(SUM(CASE WHEN grupo_financeiro = 'transferencia' AND ajuste_receita_despesa = 1 THEN valor_final ELSE 0 END), 0) AS transferencia_entrada,
+			COALESCE(SUM(CASE WHEN grupo_financeiro = 'transferencia' AND ajuste_receita_despesa = 2 THEN valor_final ELSE 0 END), 0) AS transferencia_saida,
+			COALESCE(SUM(CASE WHEN grupo_financeiro = 'receita' AND mov_ou_extrato = 'mov' THEN valor_final ELSE 0 END), 0) AS receita_real,
+			COALESCE(SUM(CASE WHEN grupo_financeiro = 'despesa' AND mov_ou_extrato = 'mov' THEN valor_final ELSE 0 END), 0) AS despesa_real,
+			COALESCE(SUM(CASE WHEN grupo_financeiro = 'transferencia' AND ajuste_receita_despesa = 1 AND mov_ou_extrato = 'mov' THEN valor_final ELSE 0 END), 0) AS transferencia_entrada_real,
+			COALESCE(SUM(CASE WHEN grupo_financeiro = 'transferencia' AND ajuste_receita_despesa = 2 AND mov_ou_extrato = 'mov' THEN valor_final ELSE 0 END), 0) AS transferencia_saida_real,
+			COALESCE(SUM(CASE WHEN grupo_financeiro = 'receita' AND mov_ou_extrato = 'ext' THEN valor_final ELSE 0 END), 0) AS receita_prev,
+			COALESCE(SUM(CASE WHEN grupo_financeiro = 'despesa' AND mov_ou_extrato = 'ext' THEN valor_final ELSE 0 END), 0) AS despesa_prev,
+			COALESCE(SUM(CASE WHEN grupo_financeiro = 'transferencia' AND ajuste_receita_despesa = 1 AND mov_ou_extrato = 'ext' THEN valor_final ELSE 0 END), 0) AS transferencia_entrada_prev,
+			COALESCE(SUM(CASE WHEN grupo_financeiro = 'transferencia' AND ajuste_receita_despesa = 2 AND mov_ou_extrato = 'ext' THEN valor_final ELSE 0 END), 0) AS transferencia_saida_prev
 		FROM %s.%s
 		WHERE %s
 		GROUP BY mes
@@ -376,18 +394,29 @@ func queryGraficoMensal(ctx context.Context, pool *pgxpool.Pool, safe, view stri
 
 	for rows.Next() {
 		var mes int
-		var receita, despesa, receitaReal, despesaReal, receitaPrev, despesaPrev float64
-		if err := rows.Scan(&mes, &receita, &despesa, &receitaReal, &despesaReal, &receitaPrev, &despesaPrev); err != nil {
+		var receita, despesa, transfEntrada, transfSaida float64
+		var receitaReal, despesaReal, transfEntradaReal, transfSaidaReal float64
+		var receitaPrev, despesaPrev, transfEntradaPrev, transfSaidaPrev float64
+		if err := rows.Scan(
+			&mes, &receita, &despesa, &transfEntrada, &transfSaida,
+			&receitaReal, &despesaReal, &transfEntradaReal, &transfSaidaReal,
+			&receitaPrev, &despesaPrev, &transfEntradaPrev, &transfSaidaPrev,
+		); err != nil {
 			return nil, err
 		}
 		if mes >= 1 && mes <= 12 {
 			m := &resultado[mes-1]
 			m.Receita = receita
 			m.Despesa = despesa
-			m.ResultadoMes = receita - despesa
+			m.TransferenciaEntrada = transfEntrada
+			m.TransferenciaSaida = transfSaida
+			// Transferência CONTINUA contando no Resultado — só deixou de ficar
+			// diluída dentro de receita/despesa: entrada soma, saída subtrai,
+			// pela mesma regra de sempre.
+			m.ResultadoMes = (receita - despesa) + (transfEntrada - transfSaida)
 			m.ReceitaRealizada = receitaReal
 			m.DespesaRealizada = despesaReal
-			m.ResultadoRealizado = receitaReal - despesaReal
+			m.ResultadoRealizado = (receitaReal - despesaReal) + (transfEntradaReal - transfSaidaReal)
 			m.ReceitaPrevista = receitaPrev
 			m.DespesaPrevista = despesaPrev
 			/*
@@ -400,7 +429,7 @@ func queryGraficoMensal(ctx context.Context, pool *pgxpool.Pool, safe, view stri
 			 * projeção de caixa ficaria otimista justamente nos meses em que já
 			 * houve movimento.
 			 */
-			m.ResultadoPrevisto = m.ResultadoRealizado + (receitaPrev - despesaPrev)
+			m.ResultadoPrevisto = m.ResultadoRealizado + (receitaPrev - despesaPrev) + (transfEntradaPrev - transfSaidaPrev)
 		}
 	}
 

@@ -149,6 +149,7 @@
               <option value="">Todos os tipos</option>
               <option value="receita">Recebimentos</option>
               <option value="despesa">Pagamentos</option>
+              <option value="transferencia">Transferências</option>
             </select>
             <select v-model="filtroSituacao" class="fc-select">
               <option value="">Todas as situações</option>
@@ -174,12 +175,10 @@
                 <td class="mono">{{ t.data }}</td>
                 <td>{{ t.descricao }}</td>
                 <td>
-                  <span :class="['pill', t.tipo === 'receita' ? 'pill--in' : 'pill--out']">
-                    {{ t.tipo === 'receita' ? 'Recebimento' : 'Pagamento' }}
-                  </span>
+                  <span :class="['pill', `pill--${classeTipo(t)}`]">{{ rotuloTipo(t) }}</span>
                 </td>
                 <td>{{ t.categoria }}</td>
-                <td class="ta-r mono" :class="t.tipo === 'receita' ? 'res-val--in' : 'res-val--out'">
+                <td class="ta-r mono" :class="`res-val--${classeTipo(t)}`">
                   {{ fmtMoeda(t.valor) }}
                 </td>
                 <td>
@@ -203,7 +202,7 @@ import BotaoFoco from '@/components/ui/BotaoFoco.vue'
 import ResumoMes from './ResumoMes.vue'
 import ProximosVencimentos from './ProximosVencimentos.vue'
 import { fmtMoeda, fmtMoedaExata, fmtCompacto } from '@/utils/formato'
-import { filtrarTransacoes, classeStatus, resumirTransacoes } from '@/utils/fluxo'
+import { filtrarTransacoes, classeStatus, resumirTransacoes, rotuloTipo, classeTipo } from '@/utils/fluxo'
 import { aplicarSelecao, alternarNumero, temRecorte, type Selecao } from '@/utils/fluxocruzado'
 import { porCategoria, topEntidades } from '@/utils/agregacao'
 import { deveMostrar } from '@/utils/foco'
@@ -387,7 +386,12 @@ const diasDoMes = computed(() => {
   for (const t of paraCalendario.value) {
     const d = base[t.dia - 1]
     if (!d) continue
-    if (t.tipo === 'receita') d.entradas += t.valor
+    // Transferência não é receita, mas uma entrada de transferência ainda é
+    // dinheiro entrando no dia — o calendário mostra direção de caixa, não
+    // categoria.
+    const entrada = t.tipo === 'receita' ||
+      (t.tipo === 'transferencia' && t.categoria === 'Entrada de Transferência')
+    if (entrada) d.entradas += t.valor
     else d.saidas += t.valor
     if (!t.realizado) d.temPrevisto = true
     d.temLancamento = true
@@ -620,6 +624,7 @@ watch(() => [props.grupoId, props.filtros, props.mes], carregar, { deep: true, i
 
 .res-val--in     { color: var(--success); }
 .res-val--out    { color: var(--danger); }
+.res-val--transf { color: var(--text-muted); }
 
 .pill {
   display: inline-flex; padding: 2px 8px; border-radius: 20px;
@@ -627,6 +632,7 @@ watch(() => [props.grupoId, props.filtros, props.mes], carregar, { deep: true, i
 }
 .pill--in  { background: var(--success-weak); color: var(--success); }
 .pill--out  { background: var(--danger-weak); color: var(--danger); }
+.pill--transf { background: var(--surface-2); color: var(--text-muted); }
 .pill--pend { background: var(--warning-weak); color: var(--warning); }
 /* Atrasado usa a cor de perigo, e nao o ambar de pendente: vencido nao e a
    mesma coisa que "ainda vai vencer", e a diferenca precisa saltar na lista. */

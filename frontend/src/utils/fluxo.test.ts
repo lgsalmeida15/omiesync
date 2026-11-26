@@ -200,4 +200,18 @@ describe('resumirTransacoes', () => {
     const r = resumirTransacoes([])
     expect(Object.values(r).every(v => v === 0)).toBe(true)
   })
+
+  // Transferência tem tipo 'transferencia' — nem 'receita' nem 'despesa' — e sem
+  // ramo próprio caía em pago/a_pagar, voltando a se misturar com despesa.
+  it('transferência entra em campos próprios, não em pago/a_pagar', () => {
+    const r = resumirTransacoes([
+      t({ tipo: 'transferencia', categoria: 'Entrada de Transferência', valor: 3000 }),
+      t({ tipo: 'transferencia', categoria: 'Saída de Transferência', valor: 1000 }),
+    ])
+    expect(r.transferido_entrada).toBe(3000)
+    expect(r.transferido_saida).toBe(1000)
+    expect(r.pago).toBe(0)
+    expect(r.a_pagar).toBe(0)
+    expect(r.resultado).toBe(2000)
+  })
 })

@@ -3,6 +3,10 @@ import api from './client'
 export interface DashboardCards {
   receita_total: number
   despesa_total: number
+  /** Transferência (entrada/saída entre contas), separada de receita/despesa,
+      no mesmo nível delas. Entra em `resultado` pelo líquido. */
+  transferencia_entrada_total: number
+  transferencia_saida_total: number
   resultado: number
   saldo_contas_correntes: number
   /** Soma dos saldos iniciais cadastrados, antes de qualquer movimento. É a
@@ -15,6 +19,10 @@ export interface GraficoMensal {
   mes_nome: string
   receita: number
   despesa: number
+  /** Transferência do mês, separada de receita/despesa. Entra em
+      `resultado_mes` pelo líquido (entrada − saída). */
+  transferencia_entrada: number
+  transferencia_saida: number
   resultado_mes: number
 }
 

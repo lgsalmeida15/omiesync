@@ -156,6 +156,32 @@ describe('resultadoDiario', () => {
     expect(r.dias).toHaveLength(28)
     expect(r.total).toBe(0)
   })
+
+  // Entrada e saída de transferência compartilham a mesma categoria superior
+  // ('Transferência'), e por isso um nó de nível 2 as somaria juntas, perdendo
+  // o sinal. O cálculo desce ao nível 3 (categoria final) exatamente para não
+  // perder essa distinção.
+  it('transferência soma a entrada e subtrai a saída, mesmo com a mesma superior', () => {
+    const nosTransf = montarPivotDiario([
+      t({ dia: 1, valor: 3000, tipo: 'transferencia', categoria_superior: 'Transferência',
+          categoria: 'Entrada de Transferência' }),
+      t({ dia: 1, valor: 1000, tipo: 'transferencia', categoria_superior: 'Transferência',
+          categoria: 'Saída de Transferência' }),
+    ], DIAS)
+    expect(resultadoDiario(nosTransf, new Set(), DIAS).total).toBe(2000)
+  })
+
+  it('excluir a superior Transferência tira entrada e saída juntas', () => {
+    const nosTransf = montarPivotDiario([
+      t({ dia: 1, valor: 3000, tipo: 'transferencia', categoria_superior: 'Transferência',
+          categoria: 'Entrada de Transferência' }),
+      t({ dia: 1, valor: 1000, tipo: 'transferencia', categoria_superior: 'Transferência',
+          categoria: 'Saída de Transferência' }),
+      t({ dia: 1, valor: 500 }),
+    ], DIAS)
+    const r = resultadoDiario(nosTransf, new Set([chaveSuperior('transferencia', 'Transferência')]), DIAS)
+    expect(r.total).toBe(500)
+  })
 })
 
 // Esta é a garantia que impede o pivô de derivar do resto da tela: sem exclusões,
@@ -173,6 +199,19 @@ describe('coerência com o resumo do mês', () => {
       t({ dia: 8, valor: 700, status: 'Atrasado', realizado: false }),
       t({ dia: 9, valor: 300, tipo: 'despesa', status: 'Atrasado', realizado: false,
           categoria_superior: '2.01 Custos' }),
+    ]
+    const nos = montarPivotDiario(com, DIAS)
+    expect(resultadoDiario(nos, new Set(), DIAS).total)
+      .toBeCloseTo(resumirTransacoes(com).resultado, 6)
+  })
+
+  it('vale também com transferência na lista', () => {
+    const com = [
+      ...amostra,
+      t({ dia: 1, valor: 3000, tipo: 'transferencia', categoria_superior: 'Transferência',
+          categoria: 'Entrada de Transferência' }),
+      t({ dia: 1, valor: 1000, tipo: 'transferencia', categoria_superior: 'Transferência',
+          categoria: 'Saída de Transferência' }),
     ]
     const nos = montarPivotDiario(com, DIAS)
     expect(resultadoDiario(nos, new Set(), DIAS).total)

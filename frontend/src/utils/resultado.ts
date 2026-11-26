@@ -41,10 +41,14 @@ export function calcularResultado(
   for (const l of linhas) {
     if (excluidos.has(chaveSuperior(l.tipo, l.categoria_superior))) continue
 
-    // Mesma regra do servidor: o que não é receita subtrai. O ELSE do
-    // ajuste_receita_despesa manda o não classificado para despesa, e replicar
-    // isso é o que mantém os dois números iguais.
-    const sinal = l.tipo === 'receita' ? 1 : -1
+    // Mesma regra do servidor: o que não é receita subtrai, com uma exceção —
+    // transferência CONTINUA contando no resultado (nunca deixou de contar, só
+    // deixou de ficar diluída em receita/despesa), e dentro dela quem subtrai é
+    // a saída, não a transferência inteira. O ELSE das demais manda o não
+    // classificado para despesa, e replicar isso é o que mantém os dois
+    // números iguais.
+    const sinal = (l.tipo === 'despesa' ||
+      (l.tipo === 'transferencia' && l.categoria_final === 'Saída de Transferência')) ? -1 : 1
     for (let i = 0; i < 12; i++) {
       if (!mesesVisiveis.has(i + 1)) continue
       meses[i] += sinal * l.meses[i]

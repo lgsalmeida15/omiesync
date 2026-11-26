@@ -10,7 +10,7 @@
           <span class="venc-nome">{{ t.descricao }}</span>
           <span class="venc-cat">{{ t.categoria }}</span>
         </div>
-        <div class="venc-val" :class="t.tipo === 'receita' ? 'res-val--in' : 'res-val--out'">
+        <div class="venc-val" :class="`res-val--${classeTipo(t)}`">
           {{ fmtMoeda(t.valor) }}
         </div>
       </div>
@@ -21,6 +21,7 @@
 <script setup lang="ts">
 import { fmtMoeda } from '@/utils/formato'
 import type { FluxoTransacao } from '@/api/fluxocaixa'
+import { classeTipo } from '@/utils/fluxo'
 
 /**
  * Lista de provisões futuras. Extraída de FluxoCaixa.vue junto com o resumo,
@@ -66,6 +67,7 @@ defineProps<{ itens: FluxoTransacao[] }>()
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .venc-val { font-family: var(--font-body); font-size: var(--fs-xs); font-weight: 600; white-space: nowrap; }
-.res-val--in  { color: var(--success); }
-.res-val--out { color: var(--danger); }
+.res-val--in     { color: var(--success); }
+.res-val--out    { color: var(--danger); }
+.res-val--transf { color: var(--text-muted); }
 </style>

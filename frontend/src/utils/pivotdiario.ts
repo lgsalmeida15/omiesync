@@ -25,12 +25,13 @@ export interface NoDiario {
   total: number
   temFilhos: boolean
   paiId: string | null
-  /** Herdado da raiz: receita e despesa chegam ambas positivas, o sinal não distingue. */
-  tipo: 'receita' | 'despesa'
+  /** Herdado da raiz: as três chegam positivas, o sinal não distingue. */
+  tipo: 'receita' | 'despesa' | 'transferencia'
 }
 
 /**
- * Ordena os irmãos alfabeticamente, com receita antes de despesa na raiz.
+ * Ordena os irmãos alfabeticamente, com receita, despesa e transferência nesta
+ * ordem na raiz — explícito, e não por sorte da ordenação alfabética.
  *
  * A lista de transações vem ordenada por DATA, então a ordem de chegada não
  * agrupa nada — diferente do pivô anual, onde o `GROUP BY` do SQL já entrega
@@ -38,7 +39,14 @@ export interface NoDiario {
  * mudariam de lugar a cada recorte.
  */
 function ordenar(nos: NoDiario[]): NoDiario[] {
-  const peso = (n: NoDiario) => (n.nivel === 1 && n.tipo === 'receita' ? 0 : 1)
+  const peso = (n: NoDiario) => {
+    if (n.nivel !== 1) return 1
+    switch (n.tipo) {
+      case 'receita': return 0
+      case 'despesa': return 1
+      default:        return 2
+    }
+  }
   return [...nos].sort((a, b) => peso(a) - peso(b) || a.rotulo.localeCompare(b.rotulo, 'pt-BR'))
 }
 
@@ -110,10 +118,19 @@ export interface ResultadoDiario {
 /**
  * Linha RESULTADO do rodapé, dia a dia.
  *
- * Soma apenas os nós de nível 1 — os totais de receita e de despesa —, porque os
- * níveis abaixo repetem os mesmos valores e somá-los multiplicaria tudo. A
- * exclusão, no entanto, é feita por categoria SUPERIOR (nível 2), igual à aba
- * Resultado, então o cálculo desce um nível e soma de lá.
+ * Soma pelos nós de nível 3 (categoria final) — não o 2 (categoria superior):
+ * dentro de transferência, entrada e saída compartilham a MESMA categoria
+ * superior ('Transferência'), e um nó de nível 2 já chega com as duas somadas
+ * juntas, sem como saber de volta quanto era entrada e quanto era saída. No
+ * nível 3 elas continuam separadas ('Entrada de Transferência' / 'Saída de
+ * Transferência'), que é o que permite entrada somar e saída subtrair — a
+ * mesma regra de `calcularResultado`, em utils/resultado.ts.
+ *
+ * Nível 3 não repete nem multiplica o total: cada transação cai em exatamente
+ * um nó de nível 3, igual acontecia com o de nível 2 antes.
+ *
+ * A exclusão continua por categoria SUPERIOR, igual à aba Resultado — por isso
+ * busca o pai (nível 2) de cada nó para montar a chave.
  */
 export function resultadoDiario(
   nos: NoDiario[],
@@ -123,10 +140,16 @@ export function resultadoDiario(
   const dias = Array(diasNoMes).fill(0)
   let total = 0
 
+  const porId = new Map(nos.map(n => [n.id, n]))
+
   for (const n of nos) {
-    if (n.nivel !== 2) continue
-    if (excluidos.has(chaveSuperior(n.tipo, n.rotulo))) continue
-    const sinal = n.tipo === 'receita' ? 1 : -1
+    if (n.nivel !== 3) continue
+    const pai = n.paiId ? porId.get(n.paiId) : undefined
+    if (!pai) continue
+    if (excluidos.has(chaveSuperior(n.tipo, pai.rotulo))) continue
+
+    const sinal = (n.tipo === 'despesa' ||
+      (n.tipo === 'transferencia' && n.rotulo === 'Saída de Transferência')) ? -1 : 1
     for (let i = 0; i < dias.length; i++) dias[i] += sinal * (n.dias[i] ?? 0)
     total += sinal * n.total
   }

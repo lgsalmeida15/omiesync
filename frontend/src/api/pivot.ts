@@ -2,7 +2,7 @@ import api from './client'
 import { paramsToQuery, type DashboardParams } from './dashboard'
 
 export interface PivotLinha {
-  tipo: string               // "receita" | "despesa" | "nao classificado"
+  tipo: string               // "receita" | "despesa" | "transferencia" | "nao classificado"
   categoria_superior: string
   categoria_final: string
   cliente: string

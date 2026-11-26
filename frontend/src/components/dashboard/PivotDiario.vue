@@ -337,6 +337,7 @@ const fmtPorTipo = (v: number, tipo: NoDiario['tipo']) =>
 
 .pv-receita { color: var(--success); }
 .pv-despesa { color: var(--danger); }
+.pv-transferencia { color: var(--text-muted); }
 .pv-zero { color: var(--text-dim) !important; opacity: 0.45; }
 .pv-previsto { background: var(--warning-weak); }
 

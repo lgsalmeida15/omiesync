@@ -35,7 +35,11 @@ import (
 //	      independente do Resultado Acumulado (ver dados/dashboard.go). Não entra
 //	      nas matvw. Não precisa de bloco de auto-upgrade dedicado: o CREATE
 //	      TABLE IF NOT EXISTS do slice principal já é idempotente, igual ao v11.
-const CurrentSchemaVersion = 13
+//	v14 — coluna grupo_financeiro: Transferência deixa de ficar diluída em
+//	      receita/despesa e vira um 3º grupo próprio, com categoria final sintética
+//	      por direção ("Entrada de Transferência" / "Saída de Transferência").
+//	      Recria as duas matvw.
+const CurrentSchemaVersion = 14
 
 // Provisioner cria e inicializa schemas de tenant.
 type Provisioner struct {
@@ -504,6 +508,24 @@ BEGIN
 END
 $$`, "'"+schemaName+"'", safe),
 
+		// Auto-upgrade v14: Transferência passa a ser um 3º grupo (grupo_financeiro),
+		// em vez de ficar diluída em receita/despesa. Recria as que ainda não têm a
+		// coluna nova. O marcador é a ausência de 'grupo_financeiro' na definição.
+		fmt.Sprintf(`DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_matviews
+               WHERE schemaname = %[1]s AND matviewname = 'matvw_gerencial_ano_corrente'
+                 AND definition NOT LIKE '%%grupo_financeiro%%') THEN
+        DROP MATERIALIZED VIEW %[2]s.matvw_gerencial_ano_corrente CASCADE;
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_matviews
+               WHERE schemaname = %[1]s AND matviewname = 'matvw_gerencial_historico'
+                 AND definition NOT LIKE '%%grupo_financeiro%%') THEN
+        DROP MATERIALIZED VIEW %[2]s.matvw_gerencial_historico CASCADE;
+    END IF;
+END
+$$`, "'"+schemaName+"'", safe),
+
 		// ── View: ano corrente + previsões futuras ────────────────────────────────
 		// Filtro: ano >= ano atual (captura previsões de extrato para anos futuros).
 		// REFRESH: após todo sync (incremental e full) — dataset pequeno, rápido.
@@ -730,6 +752,20 @@ movimentos_processados AS (
             WHEN c.origem IS NULL AND m.mov_ou_extrato = 'ext' AND m.valor_titulo_mov_ext > 0        THEN 'receita'
             WHEN c.origem IS NULL AND m.mov_ou_extrato = 'ext' AND m.valor_titulo_mov_ext < 0        THEN 'despesa'
         END                                            AS receita_despesa,
+        -- Transferência vira um 3º grupo, no mesmo nível de receita/despesa, em vez de
+        -- ficar diluída dentro de um dos dois conforme o lado do caixa. ELSE despesa
+        -- espelha o fallback de ajuste_receita_despesa logo abaixo, para os dois nunca
+        -- divergirem num lançamento não classificado.
+        CASE
+            WHEN cat_sup.descricao = 'Transferência'                                        THEN 'transferencia'
+            WHEN c.origem = 'contas_a_receber'                                              THEN 'receita'
+            WHEN c.origem = 'contas_a_pagar'                                                THEN 'despesa'
+            WHEN c.origem IS NULL AND m.mov_ou_extrato = 'mov' AND UPPER(m.status_mov) = 'RECEBIDO' THEN 'receita'
+            WHEN c.origem IS NULL AND m.mov_ou_extrato = 'mov' AND UPPER(m.status_mov) = 'PAGO'     THEN 'despesa'
+            WHEN c.origem IS NULL AND m.mov_ou_extrato = 'ext' AND m.valor_titulo_mov_ext > 0        THEN 'receita'
+            WHEN c.origem IS NULL AND m.mov_ou_extrato = 'ext' AND m.valor_titulo_mov_ext < 0        THEN 'despesa'
+            ELSE 'despesa'
+        END                                            AS grupo_financeiro,
         -- ABS só no ext, cujo valor agora carrega sinal. O dashboard soma receita e
         -- despesa como grandezas positivas e separa pelo ajuste_receita_despesa.
         -- No mov o valor já é positivo, então o ramo fica idêntico ao anterior.
@@ -754,7 +790,22 @@ movimentos_processados AS (
         END                                            AS considerar_mov_ext,
         -- O extrato traz cDesCategoria e cRazCliente prontos; servem de fallback
         -- quando a categoria ou o cliente ainda não foram sincronizados.
-        COALESCE(cat_final.descricao, m.descricao_categoria_ext) AS descricao_categoria_final,
+        --
+        -- Transferência ganha uma categoria final SINTÉTICA por direção: o Omie não
+        -- distingue entrada de saída por categoria (as duas chegam com o mesmo nome,
+        -- "Transf. Inter Empresas/Contas"), então a distinção reaproveita a mesma
+        -- condição de direção usada em ajuste_receita_despesa. Repetida aqui, e não
+        -- lida por alias, porque o Postgres não permite uma expressão do SELECT
+        -- referenciar o alias de outra do mesmo nível.
+        CASE
+            WHEN cat_sup.descricao = 'Transferência' AND (
+                     c.origem = 'contas_a_receber'
+                  OR (c.origem IS NULL AND m.mov_ou_extrato = 'mov' AND UPPER(m.status_mov) = 'RECEBIDO')
+                  OR (c.origem IS NULL AND m.mov_ou_extrato = 'ext' AND m.valor_titulo_mov_ext > 0)
+                 ) THEN 'Entrada de Transferência'
+            WHEN cat_sup.descricao = 'Transferência'                                      THEN 'Saída de Transferência'
+            ELSE COALESCE(cat_final.descricao, m.descricao_categoria_ext)
+        END                                            AS descricao_categoria_final,
         -- Título usa a distribuição de contas_pagar/receber; lançamento avulso usa o
         -- array departamentos do próprio movimento.
         CASE
@@ -817,7 +868,7 @@ SELECT
     categoria_join, percentual_categoria, origem, codigo_departamento_join,
     percentual_distribuicao_join, valor_distribuido_join, conta_considerada,
     cod_categoria_final_superior, cod_categoria_final, percentual_cat_final,
-    receita_despesa, ajuste_receita_despesa, valor_final,
+    receita_despesa, grupo_financeiro, ajuste_receita_despesa, valor_final,
     movimento_considerado, considerar_mov_ext,
     descricao_categoria_superior, descricao_categoria_final,
     departamento_final, cliente_final
@@ -1021,6 +1072,20 @@ movimentos_processados AS (
             WHEN c.origem IS NULL AND m.mov_ou_extrato = 'ext' AND m.valor_titulo_mov_ext > 0        THEN 'receita'
             WHEN c.origem IS NULL AND m.mov_ou_extrato = 'ext' AND m.valor_titulo_mov_ext < 0        THEN 'despesa'
         END                                            AS receita_despesa,
+        -- Transferência vira um 3º grupo, no mesmo nível de receita/despesa, em vez de
+        -- ficar diluída dentro de um dos dois conforme o lado do caixa. ELSE despesa
+        -- espelha o fallback de ajuste_receita_despesa logo abaixo, para os dois nunca
+        -- divergirem num lançamento não classificado.
+        CASE
+            WHEN cat_sup.descricao = 'Transferência'                                        THEN 'transferencia'
+            WHEN c.origem = 'contas_a_receber'                                              THEN 'receita'
+            WHEN c.origem = 'contas_a_pagar'                                                THEN 'despesa'
+            WHEN c.origem IS NULL AND m.mov_ou_extrato = 'mov' AND UPPER(m.status_mov) = 'RECEBIDO' THEN 'receita'
+            WHEN c.origem IS NULL AND m.mov_ou_extrato = 'mov' AND UPPER(m.status_mov) = 'PAGO'     THEN 'despesa'
+            WHEN c.origem IS NULL AND m.mov_ou_extrato = 'ext' AND m.valor_titulo_mov_ext > 0        THEN 'receita'
+            WHEN c.origem IS NULL AND m.mov_ou_extrato = 'ext' AND m.valor_titulo_mov_ext < 0        THEN 'despesa'
+            ELSE 'despesa'
+        END                                            AS grupo_financeiro,
         -- ABS só no ext, cujo valor agora carrega sinal. O dashboard soma receita e
         -- despesa como grandezas positivas e separa pelo ajuste_receita_despesa.
         -- No mov o valor já é positivo, então o ramo fica idêntico ao anterior.
@@ -1045,7 +1110,22 @@ movimentos_processados AS (
         END                                            AS considerar_mov_ext,
         -- O extrato traz cDesCategoria e cRazCliente prontos; servem de fallback
         -- quando a categoria ou o cliente ainda não foram sincronizados.
-        COALESCE(cat_final.descricao, m.descricao_categoria_ext) AS descricao_categoria_final,
+        --
+        -- Transferência ganha uma categoria final SINTÉTICA por direção: o Omie não
+        -- distingue entrada de saída por categoria (as duas chegam com o mesmo nome,
+        -- "Transf. Inter Empresas/Contas"), então a distinção reaproveita a mesma
+        -- condição de direção usada em ajuste_receita_despesa. Repetida aqui, e não
+        -- lida por alias, porque o Postgres não permite uma expressão do SELECT
+        -- referenciar o alias de outra do mesmo nível.
+        CASE
+            WHEN cat_sup.descricao = 'Transferência' AND (
+                     c.origem = 'contas_a_receber'
+                  OR (c.origem IS NULL AND m.mov_ou_extrato = 'mov' AND UPPER(m.status_mov) = 'RECEBIDO')
+                  OR (c.origem IS NULL AND m.mov_ou_extrato = 'ext' AND m.valor_titulo_mov_ext > 0)
+                 ) THEN 'Entrada de Transferência'
+            WHEN cat_sup.descricao = 'Transferência'                                      THEN 'Saída de Transferência'
+            ELSE COALESCE(cat_final.descricao, m.descricao_categoria_ext)
+        END                                            AS descricao_categoria_final,
         -- Título usa a distribuição de contas_pagar/receber; lançamento avulso usa o
         -- array departamentos do próprio movimento.
         CASE
@@ -1108,7 +1188,7 @@ SELECT
     categoria_join, percentual_categoria, origem, codigo_departamento_join,
     percentual_distribuicao_join, valor_distribuido_join, conta_considerada,
     cod_categoria_final_superior, cod_categoria_final, percentual_cat_final,
-    receita_despesa, ajuste_receita_despesa, valor_final,
+    receita_despesa, grupo_financeiro, ajuste_receita_despesa, valor_final,
     movimento_considerado, considerar_mov_ext,
     descricao_categoria_superior, descricao_categoria_final,
     departamento_final, cliente_final

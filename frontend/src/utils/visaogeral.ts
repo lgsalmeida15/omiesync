@@ -15,7 +15,14 @@ import type { GraficoMensal, SaldoMes } from '@/api/dashboard'
 export interface CardsRecorte {
   receita: number
   despesa: number
-  /** Receita menos despesa do recorte. NÃO inclui o saldo — ver cardResultado. */
+  /**
+   * Receita menos despesa do recorte, MAIS o líquido de transferência (entrada
+   * − saída). NÃO inclui o saldo — ver cardResultado.
+   *
+   * Transferência não soma em `receita`/`despesa` — ela é um grupo próprio — mas
+   * continua contando aqui, igual sempre contou, só não fica mais escondida
+   * dentro dos dois.
+   */
   resultado: number
 }
 
@@ -28,12 +35,16 @@ export function cardsDoRecorte(
 ): CardsRecorte {
   let receita = 0
   let despesa = 0
+  let transferenciaEntrada = 0
+  let transferenciaSaida = 0
   for (const m of mensal) {
     if (!mesesVisiveis.has(m.mes)) continue
     receita += m.receita
     despesa += m.despesa
+    transferenciaEntrada += m.transferencia_entrada
+    transferenciaSaida += m.transferencia_saida
   }
-  return { receita, despesa, resultado: receita - despesa }
+  return { receita, despesa, resultado: (receita - despesa) + (transferenciaEntrada - transferenciaSaida) }
 }
 
 /**

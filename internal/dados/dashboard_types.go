@@ -39,10 +39,15 @@ type SaldoMes struct {
 }
 
 type CardMetrics struct {
-	ReceitaTotal         float64 `json:"receita_total"`
-	DespesaTotal         float64 `json:"despesa_total"`
-	Resultado            float64 `json:"resultado"`
-	SaldoContasCorrentes float64 `json:"saldo_contas_correntes"`
+	ReceitaTotal float64 `json:"receita_total"`
+	DespesaTotal float64 `json:"despesa_total"`
+	// Transferência (entrada/saída entre contas) separada de receita/despesa, no
+	// mesmo nível delas. Entra no Resultado abaixo pelo líquido — nunca deixou de
+	// contar, só deixou de ficar diluída dentro de receita/despesa.
+	TransferenciaEntradaTotal float64 `json:"transferencia_entrada_total"`
+	TransferenciaSaidaTotal   float64 `json:"transferencia_saida_total"`
+	Resultado                 float64 `json:"resultado"`
+	SaldoContasCorrentes      float64 `json:"saldo_contas_correntes"`
 	// SaldoInicial é o saldo REAL de 1º de janeiro, lido de saldo_por_contas —
 	// não mais o campo de cadastro contas_correntes.saldo_inicial, que não tem
 	// data associada. Explícito na resposta porque derivá-lo no cliente exigiria
@@ -57,8 +62,14 @@ type GraficoMensal struct {
 	MesNome string  `json:"mes_nome"`
 	Receita float64 `json:"receita"`
 	Despesa float64 `json:"despesa"`
-	// ResultadoMes soma as duas trilhas. Mantido como estava: é o que a tela
-	// desenha hoje, e mudá-lo alteraria números sem ninguém pedir.
+	// Transferência (entrada/saída entre contas) separada de receita/despesa, no
+	// mesmo nível delas — não é nem uma nem outra, mas conta no ResultadoMes
+	// abaixo pelo líquido, igual sempre contou.
+	TransferenciaEntrada float64 `json:"transferencia_entrada"`
+	TransferenciaSaida   float64 `json:"transferencia_saida"`
+	// ResultadoMes soma as duas trilhas (receita/despesa) mais o líquido de
+	// transferência. Mantido como estava: é o que a tela desenha hoje, e
+	// mudá-lo alteraria números sem ninguém pedir.
 	ResultadoMes float64 `json:"resultado_mes"`
 
 	/*
